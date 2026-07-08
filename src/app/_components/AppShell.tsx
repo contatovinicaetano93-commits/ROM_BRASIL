@@ -1,10 +1,19 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { DesktopSidebar } from './DesktopSidebar'
 import { TopBar } from './TopBar'
 import { BottomNav } from './BottomNav'
 
+const STANDALONE_PATHS = ['/login']
+
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
+  if (STANDALONE_PATHS.includes(pathname)) {
+    return <>{children}</>
+  }
+
   return (
     <>
       <div className="flex min-h-screen w-full bg-background">
