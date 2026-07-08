@@ -20,7 +20,7 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 
 | | ROM Brasil (este repo) | ROM Iguatemi |
 |--|------------------------|--------------|
-| Repo | `ROM` | `ROM-IGUATEMI` |
+| Repo | `ROM_BRASIL` | `ROM-IGUATEMI` |
 | Pasta local | `/Downloads/ROM` | `/Downloads/ROM-IGUATEMI` |
 | Vercel | `rom-club` | projeto próprio |
 | Neon | banco dedicado | banco dedicado |

@@ -15,7 +15,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     priority: 'agora',
     steps: [
       'Vercel → Settings → Environment Variables',
-      'ROM_ADMIN_USER = admin',
+      'ROM_ADMIN_USER = ADMIN-BRASIL',
       'ROM_ADMIN_PASSWORD = sua senha forte',
       'Redeploy do projeto',
     ],
