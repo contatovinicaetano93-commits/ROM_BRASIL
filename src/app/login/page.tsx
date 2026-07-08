@@ -9,6 +9,7 @@ function LoginForm() {
   const router = useRouter()
   const params = useSearchParams()
   const next = sanitizeRedirectPath(params.get('next'))
+  const loggedOut = params.get('logged_out') === '1'
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +44,12 @@ function LoginForm() {
     <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6">
       <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">ROM Club</p>
       <h1 className="mt-2 text-xl font-semibold">Acesso administrativo</h1>
-      <p className="mt-2 text-sm text-muted">Entre com usuário e senha de administrador.</p>
+      <p className="mt-2 text-sm text-muted">Acesso exclusivo para administradores do ROM Club.</p>
+      {loggedOut && (
+        <p className="mt-3 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+          Você saiu do sistema. Entre novamente para acessar o painel admin.
+        </p>
+      )}
       <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs uppercase tracking-wide text-muted">Usuário</span>

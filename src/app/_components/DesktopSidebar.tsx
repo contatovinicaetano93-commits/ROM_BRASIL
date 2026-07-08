@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { APP_NAV } from './nav'
+import { AdminSessionBar } from './AdminSessionBar'
 
 export function DesktopSidebar() {
   const pathname = usePathname()
@@ -35,8 +36,9 @@ export function DesktopSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border px-6 py-5">
-        <div className="flex items-center gap-3">
+      <div className="border-t border-border px-4 py-4">
+        <AdminSessionBar className="mb-4" />
+        <div className="flex items-center gap-3 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gold text-sm font-bold text-background">
             R
           </span>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight } from 'lucide-react'
 import { APP_NAV, pageTitleFromPath } from './nav'
+import { AdminSessionBar } from './AdminSessionBar'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
@@ -92,7 +93,8 @@ export function TopBar() {
               })}
             </nav>
 
-            <div className="mt-auto px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-6">
+            <div className="mt-auto space-y-4 px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-6">
+              <AdminSessionBar />
               <p className="text-[0.65rem] text-muted">ROM · Onboarding &amp; KPIs</p>
               <p className="text-[0.6rem] text-muted/70">v0.1.0</p>
             </div>

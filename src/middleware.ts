@@ -8,7 +8,10 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const method = req.method
 
-  const publicPaths = pathname === '/login' || pathname.startsWith('/api/auth') || pathname === '/api/health'
+  const publicPaths =
+    pathname === '/login' ||
+    pathname.startsWith('/api/auth') ||
+    pathname === '/api/health'
   if (publicPaths) return NextResponse.next()
 
   const protectPage = pathname === '/admin' || pathname.startsWith('/admin/')
