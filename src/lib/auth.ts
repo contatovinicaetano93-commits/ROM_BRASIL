@@ -1,13 +1,18 @@
 import type { NextRequest } from 'next/server'
 
 export const AUTH_COOKIE = 'rom_session'
-const DEFAULT_ADMIN_USER = 'admin'
+const DEFAULT_ADMIN_USER = 'ADMIN-BRASIL'
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false
   let out = 0
   for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i)
   return out === 0
+}
+
+/** Produção Vercel ou NODE_ENV=production — nunca fail-open. */
+export function isProductionRuntime() {
+  return process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production'
 }
 
 export function getAdminUser() {
@@ -20,6 +25,11 @@ export function getAdminPassword() {
 
 export function isAuthEnabled() {
   return Boolean(getAdminPassword())
+}
+
+/** Auth obrigatória em produção e senha ausente. */
+export function isAuthMisconfigured() {
+  return isProductionRuntime() && !isAuthEnabled()
 }
 
 /** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
@@ -48,7 +58,10 @@ export function validateAdminCredentials(username: string, password: string) {
 }
 
 export async function isAuthorized(req: NextRequest) {
-  if (!isAuthEnabled()) return true
+  if (!isAuthEnabled()) {
+    // Dev: sem senha = aberto. Produção: nunca.
+    return !isProductionRuntime()
+  }
 
   const session = req.cookies.get(AUTH_COOKIE)?.value
   if (session) {

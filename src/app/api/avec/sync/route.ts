@@ -6,14 +6,13 @@ import { isAuthorized } from '@/lib/auth'
 import { getSalonUnit } from '@/lib/salon/unit'
 
 async function authorize(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
+  const secret = process.env.CRON_SECRET?.trim()
   if (secret) {
     const auth = req.headers.get('authorization')
     if (auth === `Bearer ${secret}` || req.headers.get('x-cron-secret') === secret) return true
   }
-  if (await isAuthorized(req)) return true
-  if (!secret) return true
-  return false
+  // Sessão admin. Sem CRON_SECRET e sem sessão = negado (fail-closed).
+  return isAuthorized(req)
 }
 
 function parseMode(req: NextRequest): AvecSyncMode {

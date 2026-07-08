@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { isAuthorized, isAuthEnabled } from '@/lib/auth'
+import { isAuthorized, isAuthEnabled, isAuthMisconfigured } from '@/lib/auth'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
 
@@ -25,14 +25,29 @@ function isProtectedApi(pathname: string) {
 }
 
 export async function middleware(req: NextRequest) {
-  if (!isAuthEnabled()) return NextResponse.next()
-
   const { pathname } = req.nextUrl
 
   if (pathname === '/login') return NextResponse.next()
 
   const needsAuth = isProtectedPage(pathname) || isProtectedApi(pathname)
   if (!needsAuth) return NextResponse.next()
+
+  // Produção sem ROM_ADMIN_PASSWORD: bloqueia (fail-closed).
+  if (isAuthMisconfigured()) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json(
+        { error: 'Auth não configurada (ROM_ADMIN_PASSWORD)' },
+        { status: 503 }
+      )
+    }
+    return new NextResponse('Auth não configurada. Defina ROM_ADMIN_PASSWORD na Vercel.', {
+      status: 503,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
+  }
+
+  // Dev local sem senha: aberto.
+  if (!isAuthEnabled()) return NextResponse.next()
 
   if (await isAuthorized(req)) return NextResponse.next()
 

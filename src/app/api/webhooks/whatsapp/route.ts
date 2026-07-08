@@ -5,22 +5,22 @@ import { getWhatsAppAdapter } from '@/lib/whatsapp/adapter'
 import { handleWhatsAppMessage } from '@/lib/whatsapp/conversation'
 import { parseWhatsAppPayload } from '@/lib/whatsapp/parse-payload'
 
-function authorizeWebhook(req: NextRequest) {
+function authorizeWebhook(req: NextRequest): 'ok' | 'missing' | 'unauthorized' {
   const secret = process.env.WHATSAPP_WEBHOOK_SECRET?.trim()
-  if (!secret) return true
+  if (!secret) return 'missing'
 
   const header =
     req.headers.get('x-whatsapp-secret') ??
     req.headers.get('x-webhook-secret') ??
     req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
 
-  return header === secret
+  return header === secret ? 'ok' : 'unauthorized'
 }
 
 export async function POST(req: NextRequest) {
-  if (!authorizeWebhook(req)) {
-    return ok({ ignored: true }, undefined, 200)
-  }
+  const auth = authorizeWebhook(req)
+  if (auth === 'missing') return err('Webhook WhatsApp não configurado (WHATSAPP_WEBHOOK_SECRET)', 503)
+  if (auth === 'unauthorized') return err('Não autorizado', 401)
 
   const body = await req.json().catch(() => null)
   const parsed = parseWhatsAppPayload(body)

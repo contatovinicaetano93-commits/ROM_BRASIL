@@ -1,3 +1,5 @@
+import { isProductionRuntime } from '@/lib/auth'
+
 export function getStaffChatIds(): string[] {
   // TELEGRAM_ALLOWED_CHAT_IDS = legado na Vercel (ROM Brasil); preferir STAFF
   const raw =
@@ -7,10 +9,14 @@ export function getStaffChatIds(): string[] {
   return raw.split(/[,\s]+/).filter(Boolean)
 }
 
-/** Sem whitelist configurada, aceita qualquer chat (modo aberto). */
+/**
+ * Whitelist da equipe.
+ * Produção: sem IDs = nega todos (fail-closed).
+ * Dev: sem IDs = aceita qualquer chat (conveniência local).
+ */
 export function isStaffChat(chatId: number | string): boolean {
   const ids = getStaffChatIds()
-  if (ids.length === 0) return true
+  if (ids.length === 0) return !isProductionRuntime()
   return ids.includes(String(chatId))
 }
 
