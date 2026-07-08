@@ -1,7 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { getBrand } from '@/lib/brand'
 
-const FALLBACK_REPLY =
-  'Olá! Sou a recepcionista virtual do ROM Club. Posso ajudar com agendamento, valores ou tirar dúvidas sobre nossos serviços. O que você precisa?'
+function fallbackReply() {
+  const brand = getBrand()
+  return `Olá! Sou a recepcionista virtual do ${brand.aiPersonaName}. Posso ajudar com agendamento, valores ou tirar dúvidas sobre nossos serviços. O que você precisa?`
+}
 
 let client: Anthropic | null = null
 
@@ -24,7 +27,7 @@ export function getAiModel() {
 
 export async function askAI(systemPrompt: string, userMessage: string): Promise<string> {
   if (!isAiConfigured()) {
-    return FALLBACK_REPLY
+    return fallbackReply()
   }
 
   const res = await getClient().messages.create({

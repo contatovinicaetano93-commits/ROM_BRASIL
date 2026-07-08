@@ -9,6 +9,19 @@ export interface SetupItem {
 
 export const SETUP_ITEMS: SetupItem[] = [
   {
+    id: 'panel',
+    label: 'Painel / unidade (Vercel)',
+    envVars: ['ROM_PANEL', 'NEXT_PUBLIC_ROM_PANEL', 'DATABASE_URL'],
+    priority: 'agora',
+    steps: [
+      'Use DOIS projetos Vercel (Brasil e Iguatemi) — nunca um banco compartilhado',
+      'ROM_PANEL e NEXT_PUBLIC_ROM_PANEL com o MESMO valor (brasil ou iguatemi)',
+      'DATABASE_URL = Neon dedicado só desta unidade',
+      'Redeploy após alterar NEXT_PUBLIC_ROM_PANEL (valor vai no build)',
+      'Admin → Diagnóstico: confira deployment.display_name e validation.warnings',
+    ],
+  },
+  {
     id: 'auth',
     label: 'Login do painel',
     envVars: ['ROM_ADMIN_USER', 'ROM_ADMIN_PASSWORD'],
@@ -105,11 +118,15 @@ export function isItemConfigured(
     telegram: { configured: boolean; webhook_secret?: boolean; staff_whitelist?: boolean }
     cron: { configured: boolean }
     auth: { enabled: boolean }
+    deployment?: { panel: string }
+    validation?: { ok: boolean }
   }
 ) {
   switch (id) {
     case 'auth':
       return health.auth.enabled
+    case 'panel':
+      return Boolean(health.deployment?.panel) && (health.validation?.ok ?? true)
     case 'cron':
       return health.cron.configured
     case 'claude':

@@ -13,22 +13,31 @@ import { generateBrief } from '@/lib/brief'
 import { buildSalonContext, salonContextForAI } from '@/lib/salon/context-builder'
 import { normalizeSearchText } from '@/lib/search'
 import { verifyTelegramWebhook } from '@/lib/webhooks'
+import { getBrand } from '@/lib/brand'
 
-const WELCOME_MESSAGE = `Oi! 👋 Sou a secretária virtual do ROM Club.
+function welcomeMessage() {
+  const brand = getBrand()
+  return `Oi! 👋 Sou a secretária virtual do ${brand.displayName}.
 
 Posso te ajudar com KPIs de contato do salão — quantidade, canais, status e conversão.
 
 💡 Dica: use /cliente nome ou telefone para ver o briefing de um cliente.`
+}
 
-const STAFF_ONLY_MESSAGE =
-  'Este bot é exclusivo da equipe ROM Club. Se você é da equipe, peça ao admin para incluir seu chat ID em TELEGRAM_STAFF_CHAT_IDS.'
+function staffOnlyMessage() {
+  const brand = getBrand()
+  return `Este bot é exclusivo da equipe ${brand.displayName}. Se você é da equipe, peça ao admin para incluir seu chat ID em TELEGRAM_STAFF_CHAT_IDS.`
+}
 
-const SECRETARIA_PROMPT = `Você é a secretária virtual do ROM Club para a equipe interna.
+function secretariaPrompt() {
+  const brand = getBrand()
+  return `Você é a secretária virtual do ${brand.displayName} para a equipe interna.
 Responda perguntas práticas sobre a operação do salão (faturamento, agendamentos,
 comparecimento, contatos, playbook do dia) usando SOMENTE os dados fornecidos.
 Seja direta, em português, no máximo 4 linhas. Se a pergunta não tiver relação
 com os dados fornecidos, diga que só responde sobre a operação do salão por enquanto.
 Dica: use "/cliente nome ou telefone" pra receber o briefing de um cliente.`
+}
 
 interface TelegramUpdate {
   message?: {
@@ -74,13 +83,13 @@ export async function POST(req: NextRequest) {
   if (!chatId || !text) return ok({ ignored: true })
 
   if (!isStaffChat(chatId)) {
-    await sendTelegramMessage(chatId, STAFF_ONLY_MESSAGE).catch(() => {})
+    await sendTelegramMessage(chatId, staffOnlyMessage()).catch(() => {})
     return ok({ replied: true, mode: 'staff_only' })
   }
 
   try {
     if (/^\/start\b/i.test(text)) {
-      await sendTelegramMessage(chatId, WELCOME_MESSAGE)
+      await sendTelegramMessage(chatId, welcomeMessage())
       return ok({ replied: true, mode: 'start' })
     }
 
@@ -92,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     const salonCtx = await buildSalonContext()
     const context = salonContextForAI(salonCtx)
-    const reply = await askAI(SECRETARIA_PROMPT, `Pergunta: ${text}\n\nDados: ${context}`)
+    const reply = await askAI(secretariaPrompt(), `Pergunta: ${text}\n\nDados: ${context}`)
 
     await sendTelegramMessage(chatId, reply || 'Não consegui puxar essa informação agora.')
     return ok({ replied: true })

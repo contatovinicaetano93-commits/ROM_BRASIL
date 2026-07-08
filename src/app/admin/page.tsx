@@ -7,6 +7,8 @@ import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL, PrimaryButton } fro
 import { LogoutButton } from '../_components/LogoutButton'
 import { SetupChecklist } from './SetupChecklist'
 import { apiFetch } from '@/lib/api-client'
+import { getBrand } from '@/lib/brand'
+import type { RomSeedPreset } from '@/lib/brand'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -52,6 +54,8 @@ interface AvecStatus {
 
 interface HealthStatus {
   ok: boolean
+  deployment?: { panel: string; display_name: string; host: string | null; vercel_env: string | null }
+  validation?: { ok: boolean; warnings: string[] }
   database: { configured: boolean; connected: boolean; error: string | null }
   claude: { configured: boolean; model?: string }
   avec: { configured: boolean; mock: boolean; token: boolean }
@@ -59,6 +63,7 @@ interface HealthStatus {
   telegram: { configured: boolean; webhook_secret: boolean }
   cron: { configured: boolean }
   auth: { enabled: boolean; password?: boolean; user?: boolean }
+  panel?: { id: string; display_name: string; seed_preset: string }
 }
 
 type LoadState = 'loading' | 'ok' | 'error'
@@ -68,6 +73,7 @@ function fmtIso(iso: string) {
 }
 
 export default function AdminPage() {
+  const brand = getBrand()
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState<string | null>(null)
   const [kpis, setKpis] = useState<KpiData | null>(null)
@@ -78,6 +84,7 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
+  const [seedPreset, setSeedPreset] = useState<RomSeedPreset>(brand.panel)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [connMsg, setConnMsg] = useState<string | null>(null)
 
@@ -159,7 +166,11 @@ export default function AdminPage() {
     setSeeding(true)
     setSeedMsg(null)
     try {
-      const res = await apiFetch('/api/seed', { method: 'POST' })
+      const res = await apiFetch('/api/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: seedPreset }),
+      })
       const json = await res.json()
       if (json.error) setSeedMsg(`Erro: ${json.error}`)
       else setSeedMsg(json.data?.message ?? 'Seed concluído')
@@ -175,7 +186,7 @@ export default function AdminPage() {
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Diagnóstico</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">{brand.displayName}</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">APIs &amp; dados ao vivo</h1>
           <p className="mt-1 text-xs text-muted">
             Mesmos endpoints que o app consome — formatados pra conferência rápida.
@@ -197,6 +208,29 @@ export default function AdminPage() {
 
       {error && (
         <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>
+      )}
+
+      {health?.validation && health.validation.warnings.length > 0 && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <p className="font-semibold">Atenção na configuração desta instância</p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
+            {health.validation.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {health?.deployment && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+          <p className="text-xs text-muted">Instância Vercel</p>
+          <p className="font-medium">{health.deployment.display_name}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            painel={health.deployment.panel}
+            {health.deployment.host ? ` · ${health.deployment.host}` : ''}
+            {health.deployment.vercel_env ? ` · ${health.deployment.vercel_env}` : ''}
+          </p>
+        </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -228,13 +262,27 @@ export default function AdminPage() {
                 <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Como resolver pendentes</p>
                 <SetupChecklist health={health} />
               </div>
+              <div className="border-t border-border pt-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">Dados de demonstração</p>
+                <label className="mb-3 flex flex-col gap-1.5">
+                  <span className="text-xs text-muted">Preset do seed</span>
+                  <select
+                    value={seedPreset}
+                    onChange={(e) => setSeedPreset(e.target.value as RomSeedPreset)}
+                    className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
+                  >
+                    <option value="brasil">ROM CLUB BRASIL</option>
+                    <option value="iguatemi">ROM CLUB IGUATEMI</option>
+                  </select>
+                </label>
+              </div>
               <button
                 type="button"
                 onClick={runSeed}
                 disabled={seeding}
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold disabled:opacity-60"
               >
-                {seeding ? 'Criando demo…' : 'Popular dados de demonstração'}
+                {seeding ? 'Criando demo…' : `Popular seed ${seedPreset === 'iguatemi' ? 'Iguatemi' : 'Brasil'}`}
               </button>
               {seedMsg && <p className="text-xs text-muted">{seedMsg}</p>}
             </div>

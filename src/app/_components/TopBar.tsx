@@ -6,11 +6,13 @@ import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
+import { getBrand } from '@/lib/brand'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
+  const brand = getBrand()
 
   return (
     <>
@@ -28,13 +30,11 @@ export function TopBar() {
 
           <div className="min-w-0 flex-1 lg:flex lg:items-center lg:justify-between">
             <Link href="/hoje" className="flex items-baseline justify-center gap-1 lg:justify-start">
-              <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">ROM</span>
-              <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">Club</span>
+              <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">{brand.shortMonogram}</span>
+              <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">{brand.locationSubtitle}</span>
               <span className="hidden text-lg font-semibold text-foreground lg:inline">{title}</span>
             </Link>
-            <p className="mt-0.5 hidden text-xs text-muted lg:block">
-              Frente de caixa · contatos, KPIs e ações guiadas
-            </p>
+            <p className="mt-0.5 hidden text-xs text-muted lg:block">{brand.tagline}</p>
           </div>
 
           <div className="flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 py-1 pl-1 pr-3">
@@ -42,7 +42,7 @@ export function TopBar() {
               R
             </span>
             <div className="hidden leading-tight sm:block">
-              <p className="text-[0.6rem] text-muted">ROM Club</p>
+              <p className="text-[0.6rem] text-muted">{brand.displayName}</p>
               <p className="-mt-0.5 text-[0.7rem] font-semibold text-gold-strong">Recepção</p>
             </div>
           </div>
@@ -56,8 +56,8 @@ export function TopBar() {
           <aside className="animate-slide-in-left absolute inset-y-0 left-0 flex w-[82%] max-w-xs flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)]">
             <div className="flex items-center justify-between px-5 py-5">
               <div className="flex items-baseline gap-1">
-                <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold">ROM</span>
-                <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">Club</span>
+                <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
+                <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">{brand.locationSubtitle}</span>
               </div>
               <button
                 type="button"
@@ -102,7 +102,7 @@ export function TopBar() {
                 {ADMIN_NAV.label}
               </Link>
               <AdminSessionBar />
-              <p className="text-[0.65rem] text-muted">ROM · Onboarding &amp; KPIs</p>
+              <p className="text-[0.65rem] text-muted">{brand.productName} · KPIs</p>
               <p className="text-[0.6rem] text-muted/70">v0.1.0</p>
             </div>
           </aside>

@@ -1,4 +1,5 @@
 import { LayoutDashboard, Users, Sun } from 'lucide-react'
+import { getBrand } from '@/lib/brand'
 
 export const APP_NAV = [
   { href: '/hoje', label: 'Hoje', shortLabel: 'Hoje', icon: Sun },
@@ -9,10 +10,11 @@ export const APP_NAV = [
 export const ADMIN_NAV = { href: '/admin', label: 'Diagnóstico', shortLabel: 'API' } as const
 
 export function pageTitleFromPath(pathname: string) {
+  const brand = getBrand()
   if (pathname.startsWith('/admin')) return 'Diagnóstico'
-  if (pathname.startsWith('/hoje')) return 'Hoje no ROM'
+  if (pathname.startsWith('/hoje')) return brand.hojeTitle
   if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/contatos/')) return 'Perfil do cliente'
   if (pathname.startsWith('/contatos')) return 'Contatos'
-  return 'ROM Club'
+  return brand.displayName
 }

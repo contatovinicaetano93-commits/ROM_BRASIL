@@ -4,8 +4,10 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
+import { getBrand } from '@/lib/brand'
 
 function LoginForm() {
+  const brand = getBrand()
   const router = useRouter()
   const params = useSearchParams()
   const next = sanitizeRedirectPath(params.get('next'))
@@ -42,9 +44,9 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6">
-      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">ROM Club</p>
+      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">{brand.displayName}</p>
       <h1 className="mt-2 text-xl font-semibold">Acesso da equipe</h1>
-      <p className="mt-2 text-sm text-muted">Painel, contatos e playbook do ROM Club.</p>
+      <p className="mt-2 text-sm text-muted">{brand.loginSubtitle}</p>
       {loggedOut && (
         <p className="mt-3 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           Você saiu do sistema. Entre novamente para continuar.

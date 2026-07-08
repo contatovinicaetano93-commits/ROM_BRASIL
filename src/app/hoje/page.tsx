@@ -18,6 +18,7 @@ import { CountBadge } from '../_components/ui'
 import { BriefSheet } from '../_components/BriefSheet'
 import { fmtSchedule, formatCurrency } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
+import { getBrand } from '@/lib/brand'
 
 interface PlaybookItem {
   contact_id: string
@@ -54,6 +55,7 @@ interface HojeData {
 }
 
 export default function HojePage() {
+  const brand = getBrand()
   const [data, setData] = useState<HojeData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -85,7 +87,7 @@ export default function HojePage() {
         <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Playbook do dia</p>
         <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold capitalize lg:text-2xl">
           <Sun size={22} className="text-gold" />
-          Hoje no ROM
+          Hoje no {brand.displayName}
         </h1>
         {!loading && data && <p className="mt-0.5 text-xs text-muted capitalize">{dayLabel}</p>}
       </div>

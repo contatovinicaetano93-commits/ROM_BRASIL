@@ -18,9 +18,13 @@ import {
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { getDeploymentContext } from '@/lib/deployment'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import type { RomPanelId } from '@/lib/brand'
 
 export interface AvecSyncStats {
+  panel: RomPanelId
+  deployment_host: string | null
   clients_upserted: number
   appointments_synced: number
   attendances_synced: number
@@ -269,7 +273,11 @@ export async function runAvecSync(): Promise<AvecSyncRun> {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
 
+  const deployment = getDeploymentContext()
+
   const stats: AvecSyncStats = {
+    panel: deployment.panel,
+    deployment_host: deployment.host,
     clients_upserted: 0,
     appointments_synced: 0,
     attendances_synced: 0,

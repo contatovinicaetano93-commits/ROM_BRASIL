@@ -4,6 +4,7 @@ import { isAvecConfigured, isAvecMock, getAvecBaseUrl, testAvecConnection } from
 import { runAvecSync, getLastAvecSync } from '@/lib/avec/sync'
 import { isAuthorized } from '@/lib/auth'
 import { isProduction } from '@/lib/env'
+import { getDeploymentContext } from '@/lib/deployment'
 
 async function authorize(req: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim()
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
       configured: isAvecConfigured(),
       mock: isAvecMock(),
       base_url: getAvecBaseUrl(),
+      deployment: getDeploymentContext(),
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
     })

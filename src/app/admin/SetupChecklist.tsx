@@ -12,6 +12,8 @@ interface HealthForSetup {
   telegram: { configured: boolean }
   cron: { configured: boolean }
   auth: { enabled: boolean }
+  deployment?: { panel: string }
+  validation?: { ok: boolean }
 }
 
 const PRIORITY_LABEL = {

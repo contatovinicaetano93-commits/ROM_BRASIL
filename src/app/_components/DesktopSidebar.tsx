@@ -5,15 +5,17 @@ import { usePathname } from 'next/navigation'
 import { Activity } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
+import { getBrand } from '@/lib/brand'
 
 export function DesktopSidebar() {
   const pathname = usePathname()
+  const brand = getBrand()
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
       <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">ROM</span>
-        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">Club</span>
+        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
+        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">{brand.locationSubtitle}</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-4">
@@ -57,7 +59,7 @@ export function DesktopSidebar() {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-gold-strong">Recepção</p>
-            <p className="text-xs text-muted">ROM Club · Operação</p>
+            <p className="text-xs text-muted">{brand.receptionLabel}</p>
           </div>
         </div>
         <p className="mt-4 text-[0.65rem] text-muted/70">Onboarding &amp; KPIs · v0.1.0</p>
