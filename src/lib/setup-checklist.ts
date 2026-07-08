@@ -54,6 +54,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Pedir token ao suporte Avec (relatórios 0004, 0051, 0002)',
       'Vercel → AVEC_API_TOKEN = token recebido',
+      'Opcional: AVEC_SYNC_MAX_PAGES (padrão 200 páginas ≈ 50 mil clientes)',
       'Remova AVEC_MOCK da Vercel (se existir)',
       'Admin → Testar conexão → Rodar sync',
     ],

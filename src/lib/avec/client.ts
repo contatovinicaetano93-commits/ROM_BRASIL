@@ -139,6 +139,18 @@ export interface AvecReportFetchResult {
   limit: number
 }
 
+export const AVEC_PAGE_LIMIT = 250
+/** Padrão: 200 páginas × 250 linhas = até 50.000 registros por relatório. */
+export const AVEC_SYNC_MAX_PAGES_DEFAULT = 200
+
+export function getAvecSyncMaxPages() {
+  const raw = process.env.AVEC_SYNC_MAX_PAGES?.trim()
+  if (!raw) return AVEC_SYNC_MAX_PAGES_DEFAULT
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 1) return AVEC_SYNC_MAX_PAGES_DEFAULT
+  return Math.min(Math.floor(n), 500)
+}
+
 export const AVEC_REPORT_LABELS: Record<string, string> = {
   '0004': 'clientes',
   '0051': 'agendamentos',
@@ -151,15 +163,15 @@ export function wasPaginationTruncated(rowsOnLastPage: number, limit: number, pa
 
 export function formatTruncationWarning(reportId: string, result: AvecReportFetchResult) {
   const label = AVEC_REPORT_LABELS[reportId] ?? reportId
-  return `Relatório ${label} (${reportId}) atingiu o limite de ${result.maxPages} páginas (${result.rows.length} linhas, ${result.limit}/página). Pode haver dados não sincronizados — contate o suporte ou aumente o limite.`
+  return `Relatório ${label} (${reportId}) atingiu o limite de ${result.maxPages} páginas (${result.rows.length} linhas, ${result.limit}/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.`
 }
 
 export async function fetchAllAvecReport(
   reportId: string,
   params: AvecReportParams = {},
-  maxPages = 20
+  maxPages = getAvecSyncMaxPages()
 ): Promise<AvecReportFetchResult> {
-  const limit = params.limit ?? 250
+  const limit = params.limit ?? AVEC_PAGE_LIMIT
   const all: Record<string, unknown>[] = []
   let pagesFetched = 0
   let truncated = false

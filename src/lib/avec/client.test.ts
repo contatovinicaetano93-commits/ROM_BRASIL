@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractRows,
   formatTruncationWarning,
+  getAvecSyncMaxPages,
   wasPaginationTruncated,
   type AvecReportFetchResult,
 } from '@/lib/avec/client'
@@ -38,6 +39,17 @@ describe('pagination truncation', () => {
     const msg = formatTruncationWarning('0004', result)
     expect(msg).toContain('clientes')
     expect(msg).toContain('5000')
-    expect(msg).toContain('não sincronizados')
+    expect(msg).toContain('AVEC_SYNC_MAX_PAGES')
+  })
+
+  it('usa padrão 200 páginas e respeita env', () => {
+    const env = process.env
+    delete process.env.AVEC_SYNC_MAX_PAGES
+    expect(getAvecSyncMaxPages()).toBe(200)
+    process.env.AVEC_SYNC_MAX_PAGES = '350'
+    expect(getAvecSyncMaxPages()).toBe(350)
+    process.env.AVEC_SYNC_MAX_PAGES = '9999'
+    expect(getAvecSyncMaxPages()).toBe(500)
+    process.env = env
   })
 })
