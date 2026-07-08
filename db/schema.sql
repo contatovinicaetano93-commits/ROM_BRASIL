@@ -62,6 +62,20 @@ create index if not exists client_services_contact_idx on client_services (conta
 create index if not exists client_services_active_idx on client_services (active) where active = true;
 create index if not exists client_services_scheduled_idx on client_services (scheduled_at) where scheduled_at is not null;
 
+create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id) where avec_client_id is not null;
+
+-- Log de sincronizações com a API de Relatórios Avec.
+create table if not exists avec_sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  status text not null check (status in ('ok', 'error', 'partial')),
+  stats jsonb not null default '{}',
+  error text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists avec_sync_runs_created_idx on avec_sync_runs (created_at desc);
+
 -- KPIs agregados por dia e canal — o painel administrativo lê daqui.
 -- count(*) é bigint; o cast ::int garante que o driver retorne número (não string).
 create or replace view v_kpi_daily as

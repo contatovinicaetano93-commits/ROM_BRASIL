@@ -16,8 +16,10 @@ navegação por *bottom tab bar* (Painel / Contatos), `theme-color` e
 
 ## Como funciona
 
-- `src/app/api/webhooks/avec` — recebe eventos do Avec (webhook simples até
-  confirmarmos a API oficial deles).
+- `src/app/api/webhooks/avec` — webhook push (agendamento, atendimento, cliente).
+- `src/app/api/avec/sync` — sincronização com a API de Relatórios Avec
+  (clientes `0004`, agendamentos `0051`, atendidos `0002`). Roda via cron
+  a cada 3h ou manualmente com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do provedor WhatsApp
   (Evolution API), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
@@ -39,9 +41,11 @@ ou investigar depois.
 1. **Criar um projeto Neon dedicado ao ROM** e copiar a `DATABASE_URL`
    (connection string com `sslmode=require`) pro `.env.local`.
 2. **Rodar `db/schema.sql`** no SQL Editor do Neon (ou `psql`).
-3. **Confirmar com o suporte do Avec** se existe API/webhook público. Não
-   achei documentação pública — sem isso, o endpoint `/api/webhooks/avec` fica
-   pronto mas sem gatilho real.
+3. **Avec** — pedir ao suporte o `AVEC_API_URL` (base da API de relatórios)
+   e gerar o token no painel da unidade. Preencher `AVEC_API_URL`,
+   `AVEC_API_TOKEN` e `CRON_SECRET` (protege o sync automático). Opcional:
+   `AVEC_WEBHOOK_SECRET` se configurarem webhook push para
+   `/api/webhooks/avec`.
 4. **Decidir o provedor de WhatsApp**: Evolution API (rápido, roda em minutos,
    mas usa número real em modo não-oficial) ou WhatsApp Cloud API oficial
    (mais lento pra configurar — verificação Meta Business — porém mais

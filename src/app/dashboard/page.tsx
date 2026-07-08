@@ -62,10 +62,21 @@ function fmtSchedule(iso: string) {
   return d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+interface AvecStatus {
+  configured: boolean
+  last: {
+    status: string
+    created_at: string
+    stats: { clients_upserted?: number; appointments_synced?: number; attendances_synced?: number }
+    error: string | null
+  } | null
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
+  const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -90,6 +101,13 @@ export default function DashboardPage() {
       .then((r) => r.json())
       .then((json) => {
         if (json.data) setSchedule(json.data)
+      })
+      .catch(() => {})
+
+    fetch('/api/avec/sync', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.data) setAvec(json.data)
       })
       .catch(() => {})
   }, [])
@@ -221,9 +239,23 @@ export default function DashboardPage() {
           />
           <HealthItem
             icon={<RefreshCw size={17} />}
-            label="Sincronização"
-            value={loading ? 'Carregando…' : error ? 'Sem conexão com o banco' : 'Atualizado agora'}
+            label="Banco de dados"
+            value={loading ? 'Carregando…' : error ? 'Sem conexão com o banco' : 'Conectado'}
             tone={error ? 'warning' : 'gold'}
+          />
+          <HealthItem
+            icon={<RefreshCw size={17} />}
+            label="Sync Avec"
+            value={
+              !avec
+                ? 'Carregando…'
+                : !avec.configured
+                  ? 'Configure AVEC_API_URL + TOKEN'
+                  : avec.last
+                    ? `${avec.last.status === 'ok' ? 'OK' : avec.last.status} · ${new Date(avec.last.created_at).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                    : 'Nunca sincronizado — aguardando cron'
+            }
+            tone={avec?.last?.status === 'error' ? 'warning' : avec?.configured ? 'success' : 'warning'}
           />
           <HealthItem
             icon={<ShieldCheck size={17} />}

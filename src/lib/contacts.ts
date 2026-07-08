@@ -9,6 +9,7 @@ interface UpsertContactInput {
   channel: Channel
   source: string
   avecClientId?: string | null
+  status?: ContactStatus
 }
 
 export const CONTACT_STATUSES = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido'] as const
@@ -35,6 +36,26 @@ export interface ContactRow {
 export async function upsertContact(input: UpsertContactInput): Promise<ContactRow> {
   const sql = getSql()
 
+  if (input.avecClientId) {
+    const byAvec = (await sql`
+      select id from contacts where avec_client_id = ${input.avecClientId} limit 1
+    `) as { id: string }[]
+
+    if (byAvec.length > 0) {
+      const rows = (await sql`
+        update contacts
+        set last_contact_at = now(),
+            name = coalesce(${input.name ?? null}, name),
+            email = coalesce(${input.email ?? null}, email),
+            phone = coalesce(${input.phone ?? null}, phone),
+            status = coalesce(${input.status ?? null}, status)
+        where id = ${byAvec[0].id}
+        returning *
+      `) as ContactRow[]
+      return rows[0]
+    }
+  }
+
   if (input.phone) {
     const existing = (await sql`
       select id from contacts where phone = ${input.phone} limit 1
@@ -44,7 +65,10 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       const rows = (await sql`
         update contacts
         set last_contact_at = now(),
-            name = coalesce(${input.name ?? null}, name)
+            name = coalesce(${input.name ?? null}, name),
+            email = coalesce(${input.email ?? null}, email),
+            avec_client_id = coalesce(${input.avecClientId ?? null}, avec_client_id),
+            status = coalesce(${input.status ?? null}, status)
         where id = ${existing[0].id}
         returning *
       `) as ContactRow[]
@@ -53,19 +77,28 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
   }
 
   const rows = (await sql`
-    insert into contacts (name, phone, email, channel, source, avec_client_id)
+    insert into contacts (name, phone, email, channel, source, avec_client_id, status)
     values (
       ${input.name ?? null},
       ${input.phone ?? null},
       ${input.email ?? null},
       ${input.channel},
       ${input.source},
-      ${input.avecClientId ?? null}
+      ${input.avecClientId ?? null},
+      ${input.status ?? 'novo'}
     )
     returning *
   `) as ContactRow[]
 
   return rows[0]
+}
+
+export async function getContactByAvecId(avecClientId: string): Promise<ContactRow | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    select * from contacts where avec_client_id = ${avecClientId} limit 1
+  `) as ContactRow[]
+  return rows[0] ?? null
 }
 
 export async function getContactById(id: string): Promise<ContactRow | null> {
