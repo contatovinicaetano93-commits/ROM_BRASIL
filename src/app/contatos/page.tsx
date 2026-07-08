@@ -10,6 +10,7 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../_components/ui'
+import { apiFetch } from '@/lib/api-client'
 
 interface Contact {
   id: string
@@ -53,7 +54,7 @@ export default function ContatosPage() {
     try {
       const params = new URLSearchParams({ sort: 'urgency' })
       if (pendingOnly) params.set('pending', 'true')
-      const res = await fetch(`/api/contacts?${params}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
       else setContacts(json.data ?? [])
@@ -331,11 +332,10 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
             ]
           : undefined
 
-      const res = await fetch('/api/contacts', {
+      const res = await apiFetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, phone, notes: notes || undefined, services }),
-        credentials: 'include',
       })
       const json = await res.json()
       if (!res.ok || json.error) {

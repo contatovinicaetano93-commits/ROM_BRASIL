@@ -10,13 +10,14 @@ export interface SetupItem {
 export const SETUP_ITEMS: SetupItem[] = [
   {
     id: 'auth',
-    label: 'Proteção /admin',
+    label: 'Login do painel',
     envVars: ['ROM_ADMIN_USER', 'ROM_ADMIN_PASSWORD'],
     priority: 'agora',
     steps: [
       'Vercel → Settings → Environment Variables',
       'ROM_ADMIN_USER = admin',
       'ROM_ADMIN_PASSWORD = sua senha forte',
+      'Protege dashboard, contatos e todas as APIs internas',
       'Redeploy do projeto',
     ],
   },
@@ -26,9 +27,9 @@ export const SETUP_ITEMS: SetupItem[] = [
     envVars: ['CRON_SECRET'],
     priority: 'agora',
     steps: [
-      'Gere um segredo: openssl rand -hex 32 (ou string aleatória longa)',
+      'Gere um segredo: openssl rand -hex 32',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Protege sync automático (8h) e botão "Rodar sync" no admin',
+      'Obrigatório em produção — protege sync automático (8h) e manual',
       'Redeploy',
     ],
   },
@@ -41,7 +42,6 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Crie conta em console.anthropic.com',
       'API Keys → Create Key',
       'Vercel → ANTHROPIC_API_KEY = sk-ant-...',
-      'Opcional: ANTHROPIC_MODEL = claude-3-5-haiku-latest (mais barato)',
       'Ativa: briefings IA, WhatsApp bot e Telegram secretária',
     ],
     link: { href: 'https://console.anthropic.com/settings/keys', label: 'Anthropic API Keys' },
@@ -65,25 +65,27 @@ export const SETUP_ITEMS: SetupItem[] = [
   {
     id: 'whatsapp',
     label: 'WhatsApp (Evolution)',
-    envVars: ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'EVOLUTION_API_INSTANCE'],
+    envVars: ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'EVOLUTION_API_INSTANCE', 'WHATSAPP_WEBHOOK_SECRET'],
     priority: 'quando_tiver',
     steps: [
       'Subir ou contratar instância Evolution API',
       'Criar instância e conectar número WhatsApp (QR code)',
       'Vercel: EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_API_INSTANCE',
-      'Webhook Evolution → https://rom-club.vercel.app/api/webhooks/whatsapp',
+      'Gere WHATSAPP_WEBHOOK_SECRET e configure no webhook Evolution (header x-webhook-secret)',
+      'Webhook → https://seu-dominio/api/webhooks/whatsapp',
     ],
   },
   {
     id: 'telegram',
-    label: 'Telegram bot',
-    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET'],
+    label: 'Telegram bot (equipe)',
+    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_ALLOWED_CHAT_IDS'],
     priority: 'opcional',
     steps: [
       'Telegram → @BotFather → /newbot → copie o token',
       'Vercel → TELEGRAM_BOT_TOKEN = token do bot',
       'Gere TELEGRAM_WEBHOOK_SECRET (string aleatória)',
-      'setWebhook: https://rom-club.vercel.app/api/webhooks/telegram + secret_token',
+      'Descubra chat IDs da equipe (getUpdates) e configure TELEGRAM_ALLOWED_CHAT_IDS',
+      'setWebhook: https://seu-dominio/api/webhooks/telegram + secret_token',
     ],
     link: { href: 'https://t.me/BotFather', label: '@BotFather' },
   },
@@ -95,8 +97,8 @@ export function isItemConfigured(
     database: { connected: boolean }
     claude: { configured: boolean }
     avec: { token: boolean }
-    whatsapp: { configured: boolean }
-    telegram: { configured: boolean }
+    whatsapp: { configured: boolean; webhook_secret?: boolean }
+    telegram: { configured: boolean; webhook_secret?: boolean; allowlist?: boolean }
     cron: { configured: boolean }
     auth: { enabled: boolean }
   }
@@ -111,9 +113,13 @@ export function isItemConfigured(
     case 'avec':
       return health.avec.token
     case 'whatsapp':
-      return health.whatsapp.configured
+      return health.whatsapp.configured && Boolean(health.whatsapp.webhook_secret)
     case 'telegram':
-      return health.telegram.configured
+      return (
+        health.telegram.configured &&
+        Boolean(health.telegram.webhook_secret) &&
+        Boolean(health.telegram.allowlist)
+      )
     default:
       return false
   }

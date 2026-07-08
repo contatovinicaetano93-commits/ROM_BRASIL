@@ -12,6 +12,8 @@ import {
   StatusPill,
   CHANNEL_LABEL,
 } from '../_components/ui'
+import { fmtSchedule } from '@/lib/format'
+import { apiFetch } from '@/lib/api-client'
 
 interface ScheduleItem {
   id: string
@@ -53,15 +55,6 @@ function aggregateByChannel(rows: KpiData['byDay']) {
   return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
 }
 
-function fmtSchedule(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `Hoje, ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
-
 interface AvecStatus {
   configured: boolean
   last: {
@@ -86,16 +79,16 @@ export default function DashboardPage() {
 
     async function loadDashboard() {
       try {
-        const kpisRes = await fetch('/api/kpis', { cache: 'no-store' })
+        const kpisRes = await apiFetch('/api/kpis', { cache: 'no-store' })
         const kpisJson = await kpisRes.json()
         if (cancelled) return
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
         const [recRes, schedRes, avecRes] = await Promise.all([
-          fetch('/api/recommendations', { cache: 'no-store' }),
-          fetch('/api/schedule', { cache: 'no-store' }),
-          fetch('/api/avec/sync', { cache: 'no-store' }),
+          apiFetch('/api/recommendations', { cache: 'no-store' }),
+          apiFetch('/api/schedule', { cache: 'no-store' }),
+          apiFetch('/api/avec/sync', { cache: 'no-store' }),
         ])
         if (cancelled) return
 
@@ -283,7 +276,7 @@ export default function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at)}
+                      <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at, { weekday: true })}
                     </p>
                   </div>
                   <ChevronRight size={16} className="shrink-0 text-muted" />

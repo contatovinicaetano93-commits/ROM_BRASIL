@@ -47,6 +47,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       const rows = (await sql`
         update contacts
         set last_contact_at = now(),
+            channel = ${input.channel},
             name = coalesce(${input.name ?? null}, name),
             email = coalesce(${input.email ?? null}, email),
             phone = coalesce(${phone ?? null}, phone),
@@ -67,6 +68,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       const rows = (await sql`
         update contacts
         set last_contact_at = now(),
+            channel = ${input.channel},
             name = coalesce(${input.name ?? null}, name),
             email = coalesce(${input.email ?? null}, email),
             avec_client_id = coalesce(${input.avecClientId ?? null}, avec_client_id),

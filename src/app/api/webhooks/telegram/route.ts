@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { ok } from '@/lib/api-response'
+import { ok, err } from '@/lib/api-response'
 import { getSql } from '@/lib/db'
 import { sendTelegramMessage } from '@/lib/telegram/bot'
 import { askAI } from '@/lib/ai/client'
@@ -7,6 +7,7 @@ import type { ContactRow } from '@/lib/contacts'
 import { listServices } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { generateBrief } from '@/lib/brief'
+import { isTelegramChatAllowed, verifyTelegramWebhook } from '@/lib/webhooks'
 
 const SECRETARIA_PROMPT = `Você é a secretária virtual do ROM Club para a equipe interna.
 Responda perguntas práticas sobre os KPIs de contato do salão (quantidade de
@@ -22,7 +23,6 @@ interface TelegramUpdate {
   }
 }
 
-// Busca cliente por nome (parcial) ou telefone (dígitos) e monta o briefing pro backstaff.
 async function handleClienteCommand(chatId: number, query: string) {
   const sql = getSql()
   const digits = query.replace(/\D/g, '')
@@ -47,10 +47,8 @@ async function handleClienteCommand(chatId: number, query: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-telegram-bot-api-secret-token')
-  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
-    return ok({ ignored: true }, undefined, 200)
-  }
+  const webhook = verifyTelegramWebhook(req)
+  if (!webhook.ok) return err(webhook.reason, 401)
 
   const update = (await req.json().catch(() => null)) as TelegramUpdate | null
   const chatId = update?.message?.chat.id
@@ -58,8 +56,13 @@ export async function POST(req: NextRequest) {
 
   if (!chatId || !text) return ok({ ignored: true })
 
+  const chat = isTelegramChatAllowed(chatId)
+  if (!chat.ok) {
+    await sendTelegramMessage(chatId, 'Este bot é restrito à equipe ROM.').catch(() => {})
+    return ok({ ignored: true, reason: chat.reason })
+  }
+
   try {
-    // Comando guiado: /cliente <busca> → briefing pro backstaff (cross/up-sell)
     const clienteMatch = text.match(/^\/cliente\s+(.+)/i)
     if (clienteMatch) {
       await handleClienteCommand(chatId, clienteMatch[1].trim())

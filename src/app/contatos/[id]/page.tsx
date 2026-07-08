@@ -27,6 +27,8 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
+import { fmtSchedule } from '@/lib/format'
+import { apiFetch } from '@/lib/api-client'
 
 interface Service {
   id: string
@@ -87,15 +89,6 @@ const REC_TONE: Record<string, string> = {
   scheduled: 'border-sky-500/40 bg-sky-500/10',
   upsell: 'border-gold/40 bg-gold/10',
   crosssell: 'border-sky-500/40 bg-sky-500/10',
-}
-
-function fmtSchedule(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `Hoje, ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function ServiceStateBadge({ state, days }: { state: Service['state']; days: number | null }) {
@@ -184,7 +177,7 @@ export default function ContactDetailPage() {
   const [mutationOk, setMutationOk] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/contacts/${id}`, { cache: 'no-store' })
+    const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
     const json = await res.json()
     if (json.error) setError(json.error)
     else setData(json.data)
@@ -198,7 +191,7 @@ export default function ContactDetailPage() {
     setMutationError(null)
     setMutationOk(null)
     try {
-      const res = await fetch(url, { ...init, credentials: 'include' })
+      const res = await apiFetch(url, init)
       const json = await res.json()
       if (!res.ok || json.error) {
         setMutationError(json.error ?? 'Não foi possível salvar')
@@ -214,7 +207,7 @@ export default function ContactDetailPage() {
   }
 
   useEffect(() => {
-    fetch(`/api/contacts/${id}`, { cache: 'no-store' })
+    apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((json) => {
         if (json.error) setError(json.error)
@@ -251,7 +244,7 @@ export default function ContactDetailPage() {
   async function generateBrief() {
     setBriefLoading(true)
     try {
-      const res = await fetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
       const json = await res.json()
       if (json.data) setBrief({ text: json.data.brief, source: json.data.source })
     } finally {
@@ -551,10 +544,9 @@ function ScheduleSheet({
     setSubmitting(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/services/${service.id}`, {
+      const res = await apiFetch(`/api/services/${service.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ action: 'schedule', scheduledAt: new Date(when).toISOString() }),
       })
       const json = await res.json()
@@ -626,10 +618,9 @@ function AddServiceSheet({
     setSubmitting(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/contacts/${contactId}/services`, {
+      const res = await apiFetch(`/api/contacts/${contactId}/services`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           name,
           category,
@@ -743,10 +734,9 @@ function EditContactSheet({
     setSubmitting(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/contacts/${contact.id}`, {
+      const res = await apiFetch(`/api/contacts/${contact.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           name,
           phone,

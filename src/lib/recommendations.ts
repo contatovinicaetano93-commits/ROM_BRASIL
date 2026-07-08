@@ -1,4 +1,5 @@
 import type { ClientService } from '@/lib/services'
+import { DAY_MS, fmtSchedule } from '@/lib/format'
 
 export type ServiceState = 'overdue' | 'due_soon' | 'ok' | 'no_cadence'
 
@@ -16,8 +17,6 @@ export interface Recommendation {
   detail: string
 }
 
-const DAY = 86_400_000
-
 // Enriquece cada serviço com o próximo vencimento e o estado (atrasado/vencendo/ok).
 // Baseline = última vez feito; se nunca, usa a data de cadastro.
 export function enrichServices(services: ClientService[]): EnrichedService[] {
@@ -27,20 +26,11 @@ export function enrichServices(services: ClientService[]): EnrichedService[] {
       return { ...s, next_due_at: null, days_until: null, state: 'no_cadence' as const }
     }
     const baseline = new Date(s.last_done_at ?? s.created_at).getTime()
-    const nextDue = baseline + s.cadence_days * DAY
-    const daysUntil = Math.round((nextDue - now) / DAY)
+    const nextDue = baseline + s.cadence_days * DAY_MS
+    const daysUntil = Math.round((nextDue - now) / DAY_MS)
     const state: ServiceState = daysUntil < 0 ? 'overdue' : daysUntil <= 7 ? 'due_soon' : 'ok'
     return { ...s, next_due_at: new Date(nextDue).toISOString(), days_until: daysUntil, state }
   })
-}
-
-function fmtSchedule(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `hoje às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 // Gera recomendações guiadas de ação (o que fazer AGORA com esse cliente).
@@ -54,7 +44,7 @@ export function computeRecommendations(enriched: EnrichedService[]): Recommendat
     if (!s.scheduled_at) continue
     const t = new Date(s.scheduled_at).getTime()
     if (t < now) continue
-    const daysUntil = Math.round((t - now) / DAY)
+    const daysUntil = Math.round((t - now) / DAY_MS)
     if (daysUntil <= 7) {
       recs.push({
         type: 'scheduled',

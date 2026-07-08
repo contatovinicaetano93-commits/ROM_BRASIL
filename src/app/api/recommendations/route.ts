@@ -2,14 +2,13 @@ import { ok, handleError } from '@/lib/api-response'
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
+import { urgencyForContact } from '@/lib/urgency'
 
 interface JoinedService extends ClientService {
   contact_name: string | null
   contact_status: string
 }
 
-// GET /api/recommendations — visão do front: contatos com ação recomendada agora,
-// ordenados por urgência (atrasados primeiro). Guia o cross-sell/up-sell proativo.
 export async function GET() {
   try {
     const sql = getSql()
@@ -30,22 +29,15 @@ export async function GET() {
 
     const items = Array.from(byContact.entries())
       .map(([contactId, services]) => {
-        const enriched = enrichServices(services)
-        const recommendations = computeRecommendations(enriched)
-        const overdue = enriched.filter((s) => s.state === 'overdue').length
-        const dueSoon = enriched.filter((s) => s.state === 'due_soon').length
-        const scheduledSoon = enriched.filter((s) => {
-          if (!s.scheduled_at) return false
-          const t = new Date(s.scheduled_at).getTime()
-          return t >= Date.now() && t - Date.now() <= 7 * 86_400_000
-        }).length
+        const u = urgencyForContact(services)
+        const recommendations = computeRecommendations(enrichServices(services))
         return {
           contact_id: contactId,
           contact_name: services[0].contact_name,
           contact_status: services[0].contact_status,
-          overdue,
-          due_soon: dueSoon,
-          scheduled_soon: scheduledSoon,
+          overdue: u.overdue,
+          due_soon: u.due_soon,
+          scheduled_soon: u.scheduled_soon,
           recommendations,
         }
       })

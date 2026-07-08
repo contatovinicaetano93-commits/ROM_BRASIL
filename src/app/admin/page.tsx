@@ -6,6 +6,7 @@ import { RefreshCw, ChevronRight, Database, Link2 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL, PrimaryButton } from '../_components/ui'
 import { LogoutButton } from '../_components/LogoutButton'
 import { SetupChecklist } from './SetupChecklist'
+import { apiFetch } from '@/lib/api-client'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -85,11 +86,11 @@ export default function AdminPage() {
     setError(null)
     try {
       const [k, c, s, a, h] = await Promise.all([
-        fetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json()),
-        fetch('/api/contacts?sort=urgency', { cache: 'no-store' }).then((r) => r.json()),
-        fetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json()),
-        fetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json()),
-        fetch('/api/health', { cache: 'no-store' }).then((r) => r.json()),
+        apiFetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json()),
+        apiFetch('/api/contacts?sort=urgency', { cache: 'no-store' }).then((r) => r.json()),
+        apiFetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json()),
+        apiFetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json()),
+        apiFetch('/api/health', { cache: 'no-store' }).then((r) => r.json()),
       ])
 
       const errs: string[] = []
@@ -127,7 +128,7 @@ export default function AdminPage() {
   async function testAvec() {
     setConnMsg('Testando…')
     try {
-      const res = await fetch('/api/avec/sync?test=1', { cache: 'no-store' })
+      const res = await apiFetch('/api/avec/sync?test=1', { cache: 'no-store' })
       const json = await res.json()
       const c = json.data?.connection
       if (c?.ok) setConnMsg(`OK — ${c.sample_rows ?? 0} linha(s) no relatório 0004`)
@@ -142,7 +143,7 @@ export default function AdminPage() {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const res = await fetch('/api/avec/sync', { method: 'POST', cache: 'no-store', credentials: 'include' })
+      const res = await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' })
       const json = await res.json()
       if (json.error) setSyncMsg(`Erro: ${json.error}`)
       else setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
@@ -158,7 +159,7 @@ export default function AdminPage() {
     setSeeding(true)
     setSeedMsg(null)
     try {
-      const res = await fetch('/api/seed', { method: 'POST', credentials: 'include' })
+      const res = await apiFetch('/api/seed', { method: 'POST' })
       const json = await res.json()
       if (json.error) setSeedMsg(`Erro: ${json.error}`)
       else setSeedMsg(json.data?.message ?? 'Seed concluído')
