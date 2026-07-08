@@ -261,11 +261,13 @@ export default function ContactDetailPage() {
   const { contact, services, recommendations, events } = data
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-5 py-6">
-      <button onClick={() => router.push('/contatos')} className="flex items-center gap-1 text-sm text-muted active:text-foreground">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
+      <button onClick={() => router.push('/contatos')} className="flex items-center gap-1 text-sm text-muted active:text-foreground lg:hover:text-foreground">
         <ChevronLeft size={18} /> Contatos
       </button>
 
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-8">
+        <div className="flex flex-col gap-5 lg:col-span-5 lg:gap-6">
       {/* Perfil */}
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
@@ -346,7 +348,9 @@ export default function ContactDetailPage() {
           ))}
         </div>
       )}
+        </div>
 
+        <div className="flex flex-col gap-5 lg:col-span-7 lg:gap-6">
       {/* Serviços */}
       <SectionCard
         title="Serviços & recorrência"
@@ -436,6 +440,8 @@ export default function ContactDetailPage() {
           </ol>
         )}
       </SectionCard>
+        </div>
+      </div>
 
       {addOpen && (
         <AddServiceSheet
@@ -507,10 +513,10 @@ function ScheduleSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6" onClick={onClose}>
       <div className="animate-fade-in absolute inset-0 bg-black/60" />
       <div
-        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:animate-rise lg:max-w-lg lg:rounded-2xl lg:border lg:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
@@ -586,10 +592,10 @@ function AddServiceSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6" onClick={onClose}>
       <div className="animate-fade-in absolute inset-0 bg-black/60" />
       <div
-        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:animate-rise lg:max-w-lg lg:rounded-2xl lg:border lg:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />

@@ -9,10 +9,9 @@ Stack: Next.js (App Router) + TypeScript + Tailwind + Neon (Postgres serverless)
 API-first (front-end só fala com `/api/*`). Acesso ao banco por SQL direto
 (`@neondatabase/serverless`).
 
-**Interface é web mobile-first** (não é app nativo): pensada pra abrir no
-navegador do celular da equipe. Container limitado à largura de celular,
-navegação por *bottom tab bar* (Painel / Contatos), `theme-color` e
-`apple-web-app` pra ficar com cara de app quando salva na tela inicial.
+**Interface adaptativa:** mobile-first no celular (bottom bar, drawer) e layout
+desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
+1600px, painel em duas colunas).
 
 ## Como funciona
 

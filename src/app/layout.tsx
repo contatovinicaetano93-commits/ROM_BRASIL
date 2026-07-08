@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { TopBar } from "./_components/TopBar";
-import { BottomNav } from "./_components/BottomNav";
+import { AppShell } from "./_components/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,13 +43,8 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#050403]">
-        {/* Mobile-first no celular; expande no desktop sem perder o layout */}
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col bg-background pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-xl lg:max-w-3xl lg:min-h-screen lg:border-x lg:border-border/50 xl:max-w-4xl">
-          <TopBar />
-          {children}
-        </div>
-        <BottomNav />
+      <body className="min-h-full bg-background">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

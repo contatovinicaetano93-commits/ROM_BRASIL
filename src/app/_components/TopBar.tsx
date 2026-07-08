@@ -3,40 +3,44 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, LayoutDashboard, Users, ChevronRight } from 'lucide-react'
-
-const NAV = [
-  { href: '/dashboard', label: 'Visão geral', icon: LayoutDashboard },
-  { href: '/contatos', label: 'Contatos', icon: Users },
-] as const
+import { Menu, X, ChevronRight } from 'lucide-react'
+import { APP_NAV, pageTitleFromPath } from './nav'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
+  const title = pageTitleFromPath(pathname)
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-        <div className="flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
+        <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] lg:px-8 lg:pt-4">
+          {/* Mobile: menu + logo centralizado */}
           <button
             type="button"
             onClick={() => setOpen(true)}
             aria-label="Abrir menu"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/90 active:bg-card"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/90 active:bg-card lg:hidden"
           >
             <Menu size={22} />
           </button>
 
-          <Link href="/dashboard" className="flex items-baseline gap-1">
-            <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold">ROM</span>
-            <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">Club</span>
-          </Link>
+          <div className="min-w-0 flex-1 lg:flex lg:items-center lg:justify-between">
+            <Link href="/dashboard" className="flex items-baseline justify-center gap-1 lg:justify-start">
+              <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">ROM</span>
+              <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">Club</span>
+              <span className="hidden text-lg font-semibold text-foreground lg:inline">{title}</span>
+            </Link>
+            <p className="mt-0.5 hidden text-xs text-muted lg:block">
+              Frente de caixa · contatos, KPIs e ações guiadas
+            </p>
+          </div>
 
           <div className="flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 py-1 pl-1 pr-3">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gold text-xs font-bold text-background">
               R
             </span>
-            <div className="leading-tight">
+            <div className="hidden leading-tight sm:block">
               <p className="text-[0.6rem] text-muted">ROM Club</p>
               <p className="-mt-0.5 text-[0.7rem] font-semibold text-gold-strong">Recepção</p>
             </div>
@@ -44,8 +48,9 @@ export function TopBar() {
         </div>
       </header>
 
+      {/* Drawer só no mobile — desktop usa sidebar fixa */}
       {open && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div className="animate-fade-in absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside className="animate-slide-in-left absolute inset-y-0 left-0 flex w-[82%] max-w-xs flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)]">
             <div className="flex items-center justify-between px-5 py-5">
@@ -64,7 +69,7 @@ export function TopBar() {
             </div>
 
             <nav className="flex flex-col gap-1 px-3">
-              {NAV.map(({ href, label, icon: Icon }) => {
+              {APP_NAV.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href || pathname.startsWith(`${href}/`)
                 return (
                   <Link

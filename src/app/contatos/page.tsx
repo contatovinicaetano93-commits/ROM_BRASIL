@@ -92,21 +92,24 @@ export default function ContatosPage() {
   })
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-5 py-6">
-      <div>
-        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Contatos</p>
-        <h1 className="mt-1 text-xl font-semibold">Clientes & leads</h1>
+    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
+          <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Clientes & leads</h1>
         <p className="mt-0.5 text-xs text-muted">
           {loading
             ? 'Todos os canais, em um só lugar'
             : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`}
         </p>
+        </div>
+        <div className="shrink-0 lg:w-72">
+          <PrimaryButton onClick={() => setFormOpen(true)}>
+            <Plus size={20} strokeWidth={2.4} />
+            Novo contato
+          </PrimaryButton>
+        </div>
       </div>
-
-      <PrimaryButton onClick={() => setFormOpen(true)}>
-        <Plus size={20} strokeWidth={2.4} />
-        Novo contato
-      </PrimaryButton>
 
       {contacts.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -332,10 +335,10 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6" onClick={onClose}>
       <div className="animate-fade-in absolute inset-0 bg-black/60" />
       <div
-        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+        className="animate-slide-up relative w-full max-w-md rounded-t-2xl border-t border-border bg-card-elevated p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:animate-rise lg:max-w-lg lg:rounded-2xl lg:border lg:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
