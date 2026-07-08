@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ROM · Painel de Contatos",
   description:
-    "Frente de caixa do ROM Club: contatos por WhatsApp, Telegram e Avec, centralizados num painel de KPIs.",
+    "Frente de caixa do ROM Club: playbook do dia, contatos e KPIs do salão.",
   applicationName: "ROM",
   appleWebApp: {
     capable: true,

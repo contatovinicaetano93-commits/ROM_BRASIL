@@ -1,41 +1,35 @@
 import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
-import { upsertContact, logEvent } from '@/lib/contacts'
+import { logEvent } from '@/lib/contacts'
 import { getWhatsAppAdapter } from '@/lib/whatsapp/adapter'
+import { handleWhatsAppMessage } from '@/lib/whatsapp/conversation'
 import { parseWhatsAppPayload } from '@/lib/whatsapp/parse-payload'
-import { askAI } from '@/lib/ai/client'
 
-const FIRST_CONTACT_PROMPT = `Você é a recepcionista virtual do salão ROM. Seja calorosa, direta e breve
-(máx. 3 frases). Objetivo: entender se a pessoa quer agendar um horário, tirar
-uma dúvida sobre serviço/preço, ou outra coisa — e guiar pro próximo passo.
-Se a pergunta fugir do escopo do salão, diga que vai chamar uma atendente humana.`
+function authorizeWebhook(req: NextRequest) {
+  const secret = process.env.WHATSAPP_WEBHOOK_SECRET?.trim()
+  if (!secret) return true
+
+  const header =
+    req.headers.get('x-whatsapp-secret') ??
+    req.headers.get('x-webhook-secret') ??
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+
+  return header === secret
+}
 
 export async function POST(req: NextRequest) {
+  if (!authorizeWebhook(req)) {
+    return ok({ ignored: true }, undefined, 200)
+  }
+
   const body = await req.json().catch(() => null)
   const parsed = parseWhatsAppPayload(body)
   if (!parsed) return err('Payload inválido', 422)
 
   const { from, text } = parsed
 
-  let contactId: string | null = null
-
   try {
-    const contact = await upsertContact({
-      phone: from,
-      channel: 'whatsapp',
-      source: 'whatsapp_bot',
-    })
-    contactId = contact.id
-
-    await logEvent({
-      contactId,
-      channel: 'whatsapp',
-      direction: 'in',
-      handledBy: 'ai',
-      payload: { text },
-    })
-
-    const reply = await askAI(FIRST_CONTACT_PROMPT, text)
+    const { contactId, reply, intent, handoff } = await handleWhatsAppMessage(from, text)
 
     await getWhatsAppAdapter().sendMessage(from, reply)
 
@@ -43,21 +37,19 @@ export async function POST(req: NextRequest) {
       contactId,
       channel: 'whatsapp',
       direction: 'out',
-      handledBy: 'ai',
-      payload: { text: reply },
+      handledBy: handoff ? 'system' : 'ai',
+      payload: { text: reply, intent, handoff },
     })
 
-    return ok({ replied: true })
+    return ok({ replied: true, intent, handoff })
   } catch (e) {
-    // Nunca deixa o cliente sem resposta por causa de um erro interno —
-    // registra o erro e retorna 200 pra não entrar em loop de retry do provedor.
     const message = e instanceof Error ? e.message : 'erro desconhecido'
     await logEvent({
-      contactId,
+      contactId: null,
       channel: 'whatsapp',
       direction: 'in',
       handledBy: 'system',
-      payload: { text },
+      payload: { text, from },
       error: message,
     }).catch(() => {})
 

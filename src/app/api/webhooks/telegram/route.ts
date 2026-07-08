@@ -3,17 +3,31 @@ import { ok } from '@/lib/api-response'
 import { getSql } from '@/lib/db'
 import { sendTelegramMessage } from '@/lib/telegram/bot'
 import { askAI } from '@/lib/ai/client'
+import { isStaffChat } from '@/lib/telegram/staff'
 import type { ContactRow } from '@/lib/contacts'
 import { listServices } from '@/lib/services'
-import { enrichServices, computeRecommendations } from '@/lib/recommendations'
+import { enrichServices } from '@/lib/recommendations'
+import { getContactRecommendations } from '@/lib/salon/recommendations'
+import { resolveBriefCache } from '@/lib/salon/brief-cache'
 import { generateBrief } from '@/lib/brief'
+import { buildSalonContext, salonContextForAI } from '@/lib/salon/context-builder'
+import { normalizeSearchText } from '@/lib/search'
+
+const WELCOME_MESSAGE = `Oi! 👋 Sou a secretária virtual do ROM Club.
+
+Posso te ajudar com KPIs de contato do salão — quantidade, canais, status e conversão.
+
+💡 Dica: use /cliente nome ou telefone para ver o briefing de um cliente.`
+
+const STAFF_ONLY_MESSAGE =
+  'Este bot é exclusivo da equipe ROM Club. Se você é da equipe, peça ao admin para incluir seu chat ID em TELEGRAM_STAFF_CHAT_IDS.'
 
 const SECRETARIA_PROMPT = `Você é a secretária virtual do ROM Club para a equipe interna.
-Responda perguntas práticas sobre os KPIs de contato do salão (quantidade de
-contatos, canal, status) usando SOMENTE os dados fornecidos no contexto abaixo.
+Responda perguntas práticas sobre a operação do salão (faturamento, agendamentos,
+comparecimento, contatos, playbook do dia) usando SOMENTE os dados fornecidos.
 Seja direta, em português, no máximo 4 linhas. Se a pergunta não tiver relação
-com os dados fornecidos, diga que só responde sobre KPIs de contato por enquanto.
-Dica: use "/cliente <nome ou telefone>" pra receber o briefing de um cliente.`
+com os dados fornecidos, diga que só responde sobre a operação do salão por enquanto.
+Dica: use "/cliente nome ou telefone" pra receber o briefing de um cliente.`
 
 interface TelegramUpdate {
   message?: {
@@ -22,13 +36,13 @@ interface TelegramUpdate {
   }
 }
 
-// Busca cliente por nome (parcial) ou telefone (dígitos) e monta o briefing pro backstaff.
 async function handleClienteCommand(chatId: number, query: string) {
   const sql = getSql()
-  const digits = query.replace(/\D/g, '')
+  const normalized = normalizeSearchText(query)
+  const digits = normalized.replace(/\D/g, '')
   const rows = (await sql`
     select * from contacts
-    where name ilike ${'%' + query + '%'}
+    where name ilike ${'%' + normalized + '%'}
        or (${digits} <> '' and regexp_replace(coalesce(phone,''), '\\D', '', 'g') like ${'%' + digits + '%'})
     order by last_contact_at desc
     limit 1
@@ -41,8 +55,10 @@ async function handleClienteCommand(chatId: number, query: string) {
   }
 
   const services = enrichServices(await listServices(contact.id))
-  const recs = computeRecommendations(services)
-  const { brief } = await generateBrief(contact, services, recs)
+  const { recommendations } = await getContactRecommendations(contact.id)
+  const { brief } = await resolveBriefCache(contact, services, recommendations, () =>
+    generateBrief(contact, services, recommendations)
+  )
   await sendTelegramMessage(chatId, `📋 ${contact.name ?? 'Cliente'}\n\n${brief}`)
 }
 
@@ -54,26 +70,29 @@ export async function POST(req: NextRequest) {
 
   const update = (await req.json().catch(() => null)) as TelegramUpdate | null
   const chatId = update?.message?.chat.id
-  const text = update?.message?.text
+  const text = update?.message?.text?.trim()
 
   if (!chatId || !text) return ok({ ignored: true })
 
+  if (!isStaffChat(chatId)) {
+    await sendTelegramMessage(chatId, STAFF_ONLY_MESSAGE).catch(() => {})
+    return ok({ replied: true, mode: 'staff_only' })
+  }
+
   try {
-    // Comando guiado: /cliente <busca> → briefing pro backstaff (cross/up-sell)
+    if (/^\/start\b/i.test(text)) {
+      await sendTelegramMessage(chatId, WELCOME_MESSAGE)
+      return ok({ replied: true, mode: 'start' })
+    }
+
     const clienteMatch = text.match(/^\/cliente\s+(.+)/i)
     if (clienteMatch) {
       await handleClienteCommand(chatId, clienteMatch[1].trim())
       return ok({ replied: true, mode: 'cliente' })
     }
 
-    const sql = getSql()
-    const [byDay, byStatus, conversionRows] = await Promise.all([
-      sql`select * from v_kpi_daily limit 7`,
-      sql`select * from v_kpi_status`,
-      sql`select * from v_kpi_conversion limit 1`,
-    ])
-
-    const context = JSON.stringify({ byDay, byStatus, conversion: conversionRows[0] ?? null })
+    const salonCtx = await buildSalonContext()
+    const context = salonContextForAI(salonCtx)
     const reply = await askAI(SECRETARIA_PROMPT, `Pergunta: ${text}\n\nDados: ${context}`)
 
     await sendTelegramMessage(chatId, reply || 'Não consegui puxar essa informação agora.')

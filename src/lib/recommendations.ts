@@ -1,5 +1,7 @@
 import type { ClientService } from '@/lib/services'
 
+import { fmtSchedule } from '@/lib/salon/format'
+
 export type ServiceState = 'overdue' | 'due_soon' | 'ok' | 'no_cadence'
 
 export interface EnrichedService extends ClientService {
@@ -32,15 +34,6 @@ export function enrichServices(services: ClientService[]): EnrichedService[] {
     const state: ServiceState = daysUntil < 0 ? 'overdue' : daysUntil <= 7 ? 'due_soon' : 'ok'
     return { ...s, next_due_at: new Date(nextDue).toISOString(), days_until: daysUntil, state }
   })
-}
-
-function fmtSchedule(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `hoje às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 // Gera recomendações guiadas de ação (o que fazer AGORA com esse cliente).

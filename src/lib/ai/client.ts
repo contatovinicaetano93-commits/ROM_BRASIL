@@ -19,7 +19,7 @@ export function isAiConfigured() {
 }
 
 export function getAiModel() {
-  return process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514'
+  return process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
 }
 
 export async function askAI(systemPrompt: string, userMessage: string): Promise<string> {

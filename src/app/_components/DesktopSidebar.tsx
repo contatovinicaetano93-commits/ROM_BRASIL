@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { APP_NAV } from './nav'
+import { Activity } from 'lucide-react'
+import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 
 export function DesktopSidebar() {
@@ -35,6 +36,18 @@ export function DesktopSidebar() {
           )
         })}
       </nav>
+
+      <div className="px-4 pb-2">
+        <Link
+          href={ADMIN_NAV.href}
+          className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground ${
+            pathname.startsWith('/admin') ? 'text-gold' : ''
+          }`}
+        >
+          <Activity size={16} />
+          {ADMIN_NAV.label}
+        </Link>
+      </div>
 
       <div className="border-t border-border px-4 py-4">
         <AdminSessionBar className="mb-4" />

@@ -66,11 +66,29 @@ export function mockAttendances() {
   ]
 }
 
+export function mockRevenue() {
+  const today = new Date()
+  const d = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`
+  return [{ data: d, faturamento: '4.280,00', atendimentos: '8' }]
+}
+
+export function mockCancellations() {
+  const today = new Date()
+  const d = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`
+  return [
+    { data: d, status: 'cancelado' },
+    { data: d, status: 'falta' },
+  ]
+}
+
 export function getMockReport(reportId: string, page = 1) {
   if (page > 1) return { data: [] }
 
   if (reportId === '0004') return { data: MOCK_CLIENTS }
   if (reportId === '0051') return { data: mockAppointments() }
   if (reportId === '0002') return { data: mockAttendances() }
+  if (reportId === 'revenue' || reportId === process.env.AVEC_REPORT_REVENUE) return { data: mockRevenue() }
+  if (reportId === 'cancellations' || reportId === process.env.AVEC_REPORT_CANCELLATIONS)
+    return { data: mockCancellations() }
   return { data: [] }
 }

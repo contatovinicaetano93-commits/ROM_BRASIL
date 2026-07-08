@@ -12,6 +12,7 @@ import {
   StatusPill,
   CHANNEL_LABEL,
 } from '../_components/ui'
+import { fmtSchedule } from '@/lib/salon/format'
 
 interface ScheduleItem {
   id: string
@@ -51,15 +52,6 @@ function aggregateByChannel(rows: KpiData['byDay']) {
   const map = new Map<string, number>()
   for (const row of rows) map.set(row.channel, (map.get(row.channel) ?? 0) + row.contacts_count)
   return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-}
-
-function fmtSchedule(iso: string) {
-  const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `Hoje, ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 interface AvecStatus {
