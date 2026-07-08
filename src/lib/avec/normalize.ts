@@ -63,6 +63,18 @@ export interface NormalizedAvecAttendance {
   attendedAt: string | null
 }
 
+export interface NormalizedAvecRevenue {
+  day: string | null
+  revenue: number
+  attended: number
+}
+
+export interface NormalizedAvecCancellation {
+  day: string | null
+  cancelled: number
+  noShow: number
+}
+
 // Tenta parsear data/hora em formatos comuns BR + ISO.
 export function parseAvecDateTime(datePart: string | null, timePart?: string | null): string | null {
   if (!datePart) return null
@@ -153,6 +165,34 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   if (!avecClientId && !clientName && !phone) return null
 
   return { avecClientId, clientName, phone, serviceName, attendedAt }
+}
+
+function parseMoney(raw: string | null): number {
+  if (!raw) return 0
+  const cleaned = raw.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? n : 0
+}
+
+export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAvecRevenue | null {
+  const revenue = parseMoney(
+    pick(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
+  )
+  const attended = Number(pick(row, ['atendimentos', 'qtd', 'quantidade', 'count']) ?? 0) || 0
+  const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
+  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  if (revenue <= 0 && attended <= 0) return null
+  return { day, revenue, attended }
+}
+
+export function normalizeCancellationRow(row: Record<string, unknown>): NormalizedAvecCancellation | null {
+  const status = (pick(row, ['status', 'situacao', 'situação']) ?? '').toLowerCase()
+  const datePart = pick(row, ['data', 'data_agendamento', 'dia', 'date'])
+  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  const isNoShow = status.includes('falta') || status.includes('no-show') || status.includes('noshow')
+  const isCancelled = status.includes('cancel') || isNoShow
+  if (!isCancelled && !datePart) return null
+  return { day, cancelled: isCancelled && !isNoShow ? 1 : 0, noShow: isNoShow ? 1 : 0 }
 }
 
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).

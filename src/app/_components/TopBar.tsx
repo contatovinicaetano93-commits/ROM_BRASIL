@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight } from 'lucide-react'
-import { APP_NAV, pageTitleFromPath } from './nav'
+import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 
 export function TopBar() {
@@ -27,7 +27,7 @@ export function TopBar() {
           </button>
 
           <div className="min-w-0 flex-1 lg:flex lg:items-center lg:justify-between">
-            <Link href="/dashboard" className="flex items-baseline justify-center gap-1 lg:justify-start">
+            <Link href="/hoje" className="flex items-baseline justify-center gap-1 lg:justify-start">
               <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">ROM</span>
               <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">Club</span>
               <span className="hidden text-lg font-semibold text-foreground lg:inline">{title}</span>
@@ -94,6 +94,13 @@ export function TopBar() {
             </nav>
 
             <div className="mt-auto space-y-4 px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-6">
+              <Link
+                href={ADMIN_NAV.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-xl px-2 py-2 text-xs text-muted active:text-foreground"
+              >
+                {ADMIN_NAV.label}
+              </Link>
               <AdminSessionBar />
               <p className="text-[0.65rem] text-muted">ROM · Onboarding &amp; KPIs</p>
               <p className="text-[0.6rem] text-muted/70">v0.1.0</p>

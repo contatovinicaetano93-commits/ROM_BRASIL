@@ -1,15 +1,10 @@
 import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
-import { upsertContact, logEvent } from '@/lib/contacts'
+import { logEvent } from '@/lib/contacts'
 import { getWhatsAppAdapter } from '@/lib/whatsapp/adapter'
+import { handleWhatsAppMessage } from '@/lib/whatsapp/conversation'
 import { parseWhatsAppPayload } from '@/lib/whatsapp/parse-payload'
-import { askAI } from '@/lib/ai/client'
 import { verifyWhatsAppWebhook } from '@/lib/webhooks'
-
-const FIRST_CONTACT_PROMPT = `Você é a recepcionista virtual do salão ROM. Seja calorosa, direta e breve
-(máx. 3 frases). Objetivo: entender se a pessoa quer agendar um horário, tirar
-uma dúvida sobre serviço/preço, ou outra coisa — e guiar pro próximo passo.
-Se a pergunta fugir do escopo do salão, diga que vai chamar uma atendente humana.`
 
 export async function POST(req: NextRequest) {
   const auth = verifyWhatsAppWebhook(req)
@@ -21,25 +16,8 @@ export async function POST(req: NextRequest) {
 
   const { from, text } = parsed
 
-  let contactId: string | null = null
-
   try {
-    const contact = await upsertContact({
-      phone: from,
-      channel: 'whatsapp',
-      source: 'whatsapp_bot',
-    })
-    contactId = contact.id
-
-    await logEvent({
-      contactId,
-      channel: 'whatsapp',
-      direction: 'in',
-      handledBy: 'ai',
-      payload: { text },
-    })
-
-    const reply = await askAI(FIRST_CONTACT_PROMPT, text)
+    const { contactId, reply, intent, handoff } = await handleWhatsAppMessage(from, text)
 
     await getWhatsAppAdapter().sendMessage(from, reply)
 
@@ -47,19 +25,19 @@ export async function POST(req: NextRequest) {
       contactId,
       channel: 'whatsapp',
       direction: 'out',
-      handledBy: 'ai',
-      payload: { text: reply },
+      handledBy: handoff ? 'system' : 'ai',
+      payload: { text: reply, intent, handoff },
     })
 
-    return ok({ replied: true })
+    return ok({ replied: true, intent, handoff })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'erro desconhecido'
     await logEvent({
-      contactId,
+      contactId: null,
       channel: 'whatsapp',
       direction: 'in',
       handledBy: 'system',
-      payload: { text },
+      payload: { text, from },
       error: message,
     }).catch(() => {})
 

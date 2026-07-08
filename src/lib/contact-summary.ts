@@ -1,7 +1,7 @@
-import { getSql } from '@/lib/db'
 import type { ContactRow } from '@/lib/contacts'
+import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
-import { urgencyForContact } from '@/lib/urgency'
+import { urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
   overdue: number
@@ -12,7 +12,6 @@ export interface ContactListItem extends ContactRow {
   top_action: string | null
 }
 
-// Lista contatos com resumo de urgência — base do filtro "só pendentes" e ordenação.
 export async function listContactsWithSummary(limit = 500): Promise<ContactListItem[]> {
   const sql = getSql()
   const contacts = (await sql`
@@ -33,7 +32,15 @@ export async function listContactsWithSummary(limit = 500): Promise<ContactListI
   }
 
   return contacts.map((c) => {
-    const u = urgencyForContact(byContact.get(c.id) ?? [])
-    return { ...c, ...u }
+    const u = urgencyForServices(byContact.get(c.id) ?? [])
+    return {
+      ...c,
+      overdue: u.overdue,
+      due_soon: u.due_soon,
+      scheduled_soon: u.scheduled_soon,
+      pending_actions: u.pending_actions,
+      urgency_score: u.urgency_score,
+      top_action: u.top_action,
+    }
   })
 }

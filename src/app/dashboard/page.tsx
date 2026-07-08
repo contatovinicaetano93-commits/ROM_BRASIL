@@ -12,7 +12,7 @@ import {
   StatusPill,
   CHANNEL_LABEL,
 } from '../_components/ui'
-import { fmtSchedule } from '@/lib/format'
+import { fmtSchedule } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 
 interface ScheduleItem {
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at, { weekday: true })}
+                      <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at)}
                     </p>
                   </div>
                   <ChevronRight size={16} className="shrink-0 text-muted" />

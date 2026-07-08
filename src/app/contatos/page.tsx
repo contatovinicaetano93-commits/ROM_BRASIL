@@ -11,6 +11,8 @@ import {
   STATUS_LABEL,
 } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
+import { timeAgo } from '@/lib/salon/format'
+import { CATEGORY_LABEL } from '@/lib/salon/constants'
 
 interface Contact {
   id: string
@@ -25,18 +27,6 @@ interface Contact {
   pending_actions: number
   urgency_score: number
   top_action: string | null
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const min = Math.floor(diff / 60000)
-  if (min < 1) return 'agora'
-  if (min < 60) return `há ${min} min`
-  const h = Math.floor(min / 60)
-  if (h < 24) return `há ${h}h`
-  const d = Math.floor(h / 24)
-  if (d < 30) return `há ${d}d`
-  return new Date(iso).toLocaleDateString('pt-BR')
 }
 
 export default function ContatosPage() {
@@ -306,15 +296,6 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
   const [cadence, setCadence] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-
-  const CATEGORY_LABEL: Record<string, string> = {
-    corte: 'Corte',
-    tratamento: 'Tratamento',
-    coloracao: 'Coloração',
-    bem_estar: 'Bem-estar',
-    produto: 'Produto',
-    outro: 'Outro',
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()

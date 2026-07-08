@@ -1,14 +1,18 @@
-import { LayoutDashboard, Users, Activity } from 'lucide-react'
+import { LayoutDashboard, Users, Sun } from 'lucide-react'
 
 export const APP_NAV = [
-  { href: '/dashboard', label: 'Visão geral', shortLabel: 'Painel', icon: LayoutDashboard },
+  { href: '/hoje', label: 'Hoje', shortLabel: 'Hoje', icon: Sun },
   { href: '/contatos', label: 'Contatos', shortLabel: 'Contatos', icon: Users },
-  { href: '/admin', label: 'Diagnóstico', shortLabel: 'API', icon: Activity },
+  { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard },
 ] as const
 
+export const ADMIN_NAV = { href: '/admin', label: 'Diagnóstico', shortLabel: 'API' } as const
+
 export function pageTitleFromPath(pathname: string) {
-  if (pathname.startsWith('/admin')) return 'Diagnóstico das APIs'
+  if (pathname.startsWith('/admin')) return 'Diagnóstico'
+  if (pathname.startsWith('/hoje')) return 'Hoje no ROM'
+  if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/contatos/')) return 'Perfil do cliente'
   if (pathname.startsWith('/contatos')) return 'Contatos'
-  return 'Visão geral'
+  return 'ROM Club'
 }

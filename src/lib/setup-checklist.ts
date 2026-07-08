@@ -17,7 +17,7 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Vercel → Settings → Environment Variables',
       'ROM_ADMIN_USER = admin',
       'ROM_ADMIN_PASSWORD = sua senha forte',
-      'Protege dashboard, contatos e todas as APIs internas',
+      'Protege hoje, dashboard, contatos e APIs internas',
       'Redeploy do projeto',
     ],
   },
@@ -72,21 +72,24 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Subir ou contratar instância Evolution API',
       'Criar instância e conectar número WhatsApp (QR code)',
       'Vercel: EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_API_INSTANCE',
-      'Gere WHATSAPP_WEBHOOK_SECRET e configure no webhook Evolution (header x-webhook-secret)',
-      'Webhook → https://seu-dominio/api/webhooks/whatsapp',
+      'Gere WHATSAPP_WEBHOOK_SECRET (openssl rand -hex 32)',
+      'Webhook Evolution → https://seu-dominio/api/webhooks/whatsapp',
+      'Header: x-whatsapp-secret = WHATSAPP_WEBHOOK_SECRET',
+      'Opcional: TELEGRAM_STAFF_CHAT_IDS para alertas de handoff',
     ],
   },
   {
     id: 'telegram',
     label: 'Telegram bot (equipe)',
-    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_ALLOWED_CHAT_IDS'],
+    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_STAFF_CHAT_IDS'],
     priority: 'opcional',
     steps: [
       'Telegram → @BotFather → /newbot → copie o token',
       'Vercel → TELEGRAM_BOT_TOKEN = token do bot',
       'Gere TELEGRAM_WEBHOOK_SECRET (string aleatória)',
-      'Descubra chat IDs da equipe (getUpdates) e configure TELEGRAM_ALLOWED_CHAT_IDS',
       'setWebhook: https://seu-dominio/api/webhooks/telegram + secret_token',
+      'TELEGRAM_STAFF_CHAT_IDS = IDs da equipe (recomendado em produção)',
+      'Descubra seu chat ID: @userinfobot ou getUpdates',
     ],
     link: { href: 'https://t.me/BotFather', label: '@BotFather' },
   },
@@ -99,7 +102,7 @@ export function isItemConfigured(
     claude: { configured: boolean }
     avec: { token: boolean }
     whatsapp: { configured: boolean; webhook_secret?: boolean }
-    telegram: { configured: boolean; webhook_secret?: boolean; allowlist?: boolean }
+    telegram: { configured: boolean; webhook_secret?: boolean; staff_whitelist?: boolean }
     cron: { configured: boolean }
     auth: { enabled: boolean }
   }
@@ -119,7 +122,7 @@ export function isItemConfigured(
       return (
         health.telegram.configured &&
         Boolean(health.telegram.webhook_secret) &&
-        Boolean(health.telegram.allowlist)
+        Boolean(health.telegram.staff_whitelist)
       )
     default:
       return false

@@ -34,7 +34,7 @@ export async function getHealthStatus() {
     database: { configured: envOk('DATABASE_URL'), connected, error },
     claude: {
       configured: isAiConfigured(),
-      model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514',
+      model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6',
     },
     avec: {
       configured: isAvecConfigured(),
@@ -49,7 +49,7 @@ export async function getHealthStatus() {
     telegram: {
       configured: envOk('TELEGRAM_BOT_TOKEN'),
       webhook_secret: envOk('TELEGRAM_WEBHOOK_SECRET'),
-      allowlist: envOk('TELEGRAM_ALLOWED_CHAT_IDS'),
+      staff_whitelist: envOk('TELEGRAM_STAFF_CHAT_IDS'),
     },
     cron: { configured: envOk('CRON_SECRET') },
     auth: {

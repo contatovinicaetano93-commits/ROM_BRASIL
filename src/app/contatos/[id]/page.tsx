@@ -18,6 +18,7 @@ import {
   Wrench,
   UserPlus,
   Calendar,
+  Copy,
   Pencil,
 } from 'lucide-react'
 import {
@@ -27,7 +28,8 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
-import { fmtSchedule } from '@/lib/format'
+import { fmtSchedule, whatsAppUrl } from '@/lib/salon/format'
+import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
 
 interface Service {
@@ -73,15 +75,6 @@ interface Profile {
 }
 
 const STATUS_FLOW = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
-
-const CATEGORY_LABEL: Record<string, string> = {
-  corte: 'Corte',
-  tratamento: 'Tratamento',
-  coloracao: 'Coloração',
-  bem_estar: 'Bem-estar',
-  produto: 'Produto',
-  outro: 'Outro',
-}
 
 const REC_TONE: Record<string, string> = {
   overdue: 'border-danger/40 bg-danger/10',
@@ -170,11 +163,13 @@ export default function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [brief, setBrief] = useState<{ text: string; source: string } | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
+  const [briefCopied, setBriefCopied] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [scheduleFor, setScheduleFor] = useState<Service | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
+  const [showDetails, setShowDetails] = useState(false)
 
   const load = useCallback(async () => {
     const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
@@ -217,6 +212,17 @@ export default function ContactDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
+  useEffect(() => {
+    if (!id || loading || error) return
+    setBriefLoading(true)
+    fetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.data) setBrief({ text: json.data.brief, source: json.data.source })
+      })
+      .finally(() => setBriefLoading(false))
+  }, [id, loading, error])
+
   async function changeStatus(status: string) {
     await mutate(
       `/api/contacts/${id}`,
@@ -249,6 +255,17 @@ export default function ContactDetailPage() {
       if (json.data) setBrief({ text: json.data.brief, source: json.data.source })
     } finally {
       setBriefLoading(false)
+    }
+  }
+
+  async function copyBrief() {
+    if (!brief?.text) return
+    try {
+      await navigator.clipboard.writeText(brief.text)
+      setBriefCopied(true)
+      window.setTimeout(() => setBriefCopied(false), 2000)
+    } catch {
+      setMutationError('Não foi possível copiar o briefing.')
     }
   }
 
@@ -363,30 +380,57 @@ export default function ContactDetailPage() {
             Gere um resumo com as ações de cross-sell e up-sell recomendadas para este cliente.
           </p>
         )}
-        <button
-          onClick={generateBrief}
-          disabled={briefLoading}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60"
-        >
-          <Sparkles size={16} />
-          {briefLoading ? 'Gerando…' : brief ? 'Gerar novamente' : 'Gerar briefing'}
-        </button>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          {brief && (
+            <button
+              type="button"
+              onClick={copyBrief}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground active:scale-[0.99] transition-transform"
+            >
+              {briefCopied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+              {briefCopied ? 'Copiado!' : 'Copiar briefing'}
+            </button>
+          )}
+          {contact.phone && brief?.text && whatsAppUrl(contact.phone, brief.text) && (
+            <a
+              href={whatsAppUrl(contact.phone, brief.text)!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-success/40 bg-success/10 py-3 text-sm font-semibold text-success"
+            >
+              <MessageSquare size={16} />
+              WhatsApp
+            </a>
+          )}
+          <button
+            onClick={generateBrief}
+            disabled={briefLoading}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60 ${brief && contact.phone ? '' : brief ? '' : 'w-full'}`}
+          >
+            <Sparkles size={16} />
+            {briefLoading ? 'Gerando…' : brief ? 'Atualizar' : 'Gerar briefing'}
+          </button>
+        </div>
       </SectionCard>
 
-      {/* Recomendações */}
+      {/* Recomendações — só a principal no modo recepção */}
       {recommendations.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">Ações recomendadas</h2>
-          {recommendations.map((r, i) => (
-            <div key={i} className={`rounded-2xl border p-4 ${REC_TONE[r.type] ?? 'border-border bg-card'}`}>
-              <p className="text-sm font-semibold">{r.title}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{r.detail}</p>
-            </div>
-          ))}
+        <div className={`rounded-2xl border p-4 ${REC_TONE[recommendations[0].type] ?? 'border-border bg-card'}`}>
+          <p className="text-sm font-semibold">{recommendations[0].title}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{recommendations[0].detail}</p>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => setShowDetails((v) => !v)}
+        className="rounded-2xl border border-border bg-card py-3 text-sm font-medium text-muted active:text-foreground"
+      >
+        {showDetails ? 'Ocultar serviços e histórico' : 'Ver serviços e histórico'}
+      </button>
         </div>
 
+        {showDetails && (
         <div className="flex flex-col gap-5 lg:col-span-7 lg:gap-6">
       {/* Serviços */}
       <SectionCard
@@ -478,6 +522,7 @@ export default function ContactDetailPage() {
         )}
       </SectionCard>
         </div>
+        )}
       </div>
 
       {addOpen && (

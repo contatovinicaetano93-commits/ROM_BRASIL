@@ -1,5 +1,6 @@
 import type { ClientService } from '@/lib/services'
-import { DAY_MS, fmtSchedule } from '@/lib/format'
+import { DAY_MS } from '@/lib/salon/constants'
+import { fmtSchedule } from '@/lib/salon/format'
 
 export type ServiceState = 'overdue' | 'due_soon' | 'ok' | 'no_cadence'
 

@@ -37,13 +37,13 @@ describe('webhook auth', () => {
   })
 
   it('bloqueia Telegram chat fora da allowlist', () => {
-    process.env.TELEGRAM_ALLOWED_CHAT_IDS = '111,222'
+    process.env.TELEGRAM_STAFF_CHAT_IDS = '111,222'
     const result = isTelegramChatAllowed(999)
     expect(result.ok).toBe(false)
   })
 
   it('aceita Telegram chat na allowlist', () => {
-    process.env.TELEGRAM_ALLOWED_CHAT_IDS = '111,222'
+    process.env.TELEGRAM_STAFF_CHAT_IDS = '111,222'
     const result = isTelegramChatAllowed(222)
     expect(result.ok).toBe(true)
   })

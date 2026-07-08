@@ -13,6 +13,7 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
   }
 
   const got =
+    headerSecret(req, 'x-whatsapp-secret') ||
     headerSecret(req, 'x-webhook-secret') ||
     headerSecret(req, 'x-evolution-secret') ||
     headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
@@ -35,15 +36,15 @@ export function verifyTelegramWebhook(req: NextRequest): { ok: true } | { ok: fa
 }
 
 export function isTelegramChatAllowed(chatId: number): { ok: true } | { ok: false; reason: string } {
-  const raw = process.env.TELEGRAM_ALLOWED_CHAT_IDS?.trim()
+  const raw = process.env.TELEGRAM_STAFF_CHAT_IDS?.trim()
   if (!raw) {
     if (isProduction()) {
-      return { ok: false, reason: 'TELEGRAM_ALLOWED_CHAT_IDS não configurado' }
+      return { ok: false, reason: 'TELEGRAM_STAFF_CHAT_IDS não configurado' }
     }
     return { ok: true }
   }
 
-  const allowed = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  const allowed = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
   if (!allowed.includes(String(chatId))) {
     return { ok: false, reason: 'Chat não autorizado' }
   }
