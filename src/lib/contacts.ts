@@ -16,6 +16,27 @@ interface UpsertContactInput {
 export const CONTACT_STATUSES = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido'] as const
 export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 
+const STATUS_RANK: Record<ContactStatus, number> = {
+  novo: 0,
+  em_atendimento: 1,
+  agendado: 2,
+  convertido: 3,
+  perdido: -1,
+}
+
+/** Avança no funil sem rebaixar (ex.: convertido não volta para agendado no sync Avec). */
+export function mergeContactStatus(current: ContactStatus, incoming: ContactStatus): ContactStatus {
+  if (incoming === 'perdido') return 'perdido'
+  if (current === 'perdido' && incoming !== 'convertido') return current
+  return STATUS_RANK[incoming] > STATUS_RANK[current] ? incoming : current
+}
+
+function resolveStatus(current: ContactStatus | string | undefined, incoming?: ContactStatus) {
+  if (!incoming) return null
+  if (!current || !CONTACT_STATUSES.includes(current as ContactStatus)) return incoming
+  return mergeContactStatus(current as ContactStatus, incoming)
+}
+
 export interface ContactRow {
   id: string
   name: string | null
@@ -44,13 +65,18 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
     `) as { id: string }[]
 
     if (byAvec.length > 0) {
+      const current = (await sql`
+        select status from contacts where id = ${byAvec[0].id} limit 1
+      `) as { status: string }[]
+      const status = resolveStatus(current[0]?.status, input.status)
+
       const rows = (await sql`
         update contacts
         set last_contact_at = now(),
             name = coalesce(${input.name ?? null}, name),
             email = coalesce(${input.email ?? null}, email),
             phone = coalesce(${phone ?? null}, phone),
-            status = coalesce(${input.status ?? null}, status)
+            status = coalesce(${status}, status)
         where id = ${byAvec[0].id}
         returning *
       `) as ContactRow[]
@@ -64,13 +90,18 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
     `) as { id: string }[]
 
     if (existing.length > 0) {
+      const current = (await sql`
+        select status from contacts where id = ${existing[0].id} limit 1
+      `) as { status: string }[]
+      const status = resolveStatus(current[0]?.status, input.status)
+
       const rows = (await sql`
         update contacts
         set last_contact_at = now(),
             name = coalesce(${input.name ?? null}, name),
             email = coalesce(${input.email ?? null}, email),
             avec_client_id = coalesce(${input.avecClientId ?? null}, avec_client_id),
-            status = coalesce(${input.status ?? null}, status)
+            status = coalesce(${status}, status)
         where id = ${existing[0].id}
         returning *
       `) as ContactRow[]
@@ -142,12 +173,19 @@ interface UpdateContactInput {
 export async function updateContact(id: string, patch: UpdateContactInput): Promise<ContactRow | null> {
   const sql = getSql()
   const phone = patch.phone ? normalizePhone(patch.phone) ?? patch.phone.trim() : undefined
+
+  let status: ContactStatus | null = patch.status ?? null
+  if (patch.status) {
+    const current = await getContactById(id)
+    if (current) status = mergeContactStatus(current.status as ContactStatus, patch.status)
+  }
+
   const rows = (await sql`
     update contacts set
       name = coalesce(${patch.name ?? null}, name),
       email = coalesce(${patch.email ?? null}, email),
       phone = coalesce(${phone ?? null}, phone),
-      status = coalesce(${patch.status ?? null}, status),
+      status = coalesce(${status}, status),
       notes = coalesce(${patch.notes ?? null}, notes),
       last_contact_at = now()
     where id = ${id}
