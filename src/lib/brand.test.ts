@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { getBrand, parseRomPanelId, parseSeedPreset } from '@/lib/brand'
+import { afterEach, describe, expect, it } from 'vitest'
+import { getBrand, getDefaultSeedPreset, parseRomPanelId, parseSeedPreset } from '@/lib/brand'
+
+const originalRomPanel = process.env.ROM_PANEL
+const originalSeedPreset = process.env.ROM_SEED_PRESET
+
+afterEach(() => {
+  if (originalRomPanel === undefined) delete process.env.ROM_PANEL
+  else process.env.ROM_PANEL = originalRomPanel
+
+  if (originalSeedPreset === undefined) delete process.env.ROM_SEED_PRESET
+  else process.env.ROM_SEED_PRESET = originalSeedPreset
+})
 
 describe('brand', () => {
   it('brasil é o painel padrão', () => {
@@ -21,5 +32,14 @@ describe('brand', () => {
     expect(parseRomPanelId('BRASIL')).toBe('brasil')
     expect(parseSeedPreset('iguatemi')).toBe('iguatemi')
     expect(parseSeedPreset('outro')).toBeNull()
+  })
+
+  it('usa painel ativo quando seed padrão não é definido', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    delete process.env.ROM_SEED_PRESET
+    expect(getDefaultSeedPreset()).toBe('iguatemi')
+
+    process.env.ROM_SEED_PRESET = 'outro'
+    expect(getDefaultSeedPreset()).toBe('iguatemi')
   })
 })

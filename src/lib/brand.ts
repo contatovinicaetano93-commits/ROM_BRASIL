@@ -61,7 +61,7 @@ export function getBrand(panel?: RomPanelId): RomBrand {
 }
 
 export function getDefaultSeedPreset(): RomSeedPreset {
-  return parseRomPanelId(process.env.ROM_SEED_PRESET) ?? getRomPanelId()
+  return parseSeedPreset(process.env.ROM_SEED_PRESET) ?? getRomPanelId()
 }
 
 export function parseSeedPreset(value: string | undefined | null): RomSeedPreset | null {
