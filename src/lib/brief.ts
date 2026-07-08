@@ -1,6 +1,6 @@
 import type { ContactRow } from '@/lib/contacts'
 import type { EnrichedService, Recommendation } from '@/lib/recommendations'
-import { askAI } from '@/lib/ai/client'
+import { askAI, isAiConfigured } from '@/lib/ai/client'
 import { buildContactContext, contactContextForAI } from '@/lib/salon/context-builder'
 
 const BRIEF_PROMPT = `Você é a inteligência de atendimento do ROM Club (salão de beleza de alto padrão).
@@ -33,11 +33,13 @@ export async function generateBrief(
   const rule = buildRuleBrief(contact, services, recs)
   const context = contactContextForAI(buildContactContext(contact, services, recs))
 
-  try {
-    const ai = await askAI(BRIEF_PROMPT, `Dados do cliente: ${context}`)
-    if (ai && ai.trim().length > 0) return { brief: ai.trim(), source: 'ai' }
-  } catch {
-    // IA indisponível — fallback por regras.
+  if (isAiConfigured()) {
+    try {
+      const ai = await askAI(BRIEF_PROMPT, `Dados do cliente: ${context}`)
+      if (ai && ai.trim().length > 0) return { brief: ai.trim(), source: 'ai' }
+    } catch {
+      // IA indisponível — fallback por regras.
+    }
   }
   return { brief: rule, source: 'rules' }
 }

@@ -163,6 +163,7 @@ export default function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [brief, setBrief] = useState<{ text: string; source: string } | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
+  const [briefError, setBriefError] = useState<string | null>(null)
   const [briefCopied, setBriefCopied] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -215,11 +216,17 @@ export default function ContactDetailPage() {
   useEffect(() => {
     if (!id || loading || error) return
     setBriefLoading(true)
-    fetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.data) setBrief({ text: json.data.brief, source: json.data.source })
+    setBriefError(null)
+    apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
+      .then(async (r) => {
+        const json = await r.json()
+        if (!r.ok || json.error) {
+          setBriefError(json.error ?? 'Não foi possível carregar o briefing')
+          return
+        }
+        if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
       })
+      .catch((e) => setBriefError(String(e)))
       .finally(() => setBriefLoading(false))
   }, [id, loading, error])
 
@@ -249,10 +256,18 @@ export default function ContactDetailPage() {
 
   async function generateBrief() {
     setBriefLoading(true)
+    setBriefError(null)
     try {
       const res = await apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
       const json = await res.json()
-      if (json.data) setBrief({ text: json.data.brief, source: json.data.source })
+      if (!res.ok || json.error) {
+        setBriefError(json.error ?? 'Não foi possível gerar o briefing')
+        return
+      }
+      if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
+      else setBriefError('Resposta vazia do servidor')
+    } catch (e) {
+      setBriefError(String(e))
     } finally {
       setBriefLoading(false)
     }
@@ -368,6 +383,11 @@ export default function ContactDetailPage() {
 
       {/* Briefing IA pro backstaff */}
       <SectionCard title="Briefing do backstaff">
+        {briefError && (
+          <p className="mb-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {briefError}
+          </p>
+        )}
         {brief ? (
           <div className="flex flex-col gap-3">
             <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">{brief.text}</p>

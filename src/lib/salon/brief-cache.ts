@@ -12,19 +12,35 @@ export interface CachedBrief {
   from_cache: boolean
 }
 
+function isCacheUnavailableError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  const msg = e.message.toLowerCase()
+  return (
+    msg.includes('contact_brief_cache') ||
+    msg.includes('does not exist') ||
+    msg.includes('relation') ||
+    msg.includes('undefined table')
+  )
+}
+
 export async function getCachedBrief(contactId: string, contextHash: string): Promise<CachedBrief | null> {
-  const sql = getSql()
-  const rows = (await sql`
-    select brief, source, created_at from contact_brief_cache
-    where contact_id = ${contactId} and context_hash = ${contextHash}
-    limit 1
-  `) as { brief: string; source: 'ai' | 'rules'; created_at: string }[]
+  try {
+    const sql = getSql()
+    const rows = (await sql`
+      select brief, source, created_at from contact_brief_cache
+      where contact_id = ${contactId} and context_hash = ${contextHash}
+      limit 1
+    `) as { brief: string; source: 'ai' | 'rules'; created_at: string }[]
 
-  const row = rows[0]
-  if (!row) return null
-  if (Date.now() - new Date(row.created_at).getTime() > CACHE_TTL_MS) return null
+    const row = rows[0]
+    if (!row) return null
+    if (Date.now() - new Date(row.created_at).getTime() > CACHE_TTL_MS) return null
 
-  return { brief: row.brief, source: row.source, created_at: row.created_at, from_cache: true }
+    return { brief: row.brief, source: row.source, created_at: row.created_at, from_cache: true }
+  } catch (e) {
+    if (isCacheUnavailableError(e)) return null
+    throw e
+  }
 }
 
 export async function setCachedBrief(
@@ -33,16 +49,21 @@ export async function setCachedBrief(
   brief: string,
   source: 'ai' | 'rules'
 ) {
-  const sql = getSql()
-  await sql`
-    insert into contact_brief_cache (contact_id, brief, source, context_hash, created_at)
-    values (${contactId}, ${brief}, ${source}, ${contextHash}, now())
-    on conflict (contact_id) do update set
-      brief = excluded.brief,
-      source = excluded.source,
-      context_hash = excluded.context_hash,
-      created_at = now()
-  `
+  try {
+    const sql = getSql()
+    await sql`
+      insert into contact_brief_cache (contact_id, brief, source, context_hash, created_at)
+      values (${contactId}, ${brief}, ${source}, ${contextHash}, now())
+      on conflict (contact_id) do update set
+        brief = excluded.brief,
+        source = excluded.source,
+        context_hash = excluded.context_hash,
+        created_at = now()
+    `
+  } catch (e) {
+    if (isCacheUnavailableError(e)) return
+    throw e
+  }
 }
 
 export async function resolveBriefCache(

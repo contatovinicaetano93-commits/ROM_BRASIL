@@ -15,7 +15,9 @@ import {
   DollarSign,
 } from 'lucide-react'
 import { CountBadge } from '../_components/ui'
+import { BriefSheet } from '../_components/BriefSheet'
 import { fmtSchedule, formatCurrency } from '@/lib/salon/format'
+import { apiFetch } from '@/lib/api-client'
 
 interface PlaybookItem {
   contact_id: string
@@ -55,9 +57,10 @@ export default function HojePage() {
   const [data, setData] = useState<HojeData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [briefFor, setBriefFor] = useState<{ id: string; name: string | null } | null>(null)
 
   useEffect(() => {
-    fetch('/api/hoje', { cache: 'no-store' })
+    apiFetch('/api/hoje', { cache: 'no-store' })
       .then((r) => r.json())
       .then((json) => {
         if (json.error) setError(json.error)
@@ -203,37 +206,57 @@ export default function HojePage() {
 
         {!loading &&
           data?.playbook.map((a) => (
-            <Link
+            <div
               key={a.contact_id}
-              href={`/contatos/${a.contact_id}`}
-              className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 active:bg-surface"
+              className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
-                  {a.overdue > 0 && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
-                      <AlertTriangle size={10} />
-                      {a.overdue}
-                    </span>
-                  )}
-                  {a.due_soon > 0 && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
-                      <Clock size={10} />
-                      {a.due_soon}
-                    </span>
+              <Link
+                href={`/contatos/${a.contact_id}`}
+                className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
+                    {a.overdue > 0 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
+                        <AlertTriangle size={10} />
+                        {a.overdue}
+                      </span>
+                    )}
+                    {a.due_soon > 0 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
+                        <Clock size={10} />
+                        {a.due_soon}
+                      </span>
+                    )}
+                  </div>
+                  {a.recommendations[0] && (
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      <span className="text-gold">{a.recommendations[0].title}</span> · {a.recommendations[0].detail}
+                    </p>
                   )}
                 </div>
-                {a.recommendations[0] && (
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    <span className="text-gold">{a.recommendations[0].title}</span> · {a.recommendations[0].detail}
-                  </p>
-                )}
-              </div>
-              <ChevronRight size={16} className="shrink-0 text-muted" />
-            </Link>
+                <ChevronRight size={16} className="shrink-0 text-muted" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setBriefFor({ id: a.contact_id, name: a.contact_name })}
+                aria-label={`Gerar briefing de ${a.contact_name ?? 'cliente'}`}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 text-gold active:scale-95"
+              >
+                <Sparkles size={16} />
+              </button>
+            </div>
           ))}
       </section>
+
+      {briefFor && (
+        <BriefSheet
+          contactId={briefFor.id}
+          contactName={briefFor.name}
+          onClose={() => setBriefFor(null)}
+        />
+      )}
 
       {!loading && (data?.leads.novos ?? 0) > 0 && (
         <Link
