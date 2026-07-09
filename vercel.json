@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/avec/sync",
-      "schedule": "0 8 * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/director-report",

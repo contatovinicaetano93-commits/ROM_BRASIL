@@ -395,6 +395,11 @@ export default function AdminPage() {
                 Testar conexão (relatório 0004)
               </button>
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
+              <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
+                Cron em quase tempo real: a cada <span className="font-semibold text-gold">1 minuto</span> via
+                Vercel → <code className="text-[0.7rem]">/api/avec/sync</code>
+                {typeof avec.cron?.cadence === 'string' ? ` (${avec.cron.cadence})` : ''}.
+              </p>
               <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
               </PrimaryButton>
