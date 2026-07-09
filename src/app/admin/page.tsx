@@ -44,6 +44,7 @@ interface AvecStatus {
   base_url?: string
   docs?: string
   connection?: { ok: boolean; sample_rows?: number; error?: string }
+  cron?: { schedule?: string; cadence?: string; path?: string }
   last: {
     status: string
     created_at: string
