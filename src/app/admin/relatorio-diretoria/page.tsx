@@ -40,8 +40,8 @@ export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
   const [month, setMonth] = useState('2026-03')
   const [compareMonth, setCompareMonth] = useState('2026-02')
-  /** 0021: false = só o mês selecionado (sem Δ) */
-  const [compareMonths, setCompareMonths] = useState(true)
+  /** 0021: false = só o mês selecionado (sem Δ) — padrão pedido */
+  const [compareMonths, setCompareMonths] = useState(false)
   const [quarter, setQuarter] = useState('2026-Q1')
   const [compare, setCompare] = useState('2025-Q1')
   const [proId, setProId] = useState('')
@@ -411,14 +411,14 @@ export default function RelatorioDiretoriaPage() {
 
           <div className={`grid gap-3 ${compareMonths ? 'sm:grid-cols-2' : 'sm:grid-cols-1 max-w-sm'}`}>
             <FilterSelect
-              label={compareMonths ? 'Mês A' : 'Mês (0021)'}
+              label={compareMonths ? 'Mês (qualquer um dos dois)' : 'Mês do relatório'}
               value={month}
               onChange={setMonth}
               options={MONTHS}
             />
             {compareMonths && (
               <FilterSelect
-                label="Mês B"
+                label="Outro mês (Δ = mais recente − mais antigo)"
                 value={compareMonth}
                 onChange={setCompareMonth}
                 options={MONTHS}
