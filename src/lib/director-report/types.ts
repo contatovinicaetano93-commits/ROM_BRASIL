@@ -52,8 +52,19 @@ export interface ProfessionalRevenueBlock {
   selected_month: MonthKey
 }
 
+export interface DirectorReportPeriod {
+  selected_month: MonthKey
+  selected_quarter: QuarterKey
+  compare_quarter: QuarterKey
+  /** Rótulo legível: Fat Mar/2026 · Retorno 1º tri/2026 vs … */
+  label: string
+  /** Data de referência (último dia do mês 0021), dd/mm/aaaa */
+  reference_date: string
+}
+
 export interface DirectorReport {
   generated_at: string
+  period: DirectorReportPeriod
   source: 'mock' | 'avec'
   avec_reports: { return: string; revenue: string }
   schedule_note: string

@@ -208,7 +208,13 @@ export default function RelatorioDiretoriaPage() {
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
         <CalendarClock size={14} className="text-gold" />
-        {data?.schedule_note ?? 'Terças 08:00'}
+        {data?.period ? (
+          <span className="text-foreground">
+            Período: {data.period.label} · ref. {data.period.reference_date}
+          </span>
+        ) : (
+          <span>{data?.schedule_note ?? 'Terças 08:00'}</span>
+        )}
         <span className="text-border">·</span>
         Fonte: {data?.source === 'mock' ? 'preview (mock)' : 'Avec'} · relatórios{' '}
         {data?.avec_reports.return}/{data?.avec_reports.revenue}

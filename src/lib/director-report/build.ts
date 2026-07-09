@@ -6,6 +6,7 @@ import {
   defaultSelectedMonth,
   defaultSelectedQuarter,
 } from './mock'
+import { reportPeriodLabel, reportReferenceDate } from './period'
 import { listDirectorProfessionals } from './professionals'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
@@ -49,8 +50,15 @@ export async function buildDirectorReport(
     return q?.return_rate ?? null
   }).filter((x): x is number => x != null)
 
-  return {
+  const draft: DirectorReport = {
     generated_at: new Date().toISOString(),
+    period: {
+      selected_month: selectedMonth,
+      selected_quarter: selectedQuarter,
+      compare_quarter: compareQuarter,
+      label: '',
+      reference_date: '',
+    },
     source: useMock ? 'mock' : 'mock', // 'avec' quando sync real estiver ligado
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note: 'Envio automático: terças 08:00 (America/Sao_Paulo) — só admin operacional',
@@ -66,4 +74,9 @@ export async function buildDirectorReport(
       avg_ticket_selected_month: totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
     },
   }
+
+  draft.period.label = reportPeriodLabel(draft)
+  draft.period.reference_date = reportReferenceDate(draft)
+
+  return draft
 }

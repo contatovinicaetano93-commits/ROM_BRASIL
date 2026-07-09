@@ -1,6 +1,7 @@
 import type { DirectorReport } from './types'
 import { reactivationCsv, returnCsv, revenueCsv } from './csv'
 import { sendDirectorReportEmail, getDirectorReportRecipients } from './email'
+import { slugPeriod } from './period'
 import { sendTelegramDocument, sendTelegramMessage } from '@/lib/telegram/bot'
 import { formatCurrency, formatPercent } from '@/lib/salon/format'
 
@@ -10,6 +11,7 @@ function managementChatId() {
 
 export async function deliverDirectorReport(report: DirectorReport) {
   const email = await sendDirectorReportEmail(report)
+  const slug = slugPeriod(report)
 
   let telegram: { ok: boolean; error?: string; chat?: string } | null = null
   const chat = managementChatId()
@@ -17,6 +19,8 @@ export async function deliverDirectorReport(report: DirectorReport) {
     try {
       const caption = [
         `ROM Brasil · Relatório diretoria`,
+        `Período: ${report.period.label}`,
+        `Data ref.: ${report.period.reference_date}`,
         `${report.summary.professionals} profissionais`,
         `Retorno médio ${formatPercent(report.summary.avg_return_rate, 1)}`,
         `Fat. mês ${formatCurrency(report.summary.total_revenue_selected_month)}`,
@@ -29,21 +33,21 @@ export async function deliverDirectorReport(report: DirectorReport) {
       await sendTelegramMessage(chat, caption)
       await sendTelegramDocument(
         chat,
-        'faturamento-ticket-profissionais.csv',
+        `faturamento-ticket_${slug}.csv`,
         '\uFEFF' + revenueCsv(report),
-        '0021 · faturamento + ticket'
+        `0021 · ${report.period.selected_month}`
       )
       await sendTelegramDocument(
         chat,
-        'retorno-clientes-trimestre.csv',
+        `retorno-trimestre_${slug}.csv`,
         '\uFEFF' + returnCsv(report),
-        '0011 · taxa retorno trimestre'
+        `0011 · ${report.period.selected_quarter} vs ${report.period.compare_quarter}`
       )
       await sendTelegramDocument(
         chat,
-        '0011-lista-clientes-por-profissional.csv',
+        `0011-lista-clientes_${slug}.csv`,
         '\uFEFF' + reactivationCsv(report),
-        '0011 · lista clientes (formato Avec)'
+        `0011 · lista · ref. ${report.period.reference_date}`
       )
       telegram = { ok: true, chat }
     } catch (e) {
@@ -55,5 +59,6 @@ export async function deliverDirectorReport(report: DirectorReport) {
     email,
     telegram,
     recipients: getDirectorReportRecipients(),
+    period: report.period,
   }
 }
