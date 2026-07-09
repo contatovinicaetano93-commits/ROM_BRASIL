@@ -43,10 +43,27 @@ export function formatPercent(value: number | null | undefined, digits = 0) {
   return `${(value * 100).toFixed(digits)}%`
 }
 
-export function whatsAppUrl(phone: string | null, text?: string) {
+function whatsAppDigits(phone: string | null): string | null {
   if (!phone) return null
-  const digits = phone.replace(/\D/g, '')
+  let digits = phone.replace(/\D/g, '')
   if (digits.length < 10) return null
+  // Celular BR sem DDI → assume 55
+  if (digits.length <= 11 && !digits.startsWith('55')) digits = `55${digits}`
+  return digits
+}
+
+/** Link genérico (app ou web). */
+export function whatsAppUrl(phone: string | null, text?: string) {
+  const digits = whatsAppDigits(phone)
+  if (!digits) return null
   const base = `https://wa.me/${digits}`
   return text ? `${base}?text=${encodeURIComponent(text)}` : base
+}
+
+/** Abre WhatsApp Web com mensagem pronta. */
+export function whatsAppWebUrl(phone: string | null, text?: string) {
+  const digits = whatsAppDigits(phone)
+  if (!digits) return null
+  const base = `https://web.whatsapp.com/send?phone=${digits}`
+  return text ? `${base}&text=${encodeURIComponent(text)}` : base
 }

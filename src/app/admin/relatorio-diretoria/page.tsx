@@ -10,11 +10,13 @@ import {
   Users,
   DollarSign,
   CalendarClock,
+  MessageCircle,
 } from 'lucide-react'
 import { SectionCard, CountBadge, PrimaryButton } from '../../_components/ui'
 import { apiFetch } from '@/lib/api-client'
-import { formatCurrency, formatPercent } from '@/lib/salon/format'
+import { formatCurrency, formatPercent, whatsAppWebUrl } from '@/lib/salon/format'
 import type { DirectorReport } from '@/lib/director-report/types'
+import { buildRecallWhatsAppMessage } from '@/lib/director-report/recall-message'
 
 type StageTab = '0011' | '0021'
 
@@ -392,19 +394,44 @@ export default function RelatorioDiretoriaPage() {
                       <CountBadge value={String(reactivation.length)} tone="gold" />
                     </div>
                     <ul className="space-y-2 text-sm">
-                      {reactivation.slice(0, 12).map((c, i) => (
-                        <li
-                          key={`${pro.id}-${i}`}
-                          className="flex flex-col gap-0.5 border-b border-border/50 pb-2 last:border-0"
-                        >
-                          <span className="font-medium">{c.name}</span>
-                          <span className="text-xs text-muted">
-                            {[c.mobile || c.phone, c.email, c.last_visit && `última ${c.last_visit}`]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        </li>
-                      ))}
+                      {reactivation.slice(0, 12).map((c, i) => {
+                        const phone = c.mobile || c.phone
+                        const wa = whatsAppWebUrl(phone, buildRecallWhatsAppMessage(c, pro.name))
+                        return (
+                          <li
+                            key={`${pro.id}-${i}`}
+                            className="flex items-start justify-between gap-3 border-b border-border/50 pb-2 last:border-0"
+                          >
+                            <div className="min-w-0 flex flex-col gap-0.5">
+                              <span className="font-medium">{c.name}</span>
+                              <span className="text-xs text-muted">
+                                {[phone, c.email, c.last_visit && `última ${c.last_visit}`]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                            </div>
+                            {wa ? (
+                              <a
+                                href={wa}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir WhatsApp Web com mensagem de recall"
+                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-success/40 bg-success/10 px-2.5 py-1.5 text-[0.7rem] font-semibold text-success hover:bg-success/20"
+                              >
+                                <MessageCircle size={13} />
+                                WhatsApp
+                              </a>
+                            ) : (
+                              <span
+                                className="shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-[0.7rem] text-muted"
+                                title="Sem telefone válido"
+                              >
+                                Sem WhatsApp
+                              </span>
+                            )}
+                          </li>
+                        )
+                      })}
                       {reactivation.length > 12 && (
                         <li className="text-xs text-muted">
                           + {reactivation.length - 12} na lista (baixe o CSV)
