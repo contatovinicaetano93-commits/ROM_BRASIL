@@ -109,13 +109,24 @@ export async function POST(req: NextRequest) {
     const forceMock = body?.mock !== false
     const stage = asStage(typeof body?.stage === 'string' ? body.stage : 'all')
 
+    const professionalId =
+      typeof body?.professional_id === 'string' && body.professional_id.trim()
+        ? body.professional_id.trim()
+        : undefined
+
     const report = await buildDirectorReport({
       forceMock,
       selectedMonth: asMonth(typeof body?.month === 'string' ? body.month : null),
       compareMonth: asMonth(typeof body?.compare_month === 'string' ? body.compare_month : null),
-      compareMonths: body?.compare_months !== false && body?.compare_months !== 0,
+      compareMonths:
+        body?.compare_months === undefined
+          ? stage !== '0021'
+            ? true
+            : false
+          : body?.compare_months !== false && body?.compare_months !== 0,
       selectedQuarter: asQuarter(typeof body?.quarter === 'string' ? body.quarter : null),
       compareQuarter: asQuarter(typeof body?.compare === 'string' ? body.compare : null),
+      professionalId,
     })
     const delivery = await deliverDirectorReport(report, stage)
 
