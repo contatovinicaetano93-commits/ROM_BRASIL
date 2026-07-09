@@ -1,7 +1,8 @@
 # Plano — Bot de funcionários + KPIs por profissional (ROM Brasil)
 
 > Unidade: **ROM Brasil** · Repo: `ROM_BRASIL` · Produção: https://rom-club.vercel.app  
-> Status: **plano** (sem implementação ainda). Depende de `AVEC_API_TOKEN`.
+> Status: **esqueleto implementado** (webhook + tabela + API). Agenda real depende de `AVEC_API_TOKEN`.  
+> Guia operacional: [`bot-staff-rom-brasil.md`](bot-staff-rom-brasil.md)
 
 ## Objetivo
 

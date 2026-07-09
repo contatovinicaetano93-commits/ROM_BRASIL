@@ -74,6 +74,7 @@ ou investigar depois.
 ## Próximos passos
 
 - Plano bot funcionários + KPIs por profissional: [`docs/plano-bot-funcionarios-rom-brasil.md`](docs/plano-bot-funcionarios-rom-brasil.md)
+- Guia bot staff (criar no BotFather + webhook): [`docs/bot-staff-rom-brasil.md`](docs/bot-staff-rom-brasil.md)
 
 ## Rodando local
 

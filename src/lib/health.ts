@@ -41,6 +41,8 @@ export async function getHealthStatus() {
       webhook_secret: envOk('TELEGRAM_WEBHOOK_SECRET'),
       staff_whitelist:
         envOk('TELEGRAM_STAFF_CHAT_IDS') || envOk('TELEGRAM_ALLOWED_CHAT_IDS'),
+      staff_bot: envOk('TELEGRAM_STAFF_BOT_TOKEN'),
+      staff_bot_webhook_secret: envOk('TELEGRAM_STAFF_WEBHOOK_SECRET'),
     },
     cron: { configured: envOk('CRON_SECRET') },
     auth: {
