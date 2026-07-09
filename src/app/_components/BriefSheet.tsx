@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { X, Sparkles, Copy, Check, ChevronRight } from 'lucide-react'
+import { X, Sparkles, Copy, Check, ChevronRight, Hand } from 'lucide-react'
 import { apiFetch } from '@/lib/api-client'
 import { LastVisitCard, type LastVisitData } from './LastVisitCard'
 
@@ -15,6 +15,7 @@ interface BriefSheetProps {
 export function BriefSheet({ contactId, contactName, onClose }: BriefSheetProps) {
   const [brief, setBrief] = useState<{ text: string; source: string } | null>(null)
   const [lastVisit, setLastVisit] = useState<LastVisitData | null>(null)
+  const [manicurist, setManicurist] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -23,14 +24,19 @@ export function BriefSheet({ contactId, contactName, onClose }: BriefSheetProps)
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/contacts/${contactId}/brief`, { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok || json.error) {
+      const [briefRes, profileRes] = await Promise.all([
+        apiFetch(`/api/contacts/${contactId}/brief`, { cache: 'no-store' }),
+        apiFetch(`/api/contacts/${contactId}`, { cache: 'no-store' }),
+      ])
+      const json = await briefRes.json()
+      const profile = await profileRes.json()
+      if (!briefRes.ok || json.error) {
         setError(json.error ?? 'Não foi possível gerar o briefing')
         setBrief(null)
         return
       }
       setLastVisit(json.data?.last_visit ?? null)
+      setManicurist(profile.data?.contact?.preferred_manicurist ?? null)
       if (json.data?.brief) {
         setBrief({ text: json.data.brief, source: json.data.source })
       } else {
@@ -87,7 +93,14 @@ export function BriefSheet({ contactId, contactName, onClose }: BriefSheetProps)
           )}
 
           {!loading && (
-            <div className="mb-4">
+            <div className="mb-4 space-y-3">
+              <div className="rounded-2xl border border-border bg-card px-4 py-3">
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">Manicure preferida</p>
+                <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                  <Hand size={14} className="text-gold" />
+                  {manicurist?.trim() || 'Ainda não informada'}
+                </p>
+              </div>
               <LastVisitCard visit={lastVisit} />
             </div>
           )}

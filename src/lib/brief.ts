@@ -10,7 +10,7 @@ function briefPrompt() {
   return `Você é a inteligência de atendimento do ${brand.aiPersonaName} (salão de beleza de alto padrão).
 Gere um briefing curto e direto para o backstaff/executor, em português, no máximo 5 linhas.
 Objetivo: facilitar o front no cross-sell e up-sell. Use SOMENTE os dados fornecidos.
-Formato: 1 linha de contexto do cliente (inclua a última visita se houver: data, procedimento, profissional) + bullets de ações recomendadas (o que oferecer e por quê).
+Formato: 1 linha de contexto do cliente (inclua manicure preferida e última visita se houver) + bullets de ações recomendadas (o que oferecer e por quê).
 Seja prático e caloroso, sem inventar informação que não está nos dados.`
 }
 
@@ -22,12 +22,15 @@ export function buildRuleBrief(
   const nome = contact.name ?? 'Cliente'
   const last = pickLastVisit(services)
   const linhas: string[] = []
+  const manicure = contact.preferred_manicurist
+    ? ` Manicure preferida: ${contact.preferred_manicurist}.`
+    : ''
   if (last) {
     const when = new Date(last.last_done_at).toLocaleDateString('pt-BR')
     const pro = last.professional_name ? ` com ${last.professional_name}` : ''
-    linhas.push(`${nome} — última visita ${when}: ${last.service_name}${pro}.`)
+    linhas.push(`${nome} — última visita ${when}: ${last.service_name}${pro}.${manicure}`)
   } else {
-    linhas.push(`${nome} — ${services.length} serviço(s) no perfil.`)
+    linhas.push(`${nome} — ${services.length} serviço(s) no perfil.${manicure}`)
   }
   if (recs.length === 0) {
     linhas.push('• Sem ações urgentes agora. Mantenha o relacionamento e confirme preferências.')

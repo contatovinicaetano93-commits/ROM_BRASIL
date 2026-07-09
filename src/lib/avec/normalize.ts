@@ -211,12 +211,30 @@ export function normalizeCancellationRow(row: Record<string, unknown>): Normaliz
   return { day, cancelled: isCancelled && !isNoShow ? 1 : 0, noShow: isNoShow ? 1 : 0 }
 }
 
+/** Serviço de unha / manicure / pedicure — usado para preferência de manicure. */
+export function isNailService(name: string | null | undefined): boolean {
+  if (!name) return false
+  const n = name.toLowerCase()
+  return (
+    n.includes('mani') ||
+    n.includes('pedi') ||
+    n.includes('unha') ||
+    n.includes('nail') ||
+    n.includes('esmalte') ||
+    n.includes('gel') ||
+    n.includes('fibra') ||
+    n.includes('blindagem') ||
+    n.includes('spa dos pés') ||
+    n.includes('spa das mãos')
+  )
+}
+
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).
 export function guessServiceCategory(name: string): 'corte' | 'tratamento' | 'coloracao' | 'bem_estar' | 'outro' {
   const n = name.toLowerCase()
   if (n.includes('corte') || n.includes('cabeleir')) return 'corte'
   if (n.includes('color') || n.includes('mecha') || n.includes('tintura')) return 'coloracao'
-  if (n.includes('massag') || n.includes('spa') || n.includes('pedi')) return 'bem_estar'
+  if (isNailService(n) || n.includes('massag') || n.includes('spa')) return 'bem_estar'
   if (n.includes('hidrat') || n.includes('nutri') || n.includes('trat') || n.includes('escova')) return 'tratamento'
   return 'outro'
 }

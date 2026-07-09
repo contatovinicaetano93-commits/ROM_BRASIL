@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isNailService,
   normalizeAppointmentRow,
   normalizeAttendanceRow,
   normalizePhone,
@@ -59,5 +60,14 @@ describe('normalizeAttendanceRow price', () => {
     })
     expect(row?.price).toBe(450)
     expect(row?.professional).toBe('Walter')
+  })
+})
+
+describe('isNailService', () => {
+  it('reconhece manicure e pedicure', () => {
+    expect(isNailService('Manicure completa')).toBe(true)
+    expect(isNailService('Pedicure spa')).toBe(true)
+    expect(isNailService('Blindagem de unhas')).toBe(true)
+    expect(isNailService('Corte feminino')).toBe(false)
   })
 })

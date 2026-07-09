@@ -20,6 +20,7 @@ import {
   Calendar,
   Copy,
   Pencil,
+  Hand,
 } from 'lucide-react'
 import {
   StatusPill,
@@ -61,6 +62,7 @@ interface Contact {
   channel: string
   status: string
   notes: string | null
+  preferred_manicurist: string | null
 }
 interface ContactEvent {
   id: string
@@ -363,6 +365,13 @@ export default function ContactDetailPage() {
             </a>
           )}
           {contact.notes && <p className="mt-1 text-xs leading-relaxed text-muted">{contact.notes}</p>}
+        </div>
+        <div className="mt-4 rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+          <p className="text-[0.65rem] uppercase tracking-wide text-muted">Manicure preferida</p>
+          <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+            <Hand size={14} className="shrink-0 text-gold" />
+            {contact.preferred_manicurist?.trim() || 'Ainda não informada'}
+          </p>
         </div>
       </div>
 
@@ -798,6 +807,7 @@ function EditContactSheet({
   const [phone, setPhone] = useState(contact.phone ?? '')
   const [email, setEmail] = useState(contact.email ?? '')
   const [notes, setNotes] = useState(contact.notes ?? '')
+  const [manicurist, setManicurist] = useState(contact.preferred_manicurist ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -814,6 +824,7 @@ function EditContactSheet({
           phone,
           email: email || undefined,
           notes,
+          preferred_manicurist: manicurist.trim() || null,
         }),
       })
       const json = await res.json()
@@ -869,6 +880,15 @@ function EditContactSheet({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               type="email"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted">Manicure preferida</span>
+            <input
+              value={manicurist}
+              onChange={(e) => setManicurist(e.target.value)}
+              placeholder="Nome da manicure"
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
             />
           </label>

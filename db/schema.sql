@@ -14,6 +14,7 @@ create table if not exists contacts (
   status text not null default 'novo' check (status in ('novo', 'em_atendimento', 'agendado', 'convertido', 'perdido')),
   avec_client_id text,
   notes text,
+  preferred_manicurist text,
   first_contact_at timestamptz not null default now(),
   last_contact_at timestamptz not null default now(),
   created_at timestamptz not null default now()

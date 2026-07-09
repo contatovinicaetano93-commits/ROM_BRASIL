@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { upsertContact, updateContact, logEvent } from '@/lib/contacts'
+import { upsertContact, updateContact, logEvent, setPreferredManicurist } from '@/lib/contacts'
 import { listServices, addService, scheduleService, markServiceDone } from '@/lib/services'
-import { guessServiceCategory } from '@/lib/avec/normalize'
+import { guessServiceCategory, isNailService } from '@/lib/avec/normalize'
 
 // Webhook Avec — aceita eventos push (quando disponível) ou bridge manual.
 // Também funciona como ingestão genérica até confirmarmos o formato oficial.
@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
           payload.professional_name,
           payload.price
         )
+        if (payload.professional_name && isNailService(payload.service_name)) {
+          await setPreferredManicurist(contact.id, payload.professional_name)
+        }
         await updateContact(contact.id, { status: 'agendado' })
       }
     }
@@ -82,6 +85,9 @@ export async function POST(req: NextRequest) {
         professionalName: payload.professional_name,
         lastPrice: payload.price,
       })
+      if (payload.professional_name && isNailService(payload.service_name)) {
+        await setPreferredManicurist(contact.id, payload.professional_name)
+      }
       await updateContact(contact.id, { status: 'convertido' })
     }
 
