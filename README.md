@@ -71,6 +71,10 @@ ou investigar depois.
    `/api/webhooks/telegram` com um `secret_token`.
 7. Preencher `.env.local` com base no `.env.example`.
 
+## Próximos passos
+
+- Plano bot funcionários + KPIs por profissional: [`docs/plano-bot-funcionarios-rom-brasil.md`](docs/plano-bot-funcionarios-rom-brasil.md)
+
 ## Rodando local
 
 ```bash
