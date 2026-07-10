@@ -1,3 +1,31 @@
+export const SALON_TIMEZONE = 'America/Sao_Paulo'
+
+/** Data calendária de hoje no fuso do salão (YYYY-MM-DD). */
+export function todayIso(timeZone = SALON_TIMEZONE): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+/** YYYY-MM-DD no fuso do salão a partir de ISO/Date (não usar slice UTC). */
+export function toSalonDateIso(
+  value: string | Date | null | undefined,
+  timeZone = SALON_TIMEZONE,
+): string | null {
+  if (value == null || value === '') return null
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
 export function fmtSchedule(iso: string) {
   const d = new Date(iso)
   const today = new Date()
@@ -30,15 +58,40 @@ export function formatCurrency(value: number | null | undefined) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+export function formatVisitDate(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 export function formatPercent(value: number | null | undefined, digits = 0) {
   if (value === null || value === undefined) return '—'
   return `${(value * 100).toFixed(digits)}%`
 }
 
-export function whatsAppUrl(phone: string | null, text?: string) {
+function whatsAppDigits(phone: string | null): string | null {
   if (!phone) return null
-  const digits = phone.replace(/\D/g, '')
+  let digits = phone.replace(/\D/g, '')
   if (digits.length < 10) return null
+  // Celular BR sem DDI → assume 55
+  if (digits.length <= 11 && !digits.startsWith('55')) digits = `55${digits}`
+  return digits
+}
+
+/** Link genérico (app ou web). */
+export function whatsAppUrl(phone: string | null, text?: string) {
+  const digits = whatsAppDigits(phone)
+  if (!digits) return null
   const base = `https://wa.me/${digits}`
   return text ? `${base}?text=${encodeURIComponent(text)}` : base
+}
+
+/** Abre WhatsApp Web com mensagem pronta. */
+export function whatsAppWebUrl(phone: string | null, text?: string) {
+  const digits = whatsAppDigits(phone)
+  if (!digits) return null
+  const base = `https://web.whatsapp.com/send?phone=${digits}`
+  return text ? `${base}&text=${encodeURIComponent(text)}` : base
 }

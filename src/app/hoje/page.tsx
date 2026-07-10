@@ -41,13 +41,15 @@ interface ScheduleItem {
 interface HojeData {
   day: string
   salon: {
-    revenue: number
+    revenue: number | null
     appointments: number
     attended: number
     no_shows: number
     ticket_avg: number | null
     new_clients: number
   }
+  can_view_revenue?: boolean
+  role?: 'admin' | 'staff'
   playbook: PlaybookItem[]
   scheduleToday: ScheduleItem[]
   leads: { novos: number; whatsapp_sem_resposta: number }
@@ -73,6 +75,8 @@ export default function HojePage() {
   }, [])
 
   const salon = data?.salon
+  // Só mostra faturamento depois da API confirmar (staff nunca vê)
+  const canViewRevenue = Boolean(data?.can_view_revenue)
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -98,14 +102,16 @@ export default function HojePage() {
         </div>
       )}
 
-      {/* KPIs do salão */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard
-          icon={<DollarSign size={16} />}
-          label="Faturamento"
-          value={loading ? '—' : formatCurrency(salon?.revenue)}
-          loading={loading}
-        />
+      {/* KPIs do salão — faturamento só para admin */}
+      <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        {canViewRevenue && (
+          <KpiCard
+            icon={<DollarSign size={16} />}
+            label="Faturamento"
+            value={loading ? '—' : formatCurrency(salon?.revenue ?? 0)}
+            loading={loading}
+          />
+        )}
         <KpiCard
           icon={<Calendar size={16} />}
           label="Agendados"

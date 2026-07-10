@@ -5,11 +5,11 @@ import {
   createSessionToken,
   getAdminUser,
   isAuthEnabled,
-  validateAdminCredentials,
+  validateCredentials,
 } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
-  if (!isAuthEnabled()) return ok({ auth: 'disabled' })
+  if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
 
   const body = await req.json().catch(() => null)
   const username = typeof body?.username === 'string' ? body.username : ''
@@ -18,13 +18,19 @@ export async function POST(req: NextRequest) {
 
   const user = username || getAdminUser()
   const pass = password || legacyToken
+  const hit = pass ? validateCredentials(user, pass) : null
 
-  if (!pass || !validateAdminCredentials(user, pass)) {
+  if (!hit) {
     return err('Usuário ou senha incorretos', 401)
   }
 
-  const res = ok({ auth: 'ok' })
-  res.cookies.set(AUTH_COOKIE, await createSessionToken(), {
+  const res = ok({
+    auth: 'ok',
+    user: hit.user,
+    role: hit.role,
+    can_view_revenue: hit.role === 'admin',
+  })
+  res.cookies.set(AUTH_COOKIE, await createSessionToken(hit.user, hit.role), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

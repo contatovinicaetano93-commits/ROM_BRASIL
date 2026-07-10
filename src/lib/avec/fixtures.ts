@@ -35,6 +35,8 @@ export function mockAppointments() {
       servico: 'Hidratação profunda',
       data: d,
       hora: '14:00',
+      profissional: 'Dani Mariniello',
+      valor: '280,00',
       status: 'agendado',
     },
     {
@@ -44,6 +46,8 @@ export function mockAppointments() {
       servico: 'Corte masculino',
       data: d,
       hora: '16:30',
+      profissional: 'Walter',
+      valor: '120,00',
       status: 'agendado',
     },
   ]
@@ -62,6 +66,8 @@ export function mockAttendances() {
       servico: 'Coloração completa',
       data: d,
       hora: '11:00',
+      profissional: 'Dani Mariniello',
+      valor: '450,00',
     },
   ]
 }

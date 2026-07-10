@@ -1,13 +1,16 @@
 import { NextRequest } from 'next/server'
 import { ok } from '@/lib/api-response'
-import { getAdminUser, isAuthEnabled, isAuthorized } from '@/lib/auth'
+import { getSession, isAuthEnabled, isStaffAuthConfigured } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
   const enabled = isAuthEnabled()
-  const authenticated = enabled ? await isAuthorized(req) : false
+  const session = enabled ? await getSession(req) : null
   return ok({
     auth_enabled: enabled,
-    authenticated,
-    user: authenticated ? getAdminUser() : null,
+    authenticated: enabled ? Boolean(session) : false,
+    user: session?.user ?? null,
+    role: session?.role ?? null,
+    can_view_revenue: session?.can_view_revenue ?? false,
+    staff_login_configured: isStaffAuthConfigured(),
   })
 }

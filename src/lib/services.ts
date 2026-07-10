@@ -14,12 +14,23 @@ export interface ClientService {
   scheduled_at: string | null
   product: string | null
   notes: string | null
+  professional_name: string | null
+  last_price: number | null
   active: boolean
   created_at: string
 }
 
 export interface ScheduledServiceRow extends ClientService {
   contact_name: string | null
+}
+
+/** Última visita do cliente — serviço com last_done_at mais recente. */
+export interface LastVisit {
+  service_id: string
+  service_name: string
+  last_done_at: string
+  professional_name: string | null
+  last_price: number | null
 }
 
 export async function listServices(contactId: string): Promise<ClientService[]> {
@@ -29,6 +40,26 @@ export async function listServices(contactId: string): Promise<ClientService[]> 
     where contact_id = ${contactId} and active = true
     order by created_at asc
   `) as ClientService[]
+}
+
+export function pickLastVisit(services: ClientService[]): LastVisit | null {
+  let best: ClientService | null = null
+  for (const s of services) {
+    if (!s.last_done_at) continue
+    if (!best || !best.last_done_at || s.last_done_at > best.last_done_at) best = s
+  }
+  if (!best?.last_done_at) return null
+  return {
+    service_id: best.id,
+    service_name: best.name,
+    last_done_at: best.last_done_at,
+    professional_name: best.professional_name,
+    last_price: best.last_price != null ? Number(best.last_price) : null,
+  }
+}
+
+export async function getLastVisit(contactId: string): Promise<LastVisit | null> {
+  return pickLastVisit(await listServices(contactId))
 }
 
 interface AddServiceInput {
@@ -60,21 +91,87 @@ export async function addService(contactId: string, input: AddServiceInput): Pro
   return rows[0]
 }
 
-// Marca o serviço como realizado agora — reinicia o ciclo e limpa agendamento.
-export async function markServiceDone(serviceId: string): Promise<ClientService | null> {
+export interface MarkServiceDoneOpts {
+  doneAt?: string | null
+  professionalName?: string | null
+  lastPrice?: number | null
+}
+
+// Marca o serviço como realizado — reinicia o ciclo e limpa agendamento.
+export async function markServiceDone(
+  serviceId: string,
+  opts: MarkServiceDoneOpts = {}
+): Promise<ClientService | null> {
   const sql = getSql()
+  const doneAt = opts.doneAt ?? new Date().toISOString()
   const rows = (await sql`
-    update client_services set last_done_at = now(), scheduled_at = null
+    update client_services set
+      last_done_at = ${doneAt}::timestamptz,
+      scheduled_at = null,
+      professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
+      last_price = coalesce(${opts.lastPrice ?? null}, last_price)
     where id = ${serviceId}
     returning *
   `) as ClientService[]
   return rows[0] ?? null
 }
 
-export async function scheduleService(serviceId: string, scheduledAt: string): Promise<ClientService | null> {
+/** Agenda serviço. Não grava last_price (preço de visita feita = só markServiceDone). */
+export async function scheduleService(
+  serviceId: string,
+  scheduledAt: string,
+  professionalName?: string | null,
+  _quotedPrice?: number | null
+): Promise<ClientService | null> {
+  void _quotedPrice
   const sql = getSql()
   const rows = (await sql`
-    update client_services set scheduled_at = ${scheduledAt}::timestamptz
+    update client_services set
+      scheduled_at = ${scheduledAt}::timestamptz,
+      professional_name = coalesce(${professionalName ?? null}, professional_name)
+    where id = ${serviceId}
+    returning *
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
+export async function setServiceProfessional(
+  serviceId: string,
+  professionalName: string
+): Promise<ClientService | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    update client_services set professional_name = ${professionalName}
+    where id = ${serviceId}
+    returning *
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
+/**
+ * Atualiza meta profissionais/preço.
+ * last_price só se already_done (há last_done_at) — evita preço de agendamento futuro
+ * aparecer como "valor da última visita".
+ */
+export async function patchServiceVisitMeta(
+  serviceId: string,
+  opts: { professionalName?: string | null; lastPrice?: number | null; allowLastPrice?: boolean }
+): Promise<ClientService | null> {
+  const sql = getSql()
+  if (opts.allowLastPrice && opts.lastPrice != null) {
+    const rows = (await sql`
+      update client_services set
+        professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
+        last_price = coalesce(${opts.lastPrice ?? null}, last_price)
+      where id = ${serviceId}
+        and last_done_at is not null
+      returning *
+    `) as ClientService[]
+    if (rows[0]) return rows[0]
+  }
+  const rows = (await sql`
+    update client_services set
+      professional_name = coalesce(${opts.professionalName ?? null}, professional_name)
     where id = ${serviceId}
     returning *
   `) as ClientService[]

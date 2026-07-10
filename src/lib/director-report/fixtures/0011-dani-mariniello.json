@@ -1,0 +1,415 @@
+{
+  "professional": "Dani Mariniello",
+  "period": "1tri-2tri 2026",
+  "report": "0011",
+  "clients": [
+    {
+      "name": "GABRIELLA VASSOLER",
+      "email": null,
+      "phone": null,
+      "mobile": "11964541122",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-13"
+    },
+    {
+      "name": "ANA NELIA FERNANDES",
+      "email": "ananelia@icloud.com",
+      "phone": null,
+      "mobile": "86999788017",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-21"
+    },
+    {
+      "name": "MONICA TINOCO DA FONCECA",
+      "email": null,
+      "phone": null,
+      "mobile": "84981080709",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-20"
+    },
+    {
+      "name": "LUCIANA AUGUSTINHO GOUVEIA BARRETO",
+      "email": null,
+      "phone": null,
+      "mobile": "11995456413",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-06"
+    },
+    {
+      "name": "ANA CAROLINA D ALMEIDA",
+      "email": null,
+      "phone": null,
+      "mobile": "21999870247",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-16"
+    },
+    {
+      "name": "LEANDRA FERNANDES",
+      "email": null,
+      "phone": null,
+      "mobile": "11985855980",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-29"
+    },
+    {
+      "name": "AMANDA CAMARGO",
+      "email": "amandacamargodias@gmail.com",
+      "phone": null,
+      "mobile": "12997621710",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-10"
+    },
+    {
+      "name": "ANA CAROLINA DÁLMEIDA",
+      "email": null,
+      "phone": null,
+      "mobile": "19999870247",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-12"
+    },
+    {
+      "name": "JESSICA MESQUITA",
+      "email": "jessica.jmesquita@gmail.com",
+      "phone": null,
+      "mobile": "11997902977",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-16"
+    },
+    {
+      "name": "FERNANDA CALDAS",
+      "email": null,
+      "phone": null,
+      "mobile": "11963650061",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-17"
+    },
+    {
+      "name": "MARIANA MOITA",
+      "email": null,
+      "phone": null,
+      "mobile": "11993528992",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-14"
+    },
+    {
+      "name": "DEBORA ALVES",
+      "email": null,
+      "phone": null,
+      "mobile": "11975879615",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-27"
+    },
+    {
+      "name": "MARINA DE ALMEIDA SALIM",
+      "email": "marinaasalim@gmail.com",
+      "phone": null,
+      "mobile": "21998135196",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-10"
+    },
+    {
+      "name": "MARINA DE ALMEIDA SALIM",
+      "email": "marinaasalim@gmail.com",
+      "phone": null,
+      "mobile": "21998135196",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-14"
+    },
+    {
+      "name": "LITHIELEN FERNANDES +447533433281",
+      "email": "fernandesita08@icloud.com",
+      "phone": null,
+      "mobile": "11111111111",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-12"
+    },
+    {
+      "name": "GABRIELA CAPRIOGLIO ABBUD",
+      "email": "gcaprioglio@hotmail.com",
+      "phone": null,
+      "mobile": "11992644210",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-06"
+    },
+    {
+      "name": "GIOVANA N. DE PAULA",
+      "email": "giovana.npaula@gmail.com",
+      "phone": null,
+      "mobile": "11973174197",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-26"
+    },
+    {
+      "name": "IRENE HAHN",
+      "email": null,
+      "phone": null,
+      "mobile": "48988228466",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-13"
+    },
+    {
+      "name": "MALU HAHN",
+      "email": null,
+      "phone": null,
+      "mobile": "19997219225",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-13"
+    },
+    {
+      "name": "PRISCILA FREIRE ROCHA",
+      "email": "prieq1@gmail.com",
+      "phone": null,
+      "mobile": "11997604935",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-11"
+    },
+    {
+      "name": "PRISCILA FREIRE ROCHA",
+      "email": "prieq1@gmail.com",
+      "phone": null,
+      "mobile": "11997604935",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-07"
+    },
+    {
+      "name": "PRISCILA LOCH",
+      "email": null,
+      "phone": null,
+      "mobile": "11997270539",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-07"
+    },
+    {
+      "name": "TATIANA LASSMER",
+      "email": null,
+      "phone": null,
+      "mobile": "11999943560",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-17"
+    },
+    {
+      "name": "JACQUE FERRAREZI",
+      "email": "jacqueferrarezi@gmail.com",
+      "phone": null,
+      "mobile": "11983767236",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-30"
+    },
+    {
+      "name": "GIOVANNA BUARE",
+      "email": null,
+      "phone": null,
+      "mobile": "11975433060",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-04"
+    },
+    {
+      "name": "LETICIA DE MIRANDA VIANNA",
+      "email": null,
+      "phone": null,
+      "mobile": "19984417070",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-10"
+    },
+    {
+      "name": "LETICIA DE MIRANDA VIANNA",
+      "email": null,
+      "phone": null,
+      "mobile": "19984417070",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-10"
+    },
+    {
+      "name": "ANDREA ESTRELA",
+      "email": null,
+      "phone": null,
+      "mobile": "11953180190",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-06"
+    },
+    {
+      "name": "SABRINA VILAIM MILAGRE",
+      "email": null,
+      "phone": null,
+      "mobile": "11981997992",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-27"
+    },
+    {
+      "name": "IARA BRANDAO PEREIRA",
+      "email": null,
+      "phone": null,
+      "mobile": "11991495753",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-23"
+    },
+    {
+      "name": "SOPHIA TOSCANA DE MAIO",
+      "email": null,
+      "phone": null,
+      "mobile": "11995589900",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-16"
+    },
+    {
+      "name": "YASMIM MENDES",
+      "email": null,
+      "phone": null,
+      "mobile": "11999982888",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-07"
+    },
+    {
+      "name": "MAIRA ARIAS",
+      "email": null,
+      "phone": null,
+      "mobile": "11987649070",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-04-10"
+    },
+    {
+      "name": "MAIRA ARIAS",
+      "email": null,
+      "phone": null,
+      "mobile": "11987649070",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-06"
+    },
+    {
+      "name": "CAROLINE ROCHA.",
+      "email": "carolgarocha@yahoo.com.br",
+      "phone": null,
+      "mobile": "11972126199",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-23"
+    },
+    {
+      "name": "KAREN FRUCAWA",
+      "email": null,
+      "phone": null,
+      "mobile": "11976849093",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-05"
+    },
+    {
+      "name": "MARTA AGUDO",
+      "email": "marta.agudo@gmail.com",
+      "phone": null,
+      "mobile": "11992528320",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-13"
+    },
+    {
+      "name": "MARIA NERY.",
+      "email": "ma_carmito@hotmail.com",
+      "phone": null,
+      "mobile": "11996025159",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-06"
+    },
+    {
+      "name": "ELISABETE BERTOLINI",
+      "email": null,
+      "phone": null,
+      "mobile": "11982082513",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-12"
+    },
+    {
+      "name": "MAYARA PETRECHE",
+      "email": null,
+      "phone": null,
+      "mobile": "11993394321",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-07"
+    },
+    {
+      "name": "ARIANA WAGENAKER",
+      "email": "ariana1506@hotmail.com",
+      "phone": null,
+      "mobile": "19997987067",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-06"
+    },
+    {
+      "name": "FLAVIA C. JACO",
+      "email": null,
+      "phone": null,
+      "mobile": "11996464012",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-03"
+    },
+    {
+      "name": "ANDREZA OLIVEIRA",
+      "email": null,
+      "phone": null,
+      "mobile": "11971520232",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-05"
+    },
+    {
+      "name": "LETICIA MARX BENGHI",
+      "email": null,
+      "phone": null,
+      "mobile": "41996426737",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-24"
+    },
+    {
+      "name": "CAROLINA CAGNO",
+      "email": null,
+      "phone": null,
+      "mobile": "11998080352",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-13"
+    },
+    {
+      "name": "BRUNA RAMVNELLI",
+      "email": "bru_raminelli@hotmail.com",
+      "phone": null,
+      "mobile": "11999803587",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-03"
+    },
+    {
+      "name": "BEATRIZ PIRATININGA",
+      "email": null,
+      "phone": null,
+      "mobile": "11999568569",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-07"
+    },
+    {
+      "name": "JENIFER CALDAS MENDES",
+      "email": null,
+      "phone": null,
+      "mobile": "11991857399",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-01-27"
+    },
+    {
+      "name": "ROBERTA HELENA HAMIRES",
+      "email": null,
+      "phone": null,
+      "mobile": "11976738668",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-21"
+    },
+    {
+      "name": "MARINA CALDAS",
+      "email": null,
+      "phone": null,
+      "mobile": "11985889445",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-03-14"
+    },
+    {
+      "name": "GISELA PELLEGRINI",
+      "email": "giselasmt@gmail.com",
+      "phone": null,
+      "mobile": "11981115213",
+      "gender": "NAO ESPECIFICADO",
+      "last_visit": "2026-02-03"
+    }
+  ]
+}

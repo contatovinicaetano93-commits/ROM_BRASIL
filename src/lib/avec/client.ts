@@ -4,12 +4,21 @@
 // Auth: header Authorization = token puro (sem "Bearer").
 
 import { getMockReport } from '@/lib/avec/fixtures'
+import { todayIso } from '@/lib/salon/format'
+import { isProduction } from '@/lib/env'
 
 export const AVEC_DEFAULT_API_URL = 'https://api.avec.beauty'
 
 export function isAvecMock() {
   const v = process.env.AVEC_MOCK
   return v === '1' || v === 'true'
+}
+
+/** Mock nunca em produção — evita sujar o Neon real. */
+export function assertAvecMockAllowed() {
+  if (isAvecMock() && isProduction()) {
+    throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')
+  }
 }
 
 export interface AvecReportParams {
@@ -69,14 +78,24 @@ export function fmtAvecDate(d: Date) {
   return `${dd}/${mm}/${yyyy}`
 }
 
+function fmtBrFromYmd(isoYmd: string) {
+  const [y, m, d] = isoYmd.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function addCalendarDays(isoYmd: string, delta: number) {
+  const [y, m, d] = isoYmd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y!, m! - 1, d! + delta))
+  return dt.toISOString().slice(0, 10)
+}
+
+/** Intervalo em datas de calendário America/Sao_Paulo (não UTC do servidor). */
 export function periodRange(daysBack = 0, daysForward = 14) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - daysBack)
-  const end = new Date()
-  end.setHours(23, 59, 59, 999)
-  end.setDate(end.getDate() + daysForward)
-  return { inicio: fmtAvecDate(start), fim: fmtAvecDate(end) }
+  const today = todayIso()
+  return {
+    inicio: fmtBrFromYmd(addCalendarDays(today, -daysBack)),
+    fim: fmtBrFromYmd(addCalendarDays(today, daysForward)),
+  }
 }
 
 // Extrai linhas do JSON de relatório — formato varia por endpoint.
@@ -103,6 +122,7 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
 }
 
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+  assertAvecMockAllowed()
   if (isAvecMock()) {
     return getMockReport(reportId, params.page ?? 1)
   }

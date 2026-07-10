@@ -39,11 +39,11 @@ export function DesktopSidebar() {
         })}
       </nav>
 
-      <div className="px-4 pb-2">
+      <div className="flex flex-col gap-1 px-4 pb-2">
         <Link
           href={ADMIN_NAV.href}
           className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground ${
-            pathname.startsWith('/admin') ? 'text-gold' : ''
+            pathname === '/admin' || pathname === '/admin/' ? 'text-gold' : ''
           }`}
         >
           <Activity size={16} />

@@ -20,6 +20,8 @@ import {
   Calendar,
   Copy,
   Pencil,
+  Hand,
+  Scissors,
 } from 'lucide-react'
 import {
   StatusPill,
@@ -31,6 +33,8 @@ import {
 import { fmtSchedule, whatsAppUrl } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
+import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
+import { LastVisitCard, type LastVisitData } from '../../_components/LastVisitCard'
 
 interface Service {
   id: string
@@ -40,6 +44,9 @@ interface Service {
   product: string | null
   notes: string | null
   scheduled_at: string | null
+  last_done_at: string | null
+  professional_name: string | null
+  last_price: number | null
   next_due_at: string | null
   days_until: number | null
   state: 'overdue' | 'due_soon' | 'ok' | 'no_cadence'
@@ -57,6 +64,8 @@ interface Contact {
   channel: string
   status: string
   notes: string | null
+  preferred_manicurist: string | null
+  preferred_hairstylist: string | null
 }
 interface ContactEvent {
   id: string
@@ -72,6 +81,7 @@ interface Profile {
   services: Service[]
   recommendations: Recommendation[]
   events: ContactEvent[]
+  last_visit: LastVisitData | null
 }
 
 const STATUS_FLOW = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
@@ -307,7 +317,15 @@ export default function ContactDetailPage() {
     )
   }
 
-  const { contact, services, recommendations, events } = data
+  const { contact, services, recommendations, events, last_visit } = data
+  const clientWhatsAppText = buildClientWhatsAppMessage({
+    contact,
+    services,
+    recommendations,
+  })
+  const clientWhatsAppHref = contact.phone
+    ? whatsAppUrl(contact.phone, clientWhatsAppText)
+    : null
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
@@ -359,7 +377,25 @@ export default function ContactDetailPage() {
           )}
           {contact.notes && <p className="mt-1 text-xs leading-relaxed text-muted">{contact.notes}</p>}
         </div>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Manicure preferida</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+              <Hand size={14} className="shrink-0 text-gold" />
+              {contact.preferred_manicurist?.trim() || 'Ainda não informada'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cabeleireiro preferido</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+              <Scissors size={14} className="shrink-0 text-gold" />
+              {contact.preferred_hairstylist?.trim() || 'Ainda não informado'}
+            </p>
+          </div>
+        </div>
       </div>
+
+      <LastVisitCard visit={last_visit} />
 
       {/* Status guiado */}
       <SectionCard title="Status do atendimento">
@@ -411,11 +447,12 @@ export default function ContactDetailPage() {
               {briefCopied ? 'Copiado!' : 'Copiar briefing'}
             </button>
           )}
-          {contact.phone && brief?.text && whatsAppUrl(contact.phone, brief.text) && (
+          {clientWhatsAppHref && (
             <a
-              href={whatsAppUrl(contact.phone, brief.text)!}
+              href={clientWhatsAppHref}
               target="_blank"
               rel="noopener noreferrer"
+              title="Abrir WhatsApp com mensagem pessoal de reativação"
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-success/40 bg-success/10 py-3 text-sm font-semibold text-success"
             >
               <MessageSquare size={16} />
@@ -425,7 +462,7 @@ export default function ContactDetailPage() {
           <button
             onClick={generateBrief}
             disabled={briefLoading}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60 ${brief && contact.phone ? '' : brief ? '' : 'w-full'}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60 ${brief && clientWhatsAppHref ? '' : brief ? '' : 'w-full'}`}
           >
             <Sparkles size={16} />
             {briefLoading ? 'Gerando…' : brief ? 'Atualizar' : 'Gerar briefing'}
@@ -791,6 +828,8 @@ function EditContactSheet({
   const [phone, setPhone] = useState(contact.phone ?? '')
   const [email, setEmail] = useState(contact.email ?? '')
   const [notes, setNotes] = useState(contact.notes ?? '')
+  const [manicurist, setManicurist] = useState(contact.preferred_manicurist ?? '')
+  const [hairstylist, setHairstylist] = useState(contact.preferred_hairstylist ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -807,6 +846,8 @@ function EditContactSheet({
           phone,
           email: email || undefined,
           notes,
+          preferred_manicurist: manicurist.trim() || null,
+          preferred_hairstylist: hairstylist.trim() || null,
         }),
       })
       const json = await res.json()
@@ -862,6 +903,24 @@ function EditContactSheet({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               type="email"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted">Manicure preferida</span>
+            <input
+              value={manicurist}
+              onChange={(e) => setManicurist(e.target.value)}
+              placeholder="Nome da manicure"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted">Cabeleireiro preferido</span>
+            <input
+              value={hairstylist}
+              onChange={(e) => setHairstylist(e.target.value)}
+              placeholder="Nome do cabeleireiro"
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
             />
           </label>

@@ -13,10 +13,15 @@ const contact: ContactRow = {
   phone: '11999990000',
   email: null,
   channel: 'whatsapp',
+  source: 'manual',
   status: 'novo',
+  avec_client_id: null,
   notes: null,
+  preferred_manicurist: null,
+  preferred_hairstylist: null,
+  first_contact_at: new Date().toISOString(),
+  last_contact_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
 }
 
 describe('buildRuleBrief', () => {

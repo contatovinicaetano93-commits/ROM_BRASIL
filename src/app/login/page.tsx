@@ -1,18 +1,17 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
 import { getBrand } from '@/lib/brand'
 
 function LoginForm() {
   const brand = getBrand()
-  const router = useRouter()
   const params = useSearchParams()
   const next = sanitizeRedirectPath(params.get('next'))
   const loggedOut = params.get('logged_out') === '1'
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,7 +24,10 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim(),
+        }),
         credentials: 'include',
       })
       const json = await res.json()
@@ -33,8 +35,8 @@ function LoginForm() {
         setError(json.error ?? 'Usuário ou senha incorretos')
         return
       }
-      router.push(next)
-      router.refresh()
+      // Hard navigation garante que o cookie da sessão seja lido pelo middleware
+      window.location.assign(next)
     } catch (err) {
       setError(String(err))
     } finally {
@@ -62,6 +64,9 @@ function LoginForm() {
             required
             autoComplete="username"
             autoFocus
+            placeholder="Usuário"
+            spellCheck={false}
+            autoCapitalize="characters"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
@@ -73,6 +78,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            placeholder="Senha"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>

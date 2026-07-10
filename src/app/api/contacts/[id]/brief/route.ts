@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { getContactById, logEvent } from '@/lib/contacts'
-import { listServices } from '@/lib/services'
+import { listServices, pickLastVisit } from '@/lib/services'
 import { enrichServices } from '@/lib/recommendations'
 import { getContactRecommendations } from '@/lib/salon/recommendations'
 import { resolveBriefCache } from '@/lib/salon/brief-cache'
@@ -15,8 +15,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
 
-    const services = enrichServices(await listServices(id))
+    const rawServices = await listServices(id)
+    const services = enrichServices(rawServices)
     const { recommendations } = await getContactRecommendations(id)
+    const last_visit = pickLastVisit(rawServices)
 
     const cached = await resolveBriefCache(contact, services, recommendations, () =>
       generateBrief(contact, services, recommendations)
@@ -37,6 +39,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       source: cached.source,
       from_cache: cached.from_cache,
       recommendations,
+      last_visit,
     })
   } catch (e) {
     return handleError(e)

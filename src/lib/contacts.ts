@@ -47,6 +47,8 @@ export interface ContactRow {
   status: string
   avec_client_id: string | null
   notes: string | null
+  preferred_manicurist: string | null
+  preferred_hairstylist: string | null
   first_contact_at: string
   last_contact_at: string
   created_at: string
@@ -167,6 +169,8 @@ interface UpdateContactInput {
   phone?: string
   status?: ContactStatus
   notes?: string
+  preferredManicurist?: string | null
+  preferredHairstylist?: string | null
 }
 
 // Atualização parcial e guiada: só mexe nos campos enviados (coalesce mantém o resto).
@@ -180,6 +184,16 @@ export async function updateContact(id: string, patch: UpdateContactInput): Prom
     if (current) status = mergeContactStatus(current.status as ContactStatus, patch.status)
   }
 
+  // null no PATCH = limpeza explícita → grava '' (≠ SQL NULL = nunca definido).
+  const manicurist =
+    patch.preferredManicurist === undefined
+      ? null
+      : (patch.preferredManicurist?.trim() ?? '')
+  const hairstylist =
+    patch.preferredHairstylist === undefined
+      ? null
+      : (patch.preferredHairstylist?.trim() ?? '')
+
   const rows = (await sql`
     update contacts set
       name = coalesce(${patch.name ?? null}, name),
@@ -187,11 +201,57 @@ export async function updateContact(id: string, patch: UpdateContactInput): Prom
       phone = coalesce(${phone ?? null}, phone),
       status = coalesce(${status}, status),
       notes = coalesce(${patch.notes ?? null}, notes),
+      preferred_manicurist = case
+        when ${patch.preferredManicurist !== undefined} then ${manicurist}
+        else preferred_manicurist
+      end,
+      preferred_hairstylist = case
+        when ${patch.preferredHairstylist !== undefined} then ${hairstylist}
+        else preferred_hairstylist
+      end,
       last_contact_at = now()
     where id = ${id}
     returning *
   `) as ContactRow[]
   return rows[0] ?? null
+}
+
+/**
+ * Define manicure preferida (sync Avec).
+ * Só preenche se ainda for NULL — '' = limpeza manual, não sobrescrever.
+ */
+export async function setPreferredManicurist(
+  contactId: string,
+  manicurist: string
+): Promise<void> {
+  const name = manicurist.trim()
+  if (!name) return
+  const sql = getSql()
+  await sql`
+    update contacts
+    set preferred_manicurist = ${name}
+    where id = ${contactId}
+      and preferred_manicurist is null
+  `
+}
+
+/**
+ * Define cabeleireiro preferido (sync Avec).
+ * Só preenche se ainda for NULL — '' = limpeza manual, não sobrescrever.
+ */
+export async function setPreferredHairstylist(
+  contactId: string,
+  hairstylist: string
+): Promise<void> {
+  const name = hairstylist.trim()
+  if (!name) return
+  const sql = getSql()
+  await sql`
+    update contacts
+    set preferred_hairstylist = ${name}
+    where id = ${contactId}
+      and preferred_hairstylist is null
+  `
 }
 
 interface LogEventInput {

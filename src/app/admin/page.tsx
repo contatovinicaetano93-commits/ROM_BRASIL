@@ -44,6 +44,7 @@ interface AvecStatus {
   base_url?: string
   docs?: string
   connection?: { ok: boolean; sample_rows?: number; error?: string }
+  cron?: { schedule?: string; cadence?: string; path?: string }
   last: {
     status: string
     created_at: string
@@ -58,10 +59,17 @@ interface HealthStatus {
   validation?: { ok: boolean; warnings: string[] }
   database: { configured: boolean; connected: boolean; error: string | null }
   claude: { configured: boolean; model?: string }
-  avec: { configured: boolean; mock: boolean; token: boolean }
+  avec: {
+    configured: boolean
+    mock: boolean
+    token: boolean
+    webhook_secret?: boolean
+    webhook_url?: string
+  }
   whatsapp: { configured: boolean }
   telegram: { configured: boolean; webhook_secret: boolean }
   cron: { configured: boolean }
+  webhooks?: { avec_secret?: boolean }
   auth: { enabled: boolean; password?: boolean; user?: boolean }
   panel?: { id: string; display_name: string; seed_preset: string }
 }
@@ -233,6 +241,20 @@ export default function AdminPage() {
         </div>
       )}
 
+      <Link
+        href="/admin/relatorio-diretoria"
+        className="flex items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-gold/5 px-5 py-4 transition-colors hover:bg-gold/10"
+      >
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Diretoria</p>
+          <p className="mt-1 font-semibold">Relatório semanal (2 etapas)</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Etapa 1 · 0011 trimestre vs trimestre · Etapa 2 · 0021 mês vs mês · terças 08:00
+          </p>
+        </div>
+        <ChevronRight size={20} className="shrink-0 text-gold" />
+      </Link>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Configuração" badge={<EndpointBadge path="/api/health" />}>
           {health ? (
@@ -244,9 +266,14 @@ export default function AdminPage() {
                 hint={health.claude.configured ? health.claude.model ?? 'ativo' : 'ANTHROPIC_API_KEY'}
               />
               <HealthRow label="Avec token" ok={health.avec.token} hint={health.avec.mock ? 'mock ativo' : undefined} />
+              <HealthRow
+                label="Webhook Avec (tempo real)"
+                ok={Boolean(health.avec.webhook_secret ?? health.webhooks?.avec_secret)}
+                hint={health.avec.webhook_url ?? '/api/webhooks/avec'}
+              />
               <HealthRow label="WhatsApp (Evolution)" ok={health.whatsapp.configured} />
               <HealthRow label="Telegram bot" ok={health.telegram.configured} />
-              <HealthRow label="CRON_SECRET" ok={health.cron.configured} />
+              <HealthRow label="CRON_SECRET (backup)" ok={health.cron.configured} />
               <HealthRow
                 label="Proteção /admin"
                 ok={health.auth.enabled}
@@ -271,8 +298,8 @@ export default function AdminPage() {
                     onChange={(e) => setSeedPreset(e.target.value as RomSeedPreset)}
                     className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
                   >
-                    <option value="brasil">ROM CLUB BRASIL</option>
-                    <option value="iguatemi">ROM CLUB IGUATEMI</option>
+                    <option value="brasil">{getBrand('brasil').displayName}</option>
+                    <option value="iguatemi">{getBrand('iguatemi').displayName}</option>
                   </select>
                 </label>
               </div>
@@ -282,7 +309,7 @@ export default function AdminPage() {
                 disabled={seeding}
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold disabled:opacity-60"
               >
-                {seeding ? 'Criando demo…' : `Popular seed ${seedPreset === 'iguatemi' ? 'Iguatemi' : 'Brasil'}`}
+                {seeding ? 'Criando demo…' : `Popular seed ${getBrand(seedPreset).displayName}`}
               </button>
               {seedMsg && <p className="text-xs text-muted">{seedMsg}</p>}
             </div>
@@ -381,6 +408,11 @@ export default function AdminPage() {
                 Testar conexão (relatório 0004)
               </button>
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
+              <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
+                <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
+                <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
+                <code className="text-[0.7rem]">x-avec-secret</code>). Cron a cada 1 min é só backup.
+              </p>
               <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
               </PrimaryButton>

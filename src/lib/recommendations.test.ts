@@ -11,6 +11,8 @@ function service(overrides: Partial<ClientService> & Pick<ClientService, 'name' 
     scheduled_at: null,
     product: null,
     notes: null,
+    professional_name: null,
+    last_price: null,
     active: true,
     created_at: new Date().toISOString(),
     ...overrides,

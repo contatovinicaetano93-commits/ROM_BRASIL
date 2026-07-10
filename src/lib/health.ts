@@ -54,6 +54,8 @@ export async function getHealthStatus() {
       mock: isAvecMock(),
       base_url: getAvecBaseUrl(),
       token: envOk('AVEC_API_TOKEN'),
+      webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
+      webhook_url: '/api/webhooks/avec',
     },
     whatsapp: {
       configured: envOk('EVOLUTION_API_URL') && envOk('EVOLUTION_API_KEY') && envOk('EVOLUTION_API_INSTANCE'),
@@ -69,6 +71,8 @@ export async function getHealthStatus() {
       enabled: isAuthEnabled(),
       password: envOk('ROM_ADMIN_PASSWORD') || envOk('ROM_ACCESS_TOKEN'),
       user: envOk('ROM_ADMIN_USER'),
+      staff_user: envOk('ROM_STAFF_USER'),
+      staff_password: envOk('ROM_STAFF_PASSWORD'),
     },
     webhooks: {
       avec_secret: envOk('AVEC_WEBHOOK_SECRET'),
