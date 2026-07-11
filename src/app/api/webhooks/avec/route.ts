@@ -4,6 +4,7 @@ import { verifyAvecWebhook } from '@/lib/webhooks'
 import { ingestAvecWebhook } from '@/lib/avec/webhook-ingest'
 import { scheduleAvecWebhookSideEffects } from '@/lib/avec/sync-trigger'
 import { isAuthorized } from '@/lib/auth'
+import { resolveRequestHost } from '@/lib/deployment'
 
 /**
  * Webhook Avec — tempo real (push).
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     if (!secretOk && !sessionOk) return err('Não autorizado', 401)
 
     const configured = Boolean(process.env.AVEC_WEBHOOK_SECRET?.trim())
-    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'rom-club.vercel.app'
+    const host = resolveRequestHost(req.headers)
     const proto = req.headers.get('x-forwarded-proto') ?? 'https'
     const url = `${proto}://${host}/api/webhooks/avec`
 
