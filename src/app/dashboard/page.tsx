@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ShieldCheck, RefreshCw, Layers, TrendingUp, Users, Sparkles, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Layers, TrendingUp, Users, Sparkles, ChevronRight, AlertTriangle, Clock, Calendar, Trophy } from 'lucide-react'
 import {
   SectionCard,
   CountBadge,
@@ -12,7 +12,7 @@ import {
   StatusPill,
   CHANNEL_LABEL,
 } from '../_components/ui'
-import { fmtSchedule } from '@/lib/salon/format'
+import { fmtSchedule, formatCurrency, formatPercent } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { BriefSheet } from '../_components/BriefSheet'
@@ -79,6 +79,21 @@ interface TmComparison {
   quarter: { current: TmBucket; previous: TmBucket }
 }
 
+interface ProfessionalRanking {
+  name: string
+  revenue: number
+  attended: number
+  ticket_avg: number
+  occupancy: number | null
+  delta: { revenue: number; attended: number; occupancy: number | null } | null
+}
+
+interface PerformanceData {
+  reference_day: string | null
+  compare_day: string | null
+  professionals: ProfessionalRanking[]
+}
+
 export default function DashboardPage() {
   const brand = getBrand()
   const [data, setData] = useState<KpiData | null>(null)
@@ -86,6 +101,7 @@ export default function DashboardPage() {
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
   const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
+  const [performance, setPerformance] = useState<PerformanceData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,11 +118,12 @@ export default function DashboardPage() {
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
-        const [recRes, schedRes, avecRes, tmRes] = await Promise.all([
+        const [recRes, schedRes, avecRes, tmRes, perfRes] = await Promise.all([
           apiFetch('/api/recommendations', { cache: 'no-store' }),
           apiFetch('/api/schedule', { cache: 'no-store' }),
           apiFetch('/api/avec/sync', { cache: 'no-store' }),
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
+          apiFetch('/api/kpis/performance', { cache: 'no-store' }),
         ])
         if (cancelled) return
 
@@ -146,6 +163,13 @@ export default function DashboardPage() {
           if (tmJson.data) setTm(tmJson.data)
         } catch {
           // opcional — TM ainda depende do AVEC_API_TOKEN
+        }
+
+        try {
+          const perfJson = await perfRes.json()
+          if (perfJson.data) setPerformance(perfJson.data)
+        } catch {
+          // opcional — ranking ainda depende do AVEC_API_TOKEN
         }
 
         if (warnings.length) setWarn(warnings.join(' · '))
@@ -446,6 +470,61 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <SectionCard
+        title="Ranking de profissionais (Sprint 2)"
+        badge={<Trophy size={15} className="text-muted" />}
+      >
+        {!performance || performance.professionals.length === 0 ? (
+          <p className="text-xs text-muted">
+            Sem dado ainda — depende da Avec (0021 faturamento por profissional + 0126 ocupação),
+            aguardando <code className="text-foreground/80">AVEC_API_TOKEN</code>.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
+                  <th className="pb-2 font-medium">#</th>
+                  <th className="pb-2 font-medium">Profissional</th>
+                  <th className="pb-2 font-medium">Faturamento</th>
+                  <th className="pb-2 font-medium">Atendimentos</th>
+                  <th className="pb-2 font-medium">Ticket médio</th>
+                  <th className="pb-2 font-medium">Ocupação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {performance.professionals.map((p, i) => (
+                  <tr key={p.name}>
+                    <td className="py-2 tabular-nums text-muted">{i + 1}</td>
+                    <td className="py-2 font-medium text-foreground/90">{p.name}</td>
+                    <td className="py-2 tabular-nums">
+                      {formatCurrency(p.revenue)}
+                      {p.delta && <DeltaTag value={p.delta.revenue} suffix="" isCurrency />}
+                    </td>
+                    <td className="py-2 tabular-nums">
+                      {p.attended}
+                      {p.delta && <DeltaTag value={p.delta.attended} suffix="" />}
+                    </td>
+                    <td className="py-2 tabular-nums">{formatCurrency(p.ticket_avg)}</td>
+                    <td className="py-2 tabular-nums">
+                      {p.occupancy != null ? formatPercent(p.occupancy) : '—'}
+                      {p.delta?.occupancy != null && (
+                        <DeltaTag value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {performance.compare_day && (
+              <p className="mt-3 text-[0.65rem] text-muted">
+                Comparação: janela de 30 dias até {performance.reference_day} vs até {performance.compare_day}
+              </p>
+            )}
+          </div>
+        )}
+      </SectionCard>
+
       {briefFor && (
         <BriefSheet
           contactId={briefFor.id}
@@ -466,6 +545,18 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
       </div>
       <p className="text-2xl font-semibold tabular-nums">{value}</p>
     </div>
+  )
+}
+
+function DeltaTag({ value, suffix, isCurrency }: { value: number; suffix: string; isCurrency?: boolean }) {
+  if (value === 0) return null
+  const positive = value > 0
+  const formatted = isCurrency ? formatCurrency(Math.abs(value)) : `${Math.abs(value)}${suffix}`
+  return (
+    <span className={`ml-1.5 text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}>
+      {positive ? '+' : '-'}
+      {formatted}
+    </span>
   )
 }
 
