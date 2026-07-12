@@ -12,6 +12,11 @@ function isFinancePath(pathname: string) {
   return pathname === '/financeiro' || pathname.startsWith('/financeiro/') || pathname.startsWith('/api/financeiro/')
 }
 
+// Área compartilhada por todos os papéis (admin, staff, financeiro) — não é exclusiva do financeiro.
+function isOnboardingPath(pathname: string) {
+  return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
+}
+
 function isProtectedPage(pathname: string) {
   return (
     pathname === '/' ||
@@ -22,7 +27,9 @@ function isProtectedPage(pathname: string) {
     pathname === '/admin' ||
     pathname.startsWith('/admin/') ||
     pathname === '/financeiro' ||
-    pathname.startsWith('/financeiro/')
+    pathname.startsWith('/financeiro/') ||
+    pathname === '/onboarding' ||
+    pathname.startsWith('/onboarding/')
   )
 }
 
@@ -50,13 +57,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(login)
   }
 
-  // Isolamento do painel Financeiro (Sprint 4): financeiro só enxerga /financeiro,
-  // e ninguém fora de admin/financeiro enxerga /financeiro.
+  // Isolamento do painel Financeiro (Sprint 4): financeiro só enxerga /financeiro
+  // (+ /onboarding, que é compartilhado com todo mundo) — não hoje/dashboard/contatos/admin.
   const session = await getSession(req)
   const role = session?.role
   const financePath = isFinancePath(pathname)
+  const onboardingPath = isOnboardingPath(pathname)
 
-  if (role === 'financeiro' && (isProtectedPage(pathname) || isProtectedApi(pathname)) && !financePath) {
+  if (role === 'financeiro' && (isProtectedPage(pathname) || isProtectedApi(pathname)) && !financePath && !onboardingPath) {
     return NextResponse.redirect(new URL('/financeiro', req.url))
   }
   if (financePath && role !== 'admin' && role !== 'financeiro') {
@@ -80,6 +88,8 @@ export const config = {
     '/admin/:path*',
     '/financeiro',
     '/financeiro/:path*',
+    '/onboarding',
+    '/onboarding/:path*',
     '/api/:path*',
   ],
 }

@@ -173,3 +173,31 @@ create table if not exists finance_expenses (
 
 create index if not exists finance_expenses_date_idx on finance_expenses (expense_date desc);
 create index if not exists finance_expenses_category_idx on finance_expenses (category_id);
+
+-- Onboarding (Trilha B, Sprint T2) — vídeos publicados na intranet, agrupados por pilar.
+create table if not exists onboarding_pillars (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text,
+  order_index int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists onboarding_pillars_name_idx
+  on onboarding_pillars (lower(name)) where active = true;
+
+create table if not exists onboarding_videos (
+  id uuid primary key default gen_random_uuid(),
+  pillar_id uuid references onboarding_pillars (id) on delete set null,
+  title text not null,
+  description text,
+  video_url text not null,
+  thumbnail_url text,
+  duration_seconds int,
+  order_index int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists onboarding_videos_pillar_idx on onboarding_videos (pillar_id);
