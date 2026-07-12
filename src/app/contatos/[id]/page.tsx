@@ -22,6 +22,7 @@ import {
   Pencil,
   Hand,
   Scissors,
+  ShieldOff,
 } from 'lucide-react'
 import {
   StatusPill,
@@ -66,6 +67,7 @@ interface Contact {
   notes: string | null
   preferred_manicurist: string | null
   preferred_hairstylist: string | null
+  anonymized_at: string | null
 }
 interface ContactEvent {
   id: string
@@ -188,6 +190,7 @@ export default function ContactDetailPage() {
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const load = useCallback(async () => {
     const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
@@ -228,7 +231,22 @@ export default function ContactDetailPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
+
+    apiFetch('/api/auth/session', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
+      .catch(() => setIsAdmin(false))
   }, [id])
+
+  async function anonymize() {
+    if (
+      !confirm(
+        'Excluir os dados pessoais deste contato (LGPD)? Nome, telefone, e-mail e observações são apagados de forma permanente. Não pode ser desfeito.'
+      )
+    )
+      return
+    await mutate(`/api/contacts/${id}/anonymize`, { method: 'POST' }, 'Dados pessoais removidos.')
+  }
 
   useEffect(() => {
     if (!id || loading || error) return
@@ -356,18 +374,33 @@ export default function ContactDetailPage() {
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold">{contact.name ?? 'Sem nome'}</h1>
+            <h1 className="truncate text-xl font-semibold">
+              {contact.anonymized_at ? 'Cliente anônimo (LGPD)' : contact.name ?? 'Sem nome'}
+            </h1>
             <p className="mt-0.5 text-xs text-muted">{CHANNEL_LABEL[contact.channel] ?? contact.channel}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="rounded-full border border-border p-2 text-muted active:bg-surface lg:hover:text-foreground"
-              aria-label="Editar contato"
-            >
-              <Pencil size={15} />
-            </button>
+            {!contact.anonymized_at && (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="rounded-full border border-border p-2 text-muted active:bg-surface lg:hover:text-foreground"
+                aria-label="Editar contato"
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+            {isAdmin && !contact.anonymized_at && (
+              <button
+                type="button"
+                onClick={anonymize}
+                className="rounded-full border border-danger/40 p-2 text-danger active:bg-danger/10 lg:hover:bg-danger/10"
+                aria-label="Excluir dados pessoais (LGPD)"
+                title="Excluir dados pessoais (LGPD)"
+              >
+                <ShieldOff size={15} />
+              </button>
+            )}
             <StatusPill status={contact.status} />
           </div>
         </div>

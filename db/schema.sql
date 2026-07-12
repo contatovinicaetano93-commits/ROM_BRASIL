@@ -18,7 +18,8 @@ create table if not exists contacts (
   preferred_hairstylist text,
   first_contact_at timestamptz not null default now(),
   last_contact_at timestamptz not null default now(),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  anonymized_at timestamptz
 );
 
 create index if not exists contacts_channel_idx on contacts (channel);
