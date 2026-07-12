@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity } from 'lucide-react'
+import { Activity, Wallet } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -57,6 +57,15 @@ export function DesktopSidebar() {
       </nav>
 
       <div className="flex flex-col gap-1 px-4 pb-2">
+        {showAdminNav && (
+          <Link
+            href="/financeiro"
+            className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+          >
+            <Wallet size={16} />
+            Financeiro
+          </Link>
+        )}
         <Link
           href={ADMIN_NAV.href}
           className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground ${

@@ -35,8 +35,11 @@ function LoginForm() {
         setError(json.error ?? 'Usuário ou senha incorretos')
         return
       }
+      // Financeiro tem painel próprio — não faz sentido cair no playbook do dia por padrão.
+      const role = json.data?.role
+      const dest = role === 'financeiro' && !next.startsWith('/financeiro') ? '/financeiro' : next
       // Hard navigation garante que o cookie da sessão seja lido pelo middleware
-      window.location.assign(next)
+      window.location.assign(dest)
     } catch (err) {
       setError(String(err))
     } finally {
