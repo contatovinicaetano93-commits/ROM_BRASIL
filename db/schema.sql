@@ -135,6 +135,8 @@ create table if not exists salon_daily_metrics (
   new_clients int not null default 0,
   returning_clients int not null default 0,
   ticket_avg numeric(10, 2),
+  service_duration_sum_minutes numeric(12, 2) not null default 0,
+  service_duration_count int not null default 0,
   updated_at timestamptz not null default now()
 );
 

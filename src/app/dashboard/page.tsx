@@ -67,12 +67,25 @@ interface AvecStatus {
   } | null
 }
 
+interface TmBucket {
+  key: string
+  label: string
+  avgMinutes: number | null
+  sampleCount: number
+}
+
+interface TmComparison {
+  month: { current: TmBucket; previous: TmBucket }
+  quarter: { current: TmBucket; previous: TmBucket }
+}
+
 export default function DashboardPage() {
   const brand = getBrand()
   const [data, setData] = useState<KpiData | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
   const [avec, setAvec] = useState<AvecStatus | null>(null)
+  const [tm, setTm] = useState<TmComparison | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -89,10 +102,11 @@ export default function DashboardPage() {
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
-        const [recRes, schedRes, avecRes] = await Promise.all([
+        const [recRes, schedRes, avecRes, tmRes] = await Promise.all([
           apiFetch('/api/recommendations', { cache: 'no-store' }),
           apiFetch('/api/schedule', { cache: 'no-store' }),
           apiFetch('/api/avec/sync', { cache: 'no-store' }),
+          apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
         ])
         if (cancelled) return
 
@@ -125,6 +139,13 @@ export default function DashboardPage() {
           }
         } catch {
           // opcional
+        }
+
+        try {
+          const tmJson = await tmRes.json()
+          if (tmJson.data) setTm(tmJson.data)
+        } catch {
+          // opcional — TM ainda depende do AVEC_API_TOKEN
         }
 
         if (warnings.length) setWarn(warnings.join(' · '))
@@ -218,6 +239,23 @@ export default function DashboardPage() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+          </SectionCard>
+
+          <SectionCard title="Tempo Médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
+            {tm ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
+                <TmCompareCol title="Trimestre" current={tm.quarter.current} previous={tm.quarter.previous} />
+              </div>
+            ) : (
+              <div className="h-16 animate-pulse rounded-2xl bg-card" />
+            )}
+            {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
+              <p className="mt-4 text-xs text-muted">
+                Sem dado ainda — TM depende da Avec mandar início/fim real do atendimento (Sprint 1,
+                aguardando <code className="text-foreground/80">AVEC_API_TOKEN</code>).
+              </p>
+            )}
           </SectionCard>
 
           {!loading && topChannel && (
@@ -427,6 +465,35 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
         <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
       </div>
       <p className="text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
+  )
+}
+
+function TmCompareCol({ title, current, previous }: { title: string; current: TmBucket; previous: TmBucket }) {
+  const delta =
+    current.avgMinutes != null && previous.avgMinutes != null
+      ? Math.round((current.avgMinutes - previous.avgMinutes) * 10) / 10
+      : null
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <p className="text-[0.65rem] uppercase tracking-wide text-muted">{title}</p>
+      <div className="mt-2 flex items-baseline gap-2">
+        <p className="text-2xl font-semibold tabular-nums">
+          {current.avgMinutes != null ? `${current.avgMinutes} min` : '—'}
+        </p>
+        <span className="text-xs text-muted">{current.label}</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-muted">
+        <span>
+          vs {previous.label}: {previous.avgMinutes != null ? `${previous.avgMinutes} min` : '—'}
+        </span>
+        {delta != null && (
+          <span className={delta <= 0 ? 'font-semibold text-success' : 'font-semibold text-warning'}>
+            {delta > 0 ? '+' : ''}
+            {delta} min
+          </span>
+        )}
+      </div>
     </div>
   )
 }
