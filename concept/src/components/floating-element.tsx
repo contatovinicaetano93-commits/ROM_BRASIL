@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 
 interface FloatingElementProps {
-  children: React.ReactNode
+  children?: React.ReactNode
   duration?: number
   distance?: number
   delay?: number
