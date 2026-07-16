@@ -79,11 +79,31 @@ export default function Home() {
       >
         🎵
       </button>
-      <audio
-        ref={audioRef}
-        src="https://assets.mixkit.co/active_storage/sfx/2805/2805-preview.mp3"
-        loop
-      />
+
+      <div
+        data-spotify-player="true"
+        style={{
+          position: 'fixed',
+          bottom: '110px',
+          right: '0px',
+          zIndex: 9998,
+          width: '100%',
+          maxWidth: '330px',
+          borderRadius: '12px 12px 0 0',
+        }}
+      >
+        <iframe
+          style={{
+            borderRadius: '12px 12px 0 0',
+            width: '100%',
+            height: '380px',
+            border: 'none',
+          }}
+          src="https://open.spotify.com/embed/playlist/4XVbHRYKnrX6ES2xWTKPmQ?utm_source=generator"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+          loading="lazy"
+        ></iframe>
+      </div>
     </>
   )
 }
