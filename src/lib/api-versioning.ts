@@ -48,5 +48,5 @@ export class ApiVersioning {
 
 export function getApiVersion(req: Request): string {
   const acceptHeader = req.headers.get('accept')
-  return ApiVersioning.parseVersion(acceptHeader)
+  return ApiVersioning.parseVersion(acceptHeader || undefined)
 }

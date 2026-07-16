@@ -69,8 +69,8 @@ describe('E2E: Sync Flow', () => {
         const data = await res.json()
         expect(data.data).toHaveProperty('avec')
         if (data.data.avec) {
-          expect(data.data.avec).toHaveProperty('sync_fast')
-          expect(data.data.avec).toHaveProperty('sync_full')
+          expect(data.data.avec).toHaveProperty('last_fast')
+          expect(data.data.avec).toHaveProperty('last_full')
         }
       }
     })

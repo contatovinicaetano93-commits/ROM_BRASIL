@@ -27,7 +27,7 @@ export class MigrationRunner {
     // Get executed migrations
     let executed: { name: string }[] = []
     try {
-      executed = await sql`select name from _migrations`
+      executed = (await sql`select name from _migrations`) as { name: string }[]
     } catch {
       executed = []
     }

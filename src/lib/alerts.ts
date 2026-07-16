@@ -63,7 +63,7 @@ export class AlertManager {
     const sql = getSql()
 
     try {
-      return await sql`select * from alerts where resolved_at is null order by created_at desc`
+      return (await sql`select * from alerts where resolved_at is null order by created_at desc`) as Alert[]
     } catch {
       return []
     }
