@@ -6,6 +6,7 @@ import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, todayIso } from '@/lib/salon/format'
+import posthog from 'posthog-js'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -166,6 +167,7 @@ export default function FinanceiroPage() {
 
   function downloadReport() {
     if (!kpis) return
+    posthog.capture('finance_report_downloaded', { month: kpis.current.month })
     const lines = [
       ['Métrica', kpis.current.label, kpis.previous.label].map(csvEscape).join(';'),
       ['Receita', kpis.current.revenue, kpis.previous.revenue].map(csvEscape).join(';'),
@@ -195,6 +197,7 @@ export default function FinanceiroPage() {
   async function removeExpense(id: string) {
     if (!confirm('Excluir essa despesa?')) return
     await apiFetch(`/api/financeiro/despesas/${id}`, { method: 'DELETE' })
+    posthog.capture('expense_deleted')
     load()
   }
 
@@ -521,6 +524,10 @@ function AddExpenseSheet({
       })
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error ?? 'Erro ao salvar')
+      posthog.capture('expense_added', {
+        has_receipt: Boolean(receiptUrl),
+        has_category: Boolean(finalCategoryId),
+      })
       onAdded()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))

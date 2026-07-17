@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
+import posthog from 'posthog-js'
 import {
   Avatar,
   StatusPill,
@@ -323,6 +324,11 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
         setFormError(json.error ?? 'Erro ao salvar')
         return
       }
+      posthog.capture('contact_created', {
+        has_service: serviceName.trim().length > 0,
+        service_category: serviceName.trim().length > 0 ? serviceCategory : undefined,
+        has_cadence: cadence.length > 0,
+      })
       onCreated()
       onClose()
     } catch (err) {

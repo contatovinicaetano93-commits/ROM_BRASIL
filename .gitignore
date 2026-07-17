@@ -52,3 +52,4 @@ graphify-out/
 _wip/
 academy/
 concept/
+.env.local
