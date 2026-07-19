@@ -1,36 +1,22 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import anime from 'animejs';
 
 export function FloatingScissors() {
   const scissorsRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
   const bladeLeftRef = useRef<SVGGElement>(null);
   const bladeRightRef = useRef<SVGGElement>(null);
 
-  // ===== SEGUIR MOUSE COM ANIME.JS =====
+  // ===== SEGUIR MOUSE =====
   useEffect(() => {
-    const coords = { x: 0, y: 0 };
-
     const handleMouseMove = (e: MouseEvent) => {
-      coords.x = e.clientX;
-      coords.y = e.clientY;
+      if (!scissorsRef.current) return;
 
-      if (scissorsRef.current) {
-        anime.set(scissorsRef.current, {
-          left: coords.x - 30,
-          top: coords.y - 30
-        });
-      }
+      const x = e.clientX - 30;
+      const y = e.clientY - 30;
 
-      // Rotação suave baseada na posição do mouse
-      if (svgRef.current) {
-        const angle = (coords.x / window.innerWidth) * 10 - 5;
-        anime.set(svgRef.current, {
-          rotate: angle
-        });
-      }
+      scissorsRef.current.style.left = x + 'px';
+      scissorsRef.current.style.top = y + 'px';
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -43,88 +29,53 @@ export function FloatingScissors() {
       const windowHeight = document.documentElement.scrollHeight - window.innerHeight;
       const progress = windowHeight > 0 ? window.scrollY / windowHeight : 0;
 
-      const rotationAmount = progress * 35;
+      // 0 a 25 graus conforme scroll
+      const rotationAmount = progress * 25;
 
-      anime.set(bladeLeftRef.current, {
-        rotate: -rotationAmount
-      });
+      if (bladeLeftRef.current) {
+        bladeLeftRef.current.style.transform = `rotateZ(${-rotationAmount}deg)`;
+      }
 
-      anime.set(bladeRightRef.current, {
-        rotate: rotationAmount
-      });
+      if (bladeRightRef.current) {
+        bladeRightRef.current.style.transform = `rotateZ(${rotationAmount}deg)`;
+      }
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // ===== ANIMAÇÃO DE CORTE AO CLICAR =====
+  // ===== EFEITO EXTRA: Click na tesoura =====
   const handleClick = () => {
-    if (!svgRef.current) return;
+    if (bladeLeftRef.current && bladeRightRef.current) {
+      // Abre ao máximo por um momento
+      bladeLeftRef.current.style.transform = 'rotateZ(-30deg)';
+      bladeRightRef.current.style.transform = 'rotateZ(30deg)';
 
-    anime.timeline()
-      .add({
-        targets: bladeLeftRef.current,
-        rotate: -45,
-        duration: 150,
-        easing: 'easeOutQuad'
-      }, 0)
-      .add({
-        targets: bladeRightRef.current,
-        rotate: 45,
-        duration: 150,
-        easing: 'easeOutQuad'
-      }, 0)
-      .add({
-        targets: svgRef.current,
-        scale: 0.85,
-        duration: 100,
-        easing: 'easeOutQuad'
-      }, 0)
-      .add({
-        targets: bladeLeftRef.current,
-        rotate: -25,
-        duration: 200,
-        easing: 'easeInOutQuad'
-      }, 150)
-      .add({
-        targets: bladeRightRef.current,
-        rotate: 25,
-        duration: 200,
-        easing: 'easeInOutQuad'
-      }, 150)
-      .add({
-        targets: svgRef.current,
-        scale: 1,
-        duration: 200,
-        easing: 'easeInOutQuad'
+      setTimeout(() => {
+        // Volta ao normal
+        const windowHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = windowHeight > 0 ? window.scrollY / windowHeight : 0;
+        const rotationAmount = progress * 25;
+
+        if (bladeLeftRef.current) {
+          bladeLeftRef.current.style.transform = `rotateZ(${-rotationAmount}deg)`;
+        }
+        if (bladeRightRef.current) {
+          bladeRightRef.current.style.transform = `rotateZ(${rotationAmount}deg)`;
+        }
       }, 150);
-  };
-
-  // ===== ANIMAÇÃO DE ENTRADA =====
-  useEffect(() => {
-    if (scissorsRef.current) {
-      anime.set(scissorsRef.current, { opacity: 0, scale: 0 });
-      anime.to(scissorsRef.current, {
-        opacity: 1,
-        scale: 1,
-        duration: 800,
-        delay: 300,
-        easing: 'easeOutElastic(1, .6)'
-      });
     }
-  }, []);
+  };
 
   return (
     <div
       id="floatingScissors"
       ref={scissorsRef}
       onClick={handleClick}
-      className="fixed top-0 left-0 w-[60px] h-[60px] pointer-events-auto z-[9999] cursor-pointer"
-      style={{ perspective: '1000px' }}
+      className="fixed top-0 left-0 w-[60px] h-[60px] pointer-events-auto z-[9999] cursor-pointer transition-none"
     >
       <svg
-        ref={svgRef}
         className="w-full h-full drop-shadow-xl"
         viewBox="0 0 120 160"
         xmlns="http://www.w3.org/2000/svg"
@@ -149,16 +100,23 @@ export function FloatingScissors() {
             <feDropShadow dx="3" dy="4" stdDeviation="3" floodOpacity="0.4" />
             <feDropShadow dx="1" dy="2" stdDeviation="1" floodOpacity="0.2" />
           </filter>
+
+          <filter id="innerShadow">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+          </filter>
         </defs>
 
         {/* Lâmina Superior Esquerda */}
-        <g ref={bladeLeftRef} style={{ transformOrigin: '60px 80px' }} filter="url(#deepShadow)">
+        <g ref={bladeLeftRef} style={{ transformOrigin: '60px 80px', transition: 'transform 0.3s ease-out' }} filter="url(#deepShadow)">
+          {/* Corpo da lâmina */}
           <path
             d="M 60 80 L 35 25 Q 32 20 25 18 Q 15 16 12 18 Q 8 20 10 26 Q 14 32 22 36 L 55 75 Z"
             fill="url(#metalGradient)"
             stroke="#505050"
             strokeWidth="1"
           />
+
+          {/* Detalhe/Brilho superior */}
           <path
             d="M 28 25 Q 32 22 35 24"
             stroke="#ffffff"
@@ -166,19 +124,24 @@ export function FloatingScissors() {
             fill="none"
             opacity="0.7"
           />
+
+          {/* Anel superior */}
           <circle cx="12" cy="24" r="7" fill="url(#ringGradient)" stroke="#404040" strokeWidth="1" />
           <circle cx="12" cy="24" r="4.5" fill="#e8e8e8" opacity="0.4" />
           <circle cx="12" cy="24" r="2.5" fill="none" stroke="#f0f0f0" strokeWidth="0.5" opacity="0.8" />
         </g>
 
         {/* Lâmina Inferior Direita */}
-        <g ref={bladeRightRef} style={{ transformOrigin: '60px 80px' }} filter="url(#deepShadow)">
+        <g ref={bladeRightRef} style={{ transformOrigin: '60px 80px', transition: 'transform 0.3s ease-out' }} filter="url(#deepShadow)">
+          {/* Corpo da lâmina */}
           <path
             d="M 60 80 L 35 135 Q 32 140 25 142 Q 15 144 12 142 Q 8 140 10 134 Q 14 128 22 124 L 55 85 Z"
             fill="url(#metalGradient)"
             stroke="#505050"
             strokeWidth="1"
           />
+
+          {/* Detalhe/Brilho inferior */}
           <path
             d="M 28 135 Q 32 138 35 136"
             stroke="#ffffff"
@@ -186,6 +149,8 @@ export function FloatingScissors() {
             fill="none"
             opacity="0.7"
           />
+
+          {/* Anel inferior */}
           <circle cx="12" cy="136" r="7" fill="url(#ringGradient)" stroke="#404040" strokeWidth="1" />
           <circle cx="12" cy="136" r="4.5" fill="#e8e8e8" opacity="0.4" />
           <circle cx="12" cy="136" r="2.5" fill="none" stroke="#f0f0f0" strokeWidth="0.5" opacity="0.8" />
@@ -200,9 +165,11 @@ export function FloatingScissors() {
           <circle cx="60" cy="80" r="5" fill="none" stroke="#ffffff" strokeWidth="0.5" opacity="0.5" />
         </g>
 
+        {/* Detalhe de texto nas lâminas */}
         <text x="35" y="45" fontSize="6" fill="#808080" opacity="0.5" textAnchor="middle">Professional</text>
         <text x="35" y="115" fontSize="6" fill="#808080" opacity="0.5" textAnchor="middle">Scissors</text>
       </svg>
     </div>
   );
 }
+/* tesoura 3D flutuante */
