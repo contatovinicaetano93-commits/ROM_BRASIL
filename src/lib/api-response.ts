@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
+import { Logger } from '@/lib/logger'
+import { isProduction } from '@/lib/env'
+
+const logger = new Logger('API')
 
 export function ok<T>(data: T, meta?: Record<string, unknown>, status = 200) {
   return NextResponse.json({ data, meta: meta ?? null }, { status })
@@ -14,7 +18,15 @@ export function handleError(e: unknown) {
     return err(e.issues.map((i) => i.message).join(', '), 422)
   }
   if (e instanceof Error) {
-    return err(e.message, 500)
+    // Log full error server-side, return generic message to client
+    logger.error('Unhandled error in API route', {
+      message: e.message,
+      stack: e.stack,
+      name: e.name,
+    })
+    const clientMessage = isProduction() ? 'Erro interno do servidor' : e.message
+    return err(clientMessage, 500)
   }
+  logger.error('Unknown error in API route', { error: String(e) })
   return err('Erro desconhecido', 500)
 }
