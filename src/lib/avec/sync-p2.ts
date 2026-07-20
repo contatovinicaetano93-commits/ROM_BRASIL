@@ -26,9 +26,15 @@ function todayIsoLocal() {
 }
 
 function asRows(result: unknown): Record<string, unknown>[] {
-  if (Array.isArray(result)) return result as Record<string, unknown>[]
-  if (result && typeof result === 'object' && Array.isArray((result as { rows?: unknown }).rows)) {
-    return (result as { rows: Record<string, unknown>[] }).rows
+  // Validate array items are objects before casting
+  if (Array.isArray(result)) {
+    return result.every((item) => item && typeof item === 'object') ? (result as Record<string, unknown>[]) : []
+  }
+  if (result && typeof result === 'object') {
+    const rows = (result as { rows?: unknown }).rows
+    if (Array.isArray(rows) && rows.every((item) => item && typeof item === 'object')) {
+      return rows as Record<string, unknown>[]
+    }
   }
   return []
 }
