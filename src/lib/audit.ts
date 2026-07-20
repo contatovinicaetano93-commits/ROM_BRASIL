@@ -1,4 +1,7 @@
 import { getSql } from '@/lib/db'
+import { Logger } from '@/lib/logger'
+
+const logger = new Logger('AuditLogger')
 
 export interface AuditLog {
   id: string
@@ -44,7 +47,8 @@ export class AuditLogger {
 
     try {
       return (await sql`select * from audit_logs where username = ${user} order by created_at desc limit ${limit}`) as AuditLog[]
-    } catch {
+    } catch (e) {
+      logger.warn('Failed to fetch audit logs for user', { user, error: e instanceof Error ? e.message : String(e) })
       return []
     }
   }
@@ -54,7 +58,8 @@ export class AuditLogger {
 
     try {
       return (await sql`select * from audit_logs where action = ${action} order by created_at desc limit ${limit}`) as AuditLog[]
-    } catch {
+    } catch (e) {
+      logger.warn('Failed to fetch audit logs by action', { action, error: e instanceof Error ? e.message : String(e) })
       return []
     }
   }
@@ -69,7 +74,8 @@ export class AuditLogger {
         where status = 'error' and created_at > ${since}
         order by created_at desc
       `) as AuditLog[]
-    } catch {
+    } catch (e) {
+      logger.warn('Failed to fetch suspicious audit logs', { hoursBack, error: e instanceof Error ? e.message : String(e) })
       return []
     }
   }

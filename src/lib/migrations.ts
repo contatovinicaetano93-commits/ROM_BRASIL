@@ -142,6 +142,7 @@ export async function runPendingMigrations(opts?: {
 
 export async function getMigrationStatus(opts?: {
   panel?: RomPanelId
+  databaseUrl?: string
   cwd?: string
 }): Promise<{
   panel: RomPanelId
@@ -152,16 +153,11 @@ export async function getMigrationStatus(opts?: {
   const panel = opts?.panel ?? getRomPanelId()
   const cwd = opts?.cwd ?? process.cwd()
   const registered = listMigrationsForPanel(panel, cwd)
-  const sql = getSql()
+  const sql = getQuerySql(opts?.databaseUrl)
 
   try {
-    await sql`
-      create table if not exists schema_migrations (
-        id text primary key,
-        applied_at timestamptz not null default now()
-      )
-    `
-    const rows = (await sql`select id from schema_migrations order by id`) as { id: string }[]
+    await ensureSchemaMigrationsTable(sql)
+    const rows = (await sql.query(`select id from schema_migrations order by id`)) as { id: string }[]
     const appliedSet = new Set(rows.map((r) => r.id))
     return {
       panel,
