@@ -13,6 +13,29 @@ export class Logger {
   private static isDev = process.env.NODE_ENV === 'development'
   private static isProduction = process.env.NODE_ENV === 'production'
 
+  /** Tag opcional de módulo (ex.: `new Logger('AlertManager')`) — prefixa toda mensagem da instância. */
+  constructor(private readonly module?: string) {}
+
+  private tag(message: string): string {
+    return this.module ? `[${this.module}] ${message}` : message
+  }
+
+  debug(message: string, context?: Record<string, any>): void {
+    Logger.debug(this.tag(message), context)
+  }
+
+  info(message: string, context?: Record<string, any>): void {
+    Logger.info(this.tag(message), context)
+  }
+
+  warn(message: string, context?: Record<string, any>): void {
+    Logger.warn(this.tag(message), context)
+  }
+
+  error(message: string, context?: Record<string, any>): void {
+    Logger.error(this.tag(message), undefined, context)
+  }
+
   private static formatEntry(entry: LogEntry): string {
     const { timestamp, level, message, context, error, duration_ms } = entry
     const parts = [

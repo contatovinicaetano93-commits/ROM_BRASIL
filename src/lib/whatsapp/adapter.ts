@@ -1,3 +1,5 @@
+import { retryWithBackoff } from '@/lib/retry'
+
 // Interface de mensageria — trocar de provedor (Evolution API -> WhatsApp Cloud API oficial)
 // no futuro é implementar essa interface de novo, sem tocar no resto do sistema.
 export interface WhatsAppAdapter {
@@ -29,18 +31,34 @@ export class EvolutionApiAdapter implements WhatsAppAdapter {
     // Evolution API espera só dígitos (ex: 5511999998888) — número com "+" é aceito
     // sem erro pela API mas a mensagem não é entregue de verdade.
     const number = to.replace(/\D/g, '')
-    const res = await fetch(`${this.baseUrl}/message/sendText/${this.instance}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: this.apiKey,
-      },
-      body: JSON.stringify({ number, text }),
-    })
 
-    if (!res.ok) {
-      throw new Error(`Evolution API respondeu ${res.status}: ${await res.text()}`)
-    }
+    await retryWithBackoff(
+      async () => {
+        const res = await fetch(`${this.baseUrl}/message/sendText/${this.instance}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: this.apiKey,
+          },
+          body: JSON.stringify({ number, text }),
+          signal: AbortSignal.timeout(15_000),
+        })
+
+        if (!res.ok) {
+          const err = new Error(`Evolution API respondeu ${res.status}: ${await res.text()}`)
+          ;(err as Error & { status?: number }).status = res.status
+          throw err
+        }
+      },
+      {
+        maxAttempts: 3,
+        initialDelayMs: 1000,
+        shouldRetry: (e) => {
+          const status = (e as Error & { status?: number }).status
+          return status === undefined || status >= 500
+        },
+      },
+    )
   }
 }
 

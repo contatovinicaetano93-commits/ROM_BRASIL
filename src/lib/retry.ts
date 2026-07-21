@@ -4,6 +4,8 @@ export interface RetryOptions {
   maxDelayMs?: number
   backoffMultiplier?: number
   onRetry?: (attempt: number, error: Error, nextDelayMs: number) => void
+  /** Retorna false para desistir sem repetir (ex.: erro 4xx que retry não resolve). Default: sempre repete. */
+  shouldRetry?: (error: Error) => boolean
 }
 
 export async function retryWithBackoff<T>(
@@ -16,6 +18,7 @@ export async function retryWithBackoff<T>(
     maxDelayMs = 30000,
     backoffMultiplier = 2,
     onRetry,
+    shouldRetry,
   } = options
 
   let lastError: Error | null = null
@@ -27,7 +30,7 @@ export async function retryWithBackoff<T>(
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e))
 
-      if (attempt === maxAttempts) {
+      if (attempt === maxAttempts || (shouldRetry && !shouldRetry(lastError))) {
         break
       }
 

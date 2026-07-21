@@ -6,6 +6,7 @@
 import { getMockReport } from '@/lib/avec/fixtures'
 import { todayIso } from '@/lib/salon/format'
 import { isProduction } from '@/lib/env'
+import { retryWithBackoff } from '@/lib/retry'
 
 export const AVEC_DEFAULT_API_URL = 'https://api.avec.beauty'
 
@@ -137,18 +138,34 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   }
 
   const url = `${baseUrl}/reports/${reportId}?${qs}`
-  const res = await fetch(url, {
-    headers: { Authorization: token, Accept: 'application/json' },
-    cache: 'no-store',
-    signal: AbortSignal.timeout(30_000),
-  })
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Avec ${reportId} HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
-  }
+  return retryWithBackoff(
+    async () => {
+      const res = await fetch(url, {
+        headers: { Authorization: token, Accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30_000),
+      })
 
-  return res.json()
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        const err = new Error(`Avec ${reportId} HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+        ;(err as Error & { status?: number }).status = res.status
+        throw err
+      }
+
+      return res.json()
+    },
+    {
+      maxAttempts: 3,
+      initialDelayMs: 1000,
+      // 4xx é erro de request (token/params) — repetir não resolve. Só vale retry em falha de rede ou 5xx.
+      shouldRetry: (e) => {
+        const status = (e as Error & { status?: number }).status
+        return status === undefined || status >= 500
+      },
+    },
+  )
 }
 
 // Pagina automaticamente até esgotar ou atingir maxPages.
