@@ -1,4 +1,7 @@
 import * as Sentry from '@sentry/nextjs'
+import { Logger } from './lib/logger'
+
+const logger = new Logger('Boot')
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -11,12 +14,12 @@ export async function register() {
         const { runPendingMigrations } = await import('./lib/migrations')
         const summary = await runPendingMigrations()
         if (summary.failed) {
-          console.error('[migrations] boot falhou:', summary.failed)
+          logger.error('Boot migrations failed', { failed: summary.failed })
         } else if (summary.applied.length > 0) {
-          console.log('[migrations] boot aplicou:', summary.applied.join(', '))
+          logger.info('Boot migrations applied', { applied: summary.applied })
         }
       } catch (e) {
-        console.error('[migrations] boot erro:', e instanceof Error ? e.message : e)
+        logger.error('Boot migrations error', { error: e instanceof Error ? e.message : String(e) })
       }
     }
   }

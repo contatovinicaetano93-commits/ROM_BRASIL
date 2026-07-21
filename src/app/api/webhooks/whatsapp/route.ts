@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
+import { Logger } from '@/lib/logger'
 import { logEvent } from '@/lib/contacts'
 import { getWhatsAppAdapter } from '@/lib/whatsapp/adapter'
 import { handleWhatsAppMessage } from '@/lib/whatsapp/conversation'
 import { parseWhatsAppPayload } from '@/lib/whatsapp/parse-payload'
 import { verifyWhatsAppWebhook } from '@/lib/webhooks'
+
+const logger = new Logger('WhatsAppWebhook')
 
 export async function POST(req: NextRequest) {
   const auth = verifyWhatsAppWebhook(req)
@@ -13,19 +16,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
   const parsed = parseWhatsAppPayload(body)
   if (!parsed) {
-    console.error('[whatsapp webhook] payload não reconhecido:', JSON.stringify(body))
+    logger.error('Unrecognized WhatsApp webhook payload', { payload: body })
     return err('Payload inválido', 422)
   }
 
   const { from, text } = parsed
-  console.log('[whatsapp webhook] inbound:', JSON.stringify({ from, text }))
+  logger.debug('WhatsApp message received', { from, hasText: !!text })
 
   try {
     const { contactId, reply, intent, handoff } = await handleWhatsAppMessage(from, text)
-    console.log('[whatsapp webhook] resposta gerada:', JSON.stringify({ from, intent, handoff, reply }))
+    logger.debug('WhatsApp response generated', { from, intent, handoff, hasReply: !!reply })
 
     await getWhatsAppAdapter().sendMessage(from, reply)
-    console.log('[whatsapp webhook] enviado via Evolution API para', from)
+    logger.debug('Message sent via Evolution API', { to: from })
 
     await logEvent({
       contactId,
@@ -38,7 +41,7 @@ export async function POST(req: NextRequest) {
     return ok({ replied: true, intent, handoff })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'erro desconhecido'
-    console.error('[whatsapp webhook] falhou:', message)
+    logger.error('WhatsApp webhook processing failed', { message })
     await logEvent({
       contactId: null,
       channel: 'whatsapp',

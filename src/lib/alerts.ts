@@ -1,4 +1,7 @@
 import { getSql } from '@/lib/db'
+import { Logger } from '@/lib/logger'
+
+const logger = new Logger('AlertManager')
 
 export interface Alert {
   id: string
@@ -40,9 +43,9 @@ export class AlertManager {
         insert into alerts (id, type, severity, title, message, context, created_at)
         values (${id}, ${type}, ${severity}, ${title}, ${message}, ${JSON.stringify(context || {})}, ${now})
       `
-    } catch {
+    } catch (e) {
       // Table may not exist in all environments — log locally instead
-      console.warn(`[ALERT] ${type}: ${title}`)
+      logger.warn('Failed to persist alert', { type, title, error: e instanceof Error ? e.message : String(e) })
     }
 
     return alert
@@ -55,7 +58,7 @@ export class AlertManager {
     try {
       await sql`update alerts set resolved_at = ${now} where id = ${id}`
     } catch {
-      console.warn(`[ALERT] Could not resolve alert ${id}`)
+      logger.warn('Could not resolve alert', { id })
     }
   }
 
@@ -103,7 +106,7 @@ export class AlertManager {
     const chatId = process.env.TELEGRAM_ALERTS_CHAT_ID
 
     if (!botToken || !chatId) {
-      console.warn('[ALERT] Telegram not configured')
+      logger.warn('Telegram not configured')
       return
     }
 
@@ -118,7 +121,7 @@ export class AlertManager {
         }),
       })
     } catch (e) {
-      console.error('[ALERT] Failed to send Telegram:', e)
+      logger.error('Failed to send Telegram alert', { error: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -126,7 +129,7 @@ export class AlertManager {
     const emailTo = process.env.ALERT_EMAIL_TO
 
     if (!emailTo) {
-      console.warn('[ALERT] Email not configured')
+      logger.warn('Email not configured for alerts')
       return
     }
 
@@ -145,7 +148,7 @@ export class AlertManager {
         }),
       })
     } catch (e) {
-      console.error('[ALERT] Failed to send email:', e)
+      logger.error('Failed to send email alert', { error: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -163,7 +166,7 @@ export class AlertManager {
         }),
       })
     } catch (e) {
-      console.error('[ALERT] Failed to send webhook:', e)
+      logger.error('Failed to send webhook alert', { webhook, error: e instanceof Error ? e.message : String(e) })
     }
   }
 }
