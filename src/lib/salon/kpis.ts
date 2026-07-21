@@ -11,12 +11,14 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
   const [byDay, byStatus, conversionRows] = await Promise.all([
     sql`select * from v_kpi_daily limit ${dayLimit}`,
     sql`select * from v_kpi_status`,
-    sql`select * from v_kpi_conversion limit 1`,
+    sql`select * from v_kpi_conversion limit 1` as unknown as Promise<
+      NonNullable<ContactKpis['conversion']>[]
+    >,
   ])
 
   return {
     byDay: byDay as ContactKpis['byDay'],
     byStatus: byStatus as ContactKpis['byStatus'],
-    conversion: (conversionRows[0] as ContactKpis['conversion']) ?? null,
+    conversion: conversionRows[0] ?? null,
   }
 }

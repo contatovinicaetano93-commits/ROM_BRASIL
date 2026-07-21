@@ -29,11 +29,11 @@ export async function GET(req: NextRequest) {
           count(*) filter (where status = 'novo')::int as novos,
           count(*) filter (where status = 'novo' and channel = 'whatsapp')::int as whatsapp_novos
         from contacts
-      `,
+      ` as unknown as Promise<{ novos: number; whatsapp_novos: number }[]>,
       getLastAvecSync(),
     ])
 
-    const leads = leadRows[0] as { novos: number; whatsapp_novos: number }
+    const leads = leadRows[0]
     const salonBase = salonRaw ?? {
       day,
       revenue: 0,

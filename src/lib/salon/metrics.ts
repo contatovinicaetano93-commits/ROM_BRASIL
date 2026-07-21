@@ -93,22 +93,22 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       where active = true
         and scheduled_at is not null
         and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-    `,
+    ` as unknown as Promise<{ n: number }[]>,
     sql`
       select count(*)::int as n from contacts
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-    `,
+    ` as unknown as Promise<{ n: number }[]>,
     sql`
       select count(*)::int as n from contacts
       where status = 'convertido'
         and (created_at at time zone 'America/Sao_Paulo')::date < ${day}::date
         and (last_contact_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-    `,
+    ` as unknown as Promise<{ n: number }[]>,
   ])
 
   await upsertSalonMetrics(day, {
-    appointments: (apptRows[0] as { n: number }).n,
-    new_clients: (newRows[0] as { n: number }).n,
-    returning_clients: (returningRows[0] as { n: number }).n,
+    appointments: apptRows[0].n,
+    new_clients: newRows[0].n,
+    returning_clients: returningRows[0].n,
   })
 }

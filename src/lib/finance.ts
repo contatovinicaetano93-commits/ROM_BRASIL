@@ -77,7 +77,7 @@ export async function createExpense(input: CreateExpenseInput): Promise<FinanceE
   if (!description) throw new Error('Descrição é obrigatória')
   if (!(input.amount > 0)) throw new Error('Valor precisa ser maior que zero')
 
-  const rows = await sql`
+  const rows = (await sql`
     insert into finance_expenses (category_id, description, amount, expense_date, notes, receipt_url, created_by)
     values (
       ${input.categoryId}, ${description}, ${input.amount}, ${input.expenseDate}::date,
@@ -86,8 +86,8 @@ export async function createExpense(input: CreateExpenseInput): Promise<FinanceE
     returning
       id, category_id, description, amount::float as amount,
       expense_date::text as expense_date, notes, receipt_url, created_at
-  `
-  return rows[0] as FinanceExpense
+  `) as FinanceExpense[]
+  return rows[0]
 }
 
 export async function deleteExpense(id: string): Promise<void> {
