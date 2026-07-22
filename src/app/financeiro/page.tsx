@@ -61,12 +61,15 @@ function FinanceKpiCard({
   label,
   value,
   delta,
+  compareLabel,
   positive,
   loading,
 }: {
   label: string
   value: string
   delta: string | null
+  /** Ex.: "Mai/2026" — mês escolhido em Comparar com (não necessariamente o anterior). */
+  compareLabel: string
   positive: boolean | null
   loading: boolean
 }) {
@@ -84,7 +87,7 @@ function FinanceKpiCard({
                 positive == null ? 'text-muted' : positive ? 'text-success' : 'text-warning'
               }`}
             >
-              {delta} vs. mês anterior
+              {delta} vs. {compareLabel}
             </p>
           )}
         </>
@@ -253,6 +256,7 @@ export default function FinanceiroPage() {
           label="Receita"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.revenue)}
           delta={kpis ? fmtDelta(kpis.current.revenue, kpis.previous.revenue) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
           loading={loading}
         />
@@ -260,6 +264,7 @@ export default function FinanceiroPage() {
           label="Despesas"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.expenses)}
           delta={kpis ? fmtDelta(kpis.current.expenses, kpis.previous.expenses) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.expenses <= kpis.previous.expenses : null}
           loading={loading}
         />
@@ -271,6 +276,7 @@ export default function FinanceiroPage() {
               ? fmtDelta(kpis.current.gross_margin, kpis.previous.gross_margin, 'pp')
               : null
           }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
             kpis && kpis.current.gross_margin != null && kpis.previous.gross_margin != null
               ? kpis.current.gross_margin >= kpis.previous.gross_margin
@@ -282,6 +288,7 @@ export default function FinanceiroPage() {
           label="Fluxo (receita − despesas)"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.cash_flow)}
           delta={kpis ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
           loading={loading}
         />
