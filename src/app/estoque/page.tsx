@@ -1,20 +1,41 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, PackagePlus, PackageMinus, RefreshCw, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Plus,
+  X,
+  PackagePlus,
+  PackageMinus,
+  RefreshCw,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Search,
+} from 'lucide-react'
 import { SectionCard, PrimaryButton, InfoBanner, CountBadge } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/salon/format'
+import {
+  alertRepositionCost,
+  sortPurchaseQueue,
+  purchaseQueueTotalCost,
+} from '@/lib/stock-purchase-queue'
 
 interface StockProduct {
   id: string
   name: string
   sku: string | null
+  category_id: string | null
   category_name: string | null
+  brand_id: string | null
   brand_name: string | null
   current_qty: number
   minimum_qty: number | null
   unit_cost: number | null
+}
+interface NamedOption {
+  id: string
+  name: string
 }
 interface StockMovement {
   id: string
@@ -143,19 +164,16 @@ function ValuationBars({ buckets }: { buckets: StockValuationBucket[] }) {
   )
 }
 
-/** Custo estimado de reposição: sugestão Avec (0046) × custo unitário (0149). */
-function repositionCost(alert: StockAlert): number | null {
-  if (alert.suggested_reposition == null || alert.unit_cost == null) return null
-  if (!(alert.suggested_reposition > 0) || !(alert.unit_cost > 0)) return null
-  return Math.round(alert.suggested_reposition * alert.unit_cost * 100) / 100
-}
-
 function formatQty(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
 
+type CatalogStockFilter = 'all' | 'zero' | 'low'
+
 export default function EstoquePage() {
   const [products, setProducts] = useState<StockProduct[]>([])
+  const [categories, setCategories] = useState<NamedOption[]>([])
+  const [brands, setBrands] = useState<NamedOption[]>([])
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [alerts, setAlerts] = useState<StockAlert[]>([])
   const [kpis, setKpis] = useState<StockKpis | null>(null)
@@ -165,31 +183,42 @@ export default function EstoquePage() {
   const [showAdd, setShowAdd] = useState(false)
   const [showBrands, setShowBrands] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogCategoryId, setCatalogCategoryId] = useState('')
+  const [catalogBrandId, setCatalogBrandId] = useState('')
+  const [catalogStockFilter, setCatalogStockFilter] = useState<CatalogStockFilter>('all')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [kpisRes, alertsRes, movRes, prodRes, statusRes] = await Promise.all([
+      const [kpisRes, alertsRes, movRes, prodRes, statusRes, catRes, brandRes] = await Promise.all([
         apiFetch('/api/estoque/kpis', { cache: 'no-store' }),
         apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' }),
         apiFetch('/api/estoque/movimentos', { cache: 'no-store' }),
         apiFetch('/api/estoque/produtos', { cache: 'no-store' }),
         apiFetch('/api/estoque/sync/status', { cache: 'no-store' }),
+        apiFetch('/api/estoque/categorias', { cache: 'no-store' }),
+        apiFetch('/api/estoque/marcas', { cache: 'no-store' }),
       ])
-      const [kpisJson, alertsJson, movJson, prodJson, statusJson] = await Promise.all([
-        kpisRes.json(),
-        alertsRes.json(),
-        movRes.json(),
-        prodRes.json(),
-        statusRes.json(),
-      ])
+      const [kpisJson, alertsJson, movJson, prodJson, statusJson, catJson, brandJson] =
+        await Promise.all([
+          kpisRes.json(),
+          alertsRes.json(),
+          movRes.json(),
+          prodRes.json(),
+          statusRes.json(),
+          catRes.json(),
+          brandRes.json(),
+        ])
       if (kpisJson.error) throw new Error(kpisJson.error)
       setKpis(kpisJson.data)
       setAlerts(alertsJson.data ?? [])
       setMovements(movJson.data ?? [])
       setProducts(prodJson.data ?? [])
       setSyncStatus(statusJson.data ?? null)
+      setCategories(catJson.data ?? [])
+      setBrands(brandJson.data ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -199,10 +228,30 @@ export default function EstoquePage() {
 
   useEffect(() => {
     load()
-    // Estado de sync sempre visível e atualizado — sem precisar recarregar a página.
     const interval = setInterval(load, 60_000)
     return () => clearInterval(interval)
   }, [load])
+
+  const purchaseQueue = useMemo(() => sortPurchaseQueue(alerts), [alerts])
+  const queueTotalCost = useMemo(() => purchaseQueueTotalCost(purchaseQueue), [purchaseQueue])
+
+  const catalogProducts = useMemo(() => {
+    const q = catalogQuery.trim().toLowerCase()
+    return products.filter((p) => {
+      if (catalogCategoryId && p.category_id !== catalogCategoryId) return false
+      if (catalogBrandId && p.brand_id !== catalogBrandId) return false
+      if (catalogStockFilter === 'zero' && !(p.current_qty <= 0)) return false
+      if (
+        catalogStockFilter === 'low' &&
+        !(p.minimum_qty != null && p.current_qty <= p.minimum_qty)
+      ) {
+        return false
+      }
+      if (!q) return true
+      const hay = `${p.name} ${p.sku ?? ''} ${p.category_name ?? ''} ${p.brand_name ?? ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [products, catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
 
   async function acknowledge(id: string) {
     await apiFetch(`/api/estoque/alertas/${id}`, { method: 'PATCH' })
@@ -219,7 +268,8 @@ export default function EstoquePage() {
     }
   }
 
-  const notOnboarded = !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
+  const notOnboarded =
+    !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
@@ -227,6 +277,9 @@ export default function EstoquePage() {
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Estoque</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Visão geral</h1>
+          <p className="mt-1 text-xs text-muted">
+            O que temos, o que falta e o que moveu. Caixa/CMV fica no Financeiro.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <SyncBadge status={syncStatus} />
@@ -236,7 +289,8 @@ export default function EstoquePage() {
             disabled={syncing}
             className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
-            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar agora'}
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{' '}
+            {syncing ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
         </div>
       </div>
@@ -267,7 +321,16 @@ export default function EstoquePage() {
           value={loading || !kpis ? '—' : formatCurrency(kpis.total_value)}
           {...(loading ? {} : valueCardSub(kpis))}
         />
-        <StockKpiCard label="Alertas ativos" value={loading || !kpis ? '—' : String(kpis.active_alerts)} />
+        <StockKpiCard
+          label="Fila de compra"
+          value={loading ? '—' : String(purchaseQueue.length)}
+          sub={
+            !loading && purchaseQueue.length > 0
+              ? `≈ ${formatCurrency(queueTotalCost)} para repor`
+              : undefined
+          }
+          tone={!loading && purchaseQueue.length > 0 ? 'warning' : undefined}
+        />
         <StockKpiCard
           label="Zerados"
           value={loading || !kpis ? '—' : String(kpis.zero_products)}
@@ -289,22 +352,51 @@ export default function EstoquePage() {
         </p>
       )}
 
-      <SectionCard title="Alertas de reposição" badge={<CountBadge value={String(alerts.length)} tone={alerts.length > 0 ? 'danger' : 'success'} />}>
+      <SectionCard
+        title="Fila de compra"
+        badge={
+          <CountBadge
+            value={String(purchaseQueue.length)}
+            tone={purchaseQueue.length > 0 ? 'danger' : 'success'}
+          />
+        }
+      >
+        <p className="mb-3 text-xs text-muted">
+          Avec 0046 · ordenada por urgência × custo estimado. Total sugerido:{' '}
+          <span className="font-medium text-foreground/90">
+            {loading ? '—' : formatCurrency(queueTotalCost)}
+          </span>
+        </p>
         {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
-        {!loading && alerts.length === 0 && (
+        {!loading && purchaseQueue.length === 0 && (
           <p className="text-xs text-muted">Nenhum produto abaixo do estoque mínimo.</p>
         )}
-        {!loading && alerts.length > 0 && (
+        {!loading && purchaseQueue.length > 0 && (
           <div className="flex flex-col gap-2.5">
-            {alerts.map((a) => {
-              const cost = repositionCost(a)
+            {purchaseQueue.map((a, index) => {
+              const cost = alertRepositionCost(a)
+              const deficit = Math.max(0, a.minimum_qty - a.current_qty)
               return (
-                <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3">
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3"
+                >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{a.product_name}</p>
+                    <p className="truncate text-sm font-medium">
+                      <span className="mr-2 tabular-nums text-muted">{index + 1}.</span>
+                      {a.product_name}
+                      {a.current_qty <= 0 && (
+                        <span className="ml-2 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
+                          Zerado
+                        </span>
+                      )}
+                    </p>
                     <p className="mt-0.5 text-xs text-muted">
-                      {a.category_name ?? 'Sem categoria'} · atual {a.current_qty} / mín. {a.minimum_qty}
-                      {a.suggested_reposition != null && ` · repor ${a.suggested_reposition} (sugestão Avec)`}
+                      {a.category_name ?? 'Sem categoria'} · atual {formatQty(a.current_qty)} / mín.{' '}
+                      {formatQty(a.minimum_qty)}
+                      {deficit > 0 && ` · falta ${formatQty(deficit)}`}
+                      {a.suggested_reposition != null &&
+                        ` · repor ${formatQty(a.suggested_reposition)} (Avec)`}
                       {cost != null && ` · ≈ ${formatCurrency(cost)}`}
                     </p>
                   </div>
@@ -318,6 +410,122 @@ export default function EstoquePage() {
                 </div>
               )
             })}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Catálogo"
+        badge={<CountBadge value={`${catalogProducts.length}/${products.length}`} />}
+      >
+        <p className="mb-3 text-xs text-muted">Posição Avec 0149 — busca e filtros locais.</p>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="relative flex items-center sm:col-span-2 lg:col-span-2">
+            <Search size={14} className="pointer-events-none absolute left-3 text-muted" />
+            <input
+              value={catalogQuery}
+              onChange={(e) => setCatalogQuery(e.target.value)}
+              placeholder="Buscar nome, SKU, marca…"
+              className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm outline-none focus:border-gold"
+            />
+          </label>
+          <select
+            value={catalogCategoryId}
+            onChange={(e) => setCatalogCategoryId(e.target.value)}
+            className="rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-gold"
+          >
+            <option value="">Todas as categorias</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={catalogBrandId}
+            onChange={(e) => setCatalogBrandId(e.target.value)}
+            className="rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-gold"
+          >
+            <option value="">Todas as marcas</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(
+            [
+              ['all', 'Todos'],
+              ['low', 'Abaixo do mín.'],
+              ['zero', 'Zerados'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setCatalogStockFilter(value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                catalogStockFilter === value
+                  ? 'border-gold/40 bg-gold/10 text-gold'
+                  : 'border-border text-muted hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
+        {!loading && catalogProducts.length === 0 && (
+          <p className="text-xs text-muted">Nenhum produto com esses filtros.</p>
+        )}
+        {!loading && catalogProducts.length > 0 && (
+          <div className="max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="py-1.5 font-medium">Produto</th>
+                  <th className="py-1.5 font-medium">Saldo</th>
+                  <th className="hidden py-1.5 font-medium sm:table-cell">Mín.</th>
+                  <th className="py-1.5 font-medium">Custo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catalogProducts.slice(0, 200).map((p) => {
+                  const low = p.minimum_qty != null && p.current_qty <= p.minimum_qty
+                  return (
+                    <tr key={p.id} className="border-t border-border/60">
+                      <td className="py-2">
+                        <p className="font-medium">{p.name}</p>
+                        <p className="text-xs text-muted">
+                          {[p.brand_name, p.category_name, p.sku].filter(Boolean).join(' · ') ||
+                            '—'}
+                        </p>
+                      </td>
+                      <td
+                        className={`py-2 tabular-nums ${
+                          p.current_qty <= 0 ? 'text-danger' : low ? 'text-warning' : ''
+                        }`}
+                      >
+                        {formatQty(p.current_qty)}
+                      </td>
+                      <td className="hidden py-2 tabular-nums text-muted sm:table-cell">
+                        {p.minimum_qty != null ? formatQty(p.minimum_qty) : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums text-muted">
+                        {p.unit_cost != null ? formatCurrency(p.unit_cost) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {catalogProducts.length > 200 && (
+              <p className="mt-2 text-xs text-muted">
+                Mostrando 200 de {catalogProducts.length}. Refine a busca.
+              </p>
+            )}
           </div>
         )}
       </SectionCard>
