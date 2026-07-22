@@ -71,6 +71,7 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||
     pathname === '/api/reminders/financeiro' ||
+    pathname === '/api/reminders/aftercare' ||
     pathname === '/api/admin/migrations'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {
     if (isProtectedApi(pathname)) {
