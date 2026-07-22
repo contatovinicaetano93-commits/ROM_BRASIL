@@ -561,6 +561,17 @@ export default function ContactDetailPage() {
               target="_blank"
               rel="noopener noreferrer"
               title="Abrir WhatsApp com mensagem pessoal de reativação"
+              onClick={() => {
+                void apiFetch('/api/reactivation/outreach', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contactId: contact.id,
+                    surface: 'contact_detail',
+                    lastDoneAtAtSend: last_visit?.last_done_at ?? null,
+                  }),
+                }).catch(() => {})
+              }}
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-success/40 bg-success/10 py-3 text-sm font-semibold text-success"
             >
               <MessageSquare size={16} />
