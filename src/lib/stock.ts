@@ -516,6 +516,11 @@ export interface StockKpis {
   movements_week: StockMovementSummary
   by_category: StockValuationBucket[]
   by_brand: StockValuationBucket[]
+  /**
+   * Categorias com % oficial Avec 0142 (janela ~30d).
+   * Preferir em Relatórios quando preenchido; 0243 continua em by_category.
+   */
+  by_category_period: StockValuationBucket[]
   avec_official_total: number | null
   /** Diferença entre o valor computado localmente e o total oficial da Avec (0045) — auditoria/drift. */
   drift: number | null
@@ -573,10 +578,11 @@ export async function computeStockKpis(): Promise<StockKpis> {
     week_out: number
   }[]
 
-  const [byCategory, byBrand, officialTotalBuckets] = await Promise.all([
+  const [byCategory, byBrand, officialTotalBuckets, byCategoryPeriod] = await Promise.all([
     getStockValuationSnapshot('0243'),
     getStockValuationSnapshot('0242'),
     getStockValuationSnapshot('0045'),
+    getStockValuationSnapshot('0142'),
   ])
 
   const officialTotal = officialTotalBuckets.length > 0
@@ -602,6 +608,7 @@ export async function computeStockKpis(): Promise<StockKpis> {
     },
     by_category: byCategory,
     by_brand: byBrand,
+    by_category_period: byCategoryPeriod,
     avec_official_total: officialTotal != null ? Math.round(officialTotal * 100) / 100 : null,
     drift,
     last_synced_at: totals[0]?.last_synced_at ?? null,
