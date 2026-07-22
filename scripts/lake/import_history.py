@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import os
-import re
-import time
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import boto3
 import psycopg
+
+from lake_utils import categorize, phone_key, run_athena
 
 SP = ZoneInfo("America/Sao_Paulo")
 SALONS = {"brasil": 40613, "iguatemi": 99801}
@@ -29,49 +28,6 @@ def load_env():
                 os.environ[k] = v.strip().strip("'\"")
 
 
-def athena():
-    return boto3.client("athena", region_name=os.environ["AWS_DEFAULT_REGION"])
-
-
-def run_athena(sql: str, timeout: int = 600) -> list[list[str | None]]:
-    client = athena()
-    q = client.start_query_execution(
-        QueryString=sql,
-        QueryExecutionContext={"Database": os.environ["ATHENA_DB"]},
-        ResultConfiguration={"OutputLocation": os.environ["ATHENA_OUTPUT"]},
-        WorkGroup=os.environ["ATHENA_WG"],
-    )
-    qid = q["QueryExecutionId"]
-    for _ in range(timeout):
-        st = client.get_query_execution(QueryExecutionId=qid)["QueryExecution"]["Status"]
-        if st["State"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
-            if st["State"] != "SUCCEEDED":
-                raise RuntimeError(st.get("StateChangeReason", st["State"]))
-            break
-        time.sleep(1)
-    else:
-        raise TimeoutError(sql[:120])
-
-    rows: list[list[str | None]] = []
-    token = None
-    while True:
-        kw: dict[str, Any] = {"QueryExecutionId": qid, "MaxResults": 1000}
-        if token:
-            kw["NextToken"] = token
-        res = client.get_query_results(**kw)
-        data = res["ResultSet"]["Rows"]
-        start = 1 if not rows else 0
-        if not rows:
-            rows.append([c.get("VarCharValue") for c in data[0]["Data"]])
-            start = 1
-        for r in data[start:]:
-            rows.append([c.get("VarCharValue") for c in r["Data"]])
-        token = res.get("NextToken")
-        if not token:
-            break
-    return rows
-
-
 def as_dicts(raw: list[list[str | None]]) -> list[dict[str, str | None]]:
     if not raw:
         return []
@@ -80,42 +36,6 @@ def as_dicts(raw: list[list[str | None]]) -> list[dict[str, str | None]]:
         {headers[i]: (r[i] if i < len(r) else None) for i in range(len(headers))}
         for r in raw[1:]
     ]
-
-
-def norm_phone(raw: str | None) -> str | None:
-    if not raw:
-        return None
-    digits = re.sub(r"\D", "", raw)
-    if not digits:
-        return None
-    if digits.startswith("55") and len(digits) >= 12:
-        return f"+{digits}"
-    if len(digits) in (10, 11):
-        return f"+55{digits}"
-    return f"+{digits}"
-
-
-def phone_key(raw: str | None) -> str | None:
-    p = norm_phone(raw)
-    if not p:
-        return None
-    d = re.sub(r"\D", "", p)
-    return d[-11:] if len(d) >= 11 else d
-
-
-def categorize(service: str | None) -> str:
-    s = (service or "").upper()
-    if re.search(r"COLOR|REFLEX|MECHA|LOURO|TINT", s):
-        return "coloracao"
-    if re.search(r"HIDRAT|BOTOX|CRONOGRAM|RECONSTR|TRATAM|PROGRESS", s):
-        return "tratamento"
-    if re.search(r"CORTE|ESCOVA|PENTEADO|ESCOV|BRUSHING|FINALIZ", s):
-        return "corte"
-    if re.search(r"MANIC|PEDIC|UNHA|ESMALT|SPA\s*DOS\s*PES|MAO|MÃO", s):
-        return "bem_estar"
-    if re.search(r"PRODUTO|VAREJO", s):
-        return "produto"
-    return "outro"
 
 
 def cadence_days(category: str) -> int | None:
@@ -227,12 +147,6 @@ def import_history(unit: str, database_url: str, days_back: int = 180) -> dict[s
         by_phone, by_avec = load_indexes(conn)
         print(f"contacts phone={len(by_phone)} avec_id={len(by_avec)}")
 
-        with conn.cursor() as cur:
-            cur.execute("delete from client_services where notes like 'lake:comanda_item:%%'")
-            deleted = cur.rowcount
-        conn.commit()
-        print(f"cleared previous lake history={deleted}")
-
         batch: list[tuple] = []
         for r in rows:
             done = parse_ts(r.get("done_at"))
@@ -267,8 +181,23 @@ def import_history(unit: str, database_url: str, days_back: int = 180) -> dict[s
                 )
             )
 
-        # chunk insert
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                delete from client_services
+                where notes like 'lake:comanda_item:%%'
+                  and (
+                    (last_done_at at time zone 'America/Sao_Paulo')::date
+                      between (current_date at time zone 'America/Sao_Paulo')::date - %s
+                          and (current_date at time zone 'America/Sao_Paulo')::date
+                    or notes = any(%s)
+                  )
+                """,
+                (days_back, [item[7] for item in batch]),
+            )
+            deleted = cur.rowcount
+            print(f"cleared previous lake history={deleted}")
+
             for i in range(0, len(batch), 1000):
                 chunk = batch[i : i + 1000]
                 cur.executemany(

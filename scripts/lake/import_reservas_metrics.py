@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import os
 import re
-import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import boto3
 import psycopg
 from psycopg.rows import dict_row
+
+from lake_utils import categorize, norm_phone, phone_key, run_athena
 
 SP = ZoneInfo("America/Sao_Paulo")
 
@@ -26,50 +26,6 @@ SALONS = {
 ACTIVE_STATUS = ("AGENDADO", "CONFIRMADO", "AGUARDANDO", "EM ATENDIMENTO")
 
 
-def athena():
-    return boto3.client("athena", region_name=os.environ["AWS_DEFAULT_REGION"])
-
-
-def run_athena(sql: str, timeout: int = 300) -> list[list[str | None]]:
-    client = athena()
-    q = client.start_query_execution(
-        QueryString=sql,
-        QueryExecutionContext={"Database": os.environ["ATHENA_DB"]},
-        ResultConfiguration={"OutputLocation": os.environ["ATHENA_OUTPUT"]},
-        WorkGroup=os.environ["ATHENA_WG"],
-    )
-    qid = q["QueryExecutionId"]
-    for _ in range(timeout):
-        st = client.get_query_execution(QueryExecutionId=qid)["QueryExecution"]["Status"]
-        state = st["State"]
-        if state in ("SUCCEEDED", "FAILED", "CANCELLED"):
-            if state != "SUCCEEDED":
-                raise RuntimeError(st.get("StateChangeReason", state))
-            break
-        time.sleep(1)
-    else:
-        raise TimeoutError(sql[:120])
-
-    rows: list[list[str | None]] = []
-    token = None
-    while True:
-        kw: dict[str, Any] = {"QueryExecutionId": qid, "MaxResults": 1000}
-        if token:
-            kw["NextToken"] = token
-        res = client.get_query_results(**kw)
-        data = res["ResultSet"]["Rows"]
-        start = 1 if not rows else 0
-        if not rows:
-            rows.append([c.get("VarCharValue") for c in data[0]["Data"]])
-            start = 1
-        for r in data[start:]:
-            rows.append([c.get("VarCharValue") for c in r["Data"]])
-        token = res.get("NextToken")
-        if not token:
-            break
-    return rows
-
-
 def rows_as_dicts(raw: list[list[str | None]]) -> list[dict[str, str | None]]:
     if not raw:
         return []
@@ -78,47 +34,6 @@ def rows_as_dicts(raw: list[list[str | None]]) -> list[dict[str, str | None]]:
     for r in raw[1:]:
         out.append({headers[i]: (r[i] if i < len(r) else None) for i in range(len(headers))})
     return out
-
-
-def norm_phone(raw: str | None) -> str | None:
-    if not raw:
-        return None
-    digits = re.sub(r"\D", "", raw)
-    if not digits:
-        return None
-    if digits.startswith("55") and len(digits) >= 12:
-        return f"+{digits}"
-    if len(digits) in (10, 11):
-        return f"+55{digits}"
-    if len(digits) >= 12:
-        return f"+{digits}"
-    return None
-
-
-def phone_key(raw: str | None) -> str | None:
-    p = norm_phone(raw)
-    if not p:
-        return None
-    d = re.sub(r"\D", "", p)
-    # compare by last 11 national digits when possible
-    if len(d) >= 11:
-        return d[-11:]
-    return d
-
-
-def categorize(service: str | None) -> str:
-    s = (service or "").upper()
-    if re.search(r"COLOR|REFLEX|MECHA|LOURO|TINT", s):
-        return "coloracao"
-    if re.search(r"HIDRAT|BOTOX|CRONOGRAM|RECONSTR|TRATAM|PROGRESS", s):
-        return "tratamento"
-    if re.search(r"CORTE|ESCOVA|PENTEADO|ESCOV|BRUSHING|FINALIZ", s):
-        return "corte"
-    if re.search(r"MANIC|PEDIC|UNHA|ESMALT|SPA\s*DOS\s*PES|MAO|MÃO", s):
-        return "bem_estar"
-    if re.search(r"PRODUTO|VAREJO", s):
-        return "produto"
-    return "outro"
 
 
 def parse_hora(hora: str | None) -> tuple[int, int]:
@@ -224,12 +139,10 @@ def ensure_contact(
     telefone: str | None,
     salao_cliente_id: str | None,
     *,
-    status: str = "importado",
+    status: str = "novo",
     partial_phone_unique: bool = False,
 ) -> str | None:
     k = phone_key(telefone)
-    if k and k in phone_idx:
-        return phone_idx[k]
     phone = norm_phone(telefone)
     name = (nome or "Cliente").strip()[:200] or "Cliente"
 
@@ -244,6 +157,9 @@ def ensure_contact(
                 if k:
                     phone_idx[k] = row[0]
                 return row[0]
+
+        if k and k in phone_idx:
+            return phone_idx[k]
 
         if phone:
             cur.execute(
@@ -324,7 +240,7 @@ def import_unit(
     days_fwd: int = 45,
     days_back_hist: int = 7,
     days_metrics: int = 30,
-    contact_status: str = "importado",
+    contact_status: str = "novo",
 ) -> dict[str, Any]:
     salao_id = SALONS[unit]
     print(f"\n==== {unit} salao_id={salao_id} ====")
@@ -452,11 +368,12 @@ def import_unit(
                     """
                     select count(*)::int from client_services
                     where scheduled_at is not null
+                      and notes like 'lake:reserva:%%'
                       and (scheduled_at at time zone 'America/Sao_Paulo')::date = %s::date
                     """,
                     (day,),
                 )
-                appointments = cur.fetchone()[0] or attended
+                appointments = cur.fetchone()[0]
                 cur.execute(
                     """
                     insert into salon_daily_metrics as m (
@@ -497,9 +414,9 @@ def main():
     results = []
 
     if os.environ.get("DATABASE_URL_BRASIL") and (not only or only == "brasil"):
-        results.append(import_unit("brasil", os.environ["DATABASE_URL_BRASIL"], contact_status="importado"))
+        results.append(import_unit("brasil", os.environ["DATABASE_URL_BRASIL"], contact_status="novo"))
     if os.environ.get("DATABASE_URL_IGUATEMI") and (not only or only == "iguatemi"):
-        results.append(import_unit("iguatemi", os.environ["DATABASE_URL_IGUATEMI"], contact_status="importado"))
+        results.append(import_unit("iguatemi", os.environ["DATABASE_URL_IGUATEMI"], contact_status="novo"))
     if os.environ.get("DATABASE_URL_ROMSALES") and (not only or only == "romsales"):
         print("\n==== romsales (mirror brasil) ====")
         results.append(
