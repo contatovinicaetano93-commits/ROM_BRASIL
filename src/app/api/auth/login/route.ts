@@ -8,9 +8,17 @@ import {
   validateCredentials,
 } from '@/lib/auth'
 import { LoginRequestSchema } from '@/lib/schemas'
+import { checkLoginRateLimit } from '@/lib/rate-limiter'
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
+
+  const rate = checkLoginRateLimit(req.headers)
+  if (!rate.ok) {
+    const res = err('Muitas tentativas de login. Aguarde alguns minutos.', 429)
+    for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
+    return res
+  }
 
   const body = await req.json().catch(() => null)
 
@@ -35,6 +43,7 @@ export async function POST(req: NextRequest) {
     role: hit.role,
     can_view_revenue: hit.role === 'admin',
   })
+  for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
   res.cookies.set(AUTH_COOKIE, await createSessionToken(hit.user, hit.role), {
     httpOnly: true,
     sameSite: 'lax',

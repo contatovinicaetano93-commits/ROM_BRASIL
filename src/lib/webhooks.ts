@@ -12,12 +12,12 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
     return { ok: true }
   }
 
+  // Só headers — nunca ?secret= (vaza em logs/referrer).
   const got =
     headerSecret(req, 'x-whatsapp-secret') ||
     headerSecret(req, 'x-webhook-secret') ||
     headerSecret(req, 'x-evolution-secret') ||
-    headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '') ||
-    (req.nextUrl.searchParams.get('secret')?.trim() ?? '')
+    headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
 
   if (got !== expected) return { ok: false, reason: 'Secret inválido' }
   return { ok: true }
