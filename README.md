@@ -20,8 +20,8 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec
   (clientes `0004`, agendamentos `0051`, atendidos `0002`). Cron fast a cada 5 min,
   full a cada 10 min, ou tempo real via webhook. Manual com `CRON_SECRET`.
-- `src/app/api/webhooks/whatsapp` — recebe mensagem do provedor WhatsApp
-  (ManyChat), responde com IA (primeiro atendimento guiado) e loga tudo.
+- `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
+  (Meta), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
   linguagem natural, a IA responde puxando os KPIs do Neon.
 - `src/app/dashboard` — painel com contatos por dia, por canal, por status e
@@ -29,7 +29,7 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/contatos` — lista dos últimos contatos (todos os canais) e formulário
   pra registrar contato manual (`GET`/`POST /api/contacts`).
 - `src/lib/whatsapp/adapter.ts` — interface de mensageria. Implementada com
-  ManyChat (canal oficial Meta).
+  WhatsApp Cloud API oficial (Meta Graph).
 
 Resiliência: todo evento (mensagem recebida, resposta da IA, erro) vira uma
 linha em `contact_events` — nada se perde silenciosamente, dá pra reprocessar
@@ -45,10 +45,11 @@ ou investigar depois.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
    Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec`. Backup: `CRON_SECRET` (cron fast 5 min + full 10 min).
-5. **WhatsApp via ManyChat** — `MANYCHAT_API_KEY` no painel ManyChat
-   (Settings → API). Canal oficial Meta. Para aftercare fora da janela 24h,
-   configure também `MANYCHAT_OUTBOUND_FLOW_NS` (fluxo com template aprovado).
-   Webhook: External Request → `/api/webhooks/whatsapp` + `WHATSAPP_WEBHOOK_SECRET`.
+5. **WhatsApp Cloud API oficial** — no Meta Developer:
+   `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
+   `WHATSAPP_APP_SECRET`. Webhook → `/api/webhooks/whatsapp` (campo `messages`).
+   Para aftercare fora da janela 24h: template aprovado em
+   `WHATSAPP_TEMPLATE_AFTERCARE`.
 6. **Criar um bot Telegram dedicado ao ROM** via `@BotFather` (2 min, token na
    hora) e configurar o `setWebhook` apontando para
    `/api/webhooks/telegram` com um `secret_token`.

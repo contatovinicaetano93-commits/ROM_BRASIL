@@ -13,10 +13,11 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
   }
 
   // Só headers — nunca ?secret= (vaza em logs/referrer).
+  // Cloud API oficial usa X-Hub-Signature-256 (verificado na route); este secret
+  // serve como fallback/teste.
   const got =
     headerSecret(req, 'x-whatsapp-secret') ||
     headerSecret(req, 'x-webhook-secret') ||
-    headerSecret(req, 'x-evolution-secret') ||
     headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
 
   if (got !== expected) return { ok: false, reason: 'Secret inválido' }
