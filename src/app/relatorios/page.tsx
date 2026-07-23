@@ -71,6 +71,7 @@ export default function RelatoriosOverviewPage() {
 
   const incomplete = data?.completeness.status === 'incomplete'
   const inProgress = data?.completeness.status === 'in_progress'
+  const notStarted = data?.completeness.status === 'not_started'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
@@ -128,7 +129,7 @@ export default function RelatoriosOverviewPage() {
             className={`flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
               incomplete
                 ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
-                : inProgress
+                : inProgress || notStarted
                   ? 'border-border bg-card text-muted'
                   : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
             }`}
@@ -142,14 +143,20 @@ export default function RelatoriosOverviewPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs opacity-90">
-                Checado até {data.completeness.check_through}.{' '}
-                {incomplete
-                  ? `Faltam métricas em: ${data.completeness.days_missing.slice(0, 12).join(', ')}${
-                      data.completeness.days_missing.length > 12 ? '…' : ''
-                    }`
-                  : inProgress
-                    ? 'Mês em andamento — o fechamento completa no último dia.'
-                    : 'Mês sem buracos no acumulado diário ROM.'}
+                {notStarted ? (
+                  'O mês ainda não começou.'
+                ) : (
+                  <>
+                    Checado até {data.completeness.check_through}.{' '}
+                    {incomplete
+                      ? `Faltam métricas em: ${data.completeness.days_missing.slice(0, 12).join(', ')}${
+                          data.completeness.days_missing.length > 12 ? '…' : ''
+                        }`
+                      : inProgress
+                        ? 'Mês em andamento — o fechamento completa no último dia.'
+                        : 'Mês sem buracos no acumulado diário ROM.'}
+                  </>
+                )}
               </p>
             </div>
           </div>

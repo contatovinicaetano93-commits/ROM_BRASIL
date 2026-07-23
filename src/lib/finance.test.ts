@@ -136,6 +136,17 @@ describe('finance', () => {
       expect(result.previous.gross_margin).toBe(75)
     })
 
+    it('limita o bucket atual ao último dia coberto pelo fechamento', async () => {
+      mockBucketSql({ revenue: '10000', expenses: '4000', attended: 50 })
+      mockBucketSql({ revenue: '8000', expenses: '2000', attended: 40 })
+
+      const { computeFinanceKpis } = await import('@/lib/finance')
+      const result = await computeFinanceKpis({ month: '2026-07', through: '2026-07-22' })
+
+      expect(result.current.to).toBe('2026-07-22')
+      expect(getPaymentMixRange).toHaveBeenCalledWith('2026-07-01', '2026-07-22')
+    })
+
     it('retorna margem null quando não há receita sincronizada da Avec ainda', async () => {
       mockBucketSql({ revenue: '0', expenses: '500' })
       mockBucketSql({ revenue: '0', expenses: '0' })

@@ -8,7 +8,7 @@ create table if not exists salon_month_metrics (
   days_present int not null default 0,
   days_missing text[] not null default '{}',
   status text not null default 'incomplete'
-    check (status in ('complete', 'in_progress', 'incomplete')),
+    check (status in ('complete', 'in_progress', 'incomplete', 'not_started')),
   revenue numeric(14, 2) not null default 0,
   attended int not null default 0,
   cancelled int not null default 0,

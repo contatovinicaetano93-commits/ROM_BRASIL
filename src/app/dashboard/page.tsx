@@ -482,7 +482,7 @@ export default function DashboardPage() {
             </Link>
             {' · '}
             Ranking completo:{' '}
-            <Link href="/relatorios" className="text-gold hover:underline">
+            <Link href="/admin/relatorio-diretoria" className="text-gold hover:underline">
               Relatórios
             </Link>
           </p>

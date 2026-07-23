@@ -40,9 +40,11 @@ export function buildMonthOverviewCsv(overview: MonthOverview): string {
     csvRow(
       'Completude',
       `${completeness.days_present}/${completeness.days_expected} dias`,
-      completeness.days_missing.length
-        ? `Faltando: ${completeness.days_missing.join(', ')}`
-        : 'Sem buracos no período checado',
+      completeness.status === 'not_started'
+        ? 'Mês ainda não iniciado'
+        : completeness.days_missing.length
+          ? `Faltando: ${completeness.days_missing.join(', ')}`
+          : 'Sem buracos no período checado',
     ),
     '',
     csvRow('=== FECHAMENTO ROM (soma diária) ==='),
@@ -171,9 +173,11 @@ export function buildPeriodAnalyticsCsv(period: PeriodAnalytics, unit: string): 
 export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
   const { finance: f, analytics: a, completeness } = overview
   const missing =
-    completeness.days_missing.length > 0
-      ? `<p><strong>Dias faltando:</strong> ${completeness.days_missing.join(', ')}</p>`
-      : '<p>Sem buracos no período checado.</p>'
+    completeness.status === 'not_started'
+      ? '<p>Mês ainda não iniciado.</p>'
+      : completeness.days_missing.length > 0
+        ? `<p><strong>Dias faltando:</strong> ${completeness.days_missing.join(', ')}</p>`
+        : '<p>Sem buracos no período checado.</p>'
 
   const row = (k: string, v: string) =>
     `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`

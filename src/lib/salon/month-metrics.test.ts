@@ -46,4 +46,12 @@ describe('computeMonthCompleteness', () => {
     expect(c.status).toBe('incomplete')
     expect(c.days_missing).toContain('2026-07-10')
   })
+
+  it('marca mês futuro como não iniciado', () => {
+    const c = computeMonthCompleteness('2026-08', [], '2026-07-23')
+    expect(c.status).toBe('not_started')
+    expect(c.check_through).toBe('2026-07-31')
+    expect(c.days_expected).toBe(0)
+    expect(statusLabelPt(c.status)).toBe('Não iniciado')
+  })
 })

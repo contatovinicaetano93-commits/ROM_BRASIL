@@ -3,7 +3,7 @@ import { todayIso } from '@/lib/salon/format'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-export type MonthCloseStatus = 'complete' | 'in_progress' | 'incomplete'
+export type MonthCloseStatus = 'complete' | 'in_progress' | 'incomplete' | 'not_started'
 
 let monthMetricsTableReady: Promise<void> | null = null
 
@@ -21,7 +21,7 @@ export async function ensureSalonMonthMetricsTable(): Promise<void> {
           days_present int not null default 0,
           days_missing text[] not null default '{}',
           status text not null default 'incomplete'
-            check (status in ('complete', 'in_progress', 'incomplete')),
+            check (status in ('complete', 'in_progress', 'incomplete', 'not_started')),
           revenue numeric(14, 2) not null default 0,
           attended int not null default 0,
           cancelled int not null default 0,
@@ -55,7 +55,7 @@ export interface MonthCompleteness {
   label: string
   from: string
   to: string
-  /** Último dia considerado na checagem (ontem se mês atual; fim do mês se passado). */
+  /** Último dia considerado na checagem (pode ser anterior ao início se ainda não começou). */
   check_through: string
   days_expected: number
   days_present: number
@@ -140,22 +140,21 @@ export function computeMonthCompleteness(
       label: labelMonthPt(monthKey),
       from,
       to,
-      check_through: from,
+      check_through: shiftDay(from, -1),
       days_expected: 0,
       days_present: 0,
       days_missing: [],
-      status: 'in_progress',
+      status: 'not_started',
     }
   }
 
   const yesterday = shiftDay(today, -1)
   let check_through = to
   if (monthKey === current) {
-    check_through = yesterday < from ? from : yesterday > to ? to : yesterday
+    check_through = yesterday > to ? to : yesterday
   }
 
-  const expected =
-    monthKey === current && yesterday < from ? [] : listDaysInclusive(from, check_through)
+  const expected = listDaysInclusive(from, check_through)
   const presentSet = new Set(presentDays.map((d) => d.slice(0, 10)))
   const days_missing = expected.filter((d) => !presentSet.has(d))
   const days_present = expected.filter((d) => presentSet.has(d)).length
@@ -172,7 +171,7 @@ export function computeMonthCompleteness(
     label: labelMonthPt(monthKey),
     from,
     to,
-    check_through: expected.length ? check_through : from,
+    check_through,
     days_expected: expected.length,
     days_present,
     days_missing,
@@ -181,9 +180,20 @@ export function computeMonthCompleteness(
 }
 
 export function statusLabelPt(status: MonthCloseStatus): string {
-  if (status === 'complete') return 'Completo'
-  if (status === 'in_progress') return 'Em andamento'
-  return 'INCOMPLETO'
+  switch (status) {
+    case 'complete':
+      return 'Completo'
+    case 'in_progress':
+      return 'Em andamento'
+    case 'incomplete':
+      return 'INCOMPLETO'
+    case 'not_started':
+      return 'Não iniciado'
+    default: {
+      const exhaustive: never = status
+      return exhaustive
+    }
+  }
 }
 
 async function listPresentDays(from: string, to: string): Promise<string[]> {
@@ -310,11 +320,11 @@ export async function materializeSalonMonthMetrics(
   await ensureSalonMonthMetricsTable()
   const sql = getSql()
   const { from, to } = monthRange(monthKey)
-  const [completeness, totals, expenses, cmv] = await Promise.all([
-    getMonthCompleteness(monthKey),
-    sumDailyTotals(from, to),
-    sumExpenses(from, to),
-    sumStockCogs(from, to),
+  const completeness = await getMonthCompleteness(monthKey)
+  const [totals, expenses, cmv] = await Promise.all([
+    sumDailyTotals(from, completeness.check_through),
+    sumExpenses(from, completeness.check_through),
+    sumStockCogs(from, completeness.check_through),
   ])
   const cash_flow = Math.round((totals.revenue - expenses) * 100) / 100
   const payloadJson = JSON.stringify(payload)

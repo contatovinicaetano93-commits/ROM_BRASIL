@@ -262,8 +262,9 @@ export interface FinanceKpis {
   previous: FinanceKpiBucket
 }
 
-async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
-  const { from, to } = monthRange(monthKey)
+async function buildBucket(monthKey: string, through?: string): Promise<FinanceKpiBucket> {
+  const { from, to: monthEnd } = monthRange(monthKey)
+  const to = through && through < monthEnd ? through : monthEnd
   const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmv] = await Promise.all([
     sumRevenue(from, to),
     sumExpenses(from, to),
@@ -305,12 +306,13 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
 export async function computeFinanceKpis(opts?: {
   month?: string
   compareMonth?: string
+  through?: string
 }): Promise<FinanceKpis> {
   await ensureFiscalSplitTable().catch(() => undefined)
   const current = opts?.month ?? currentMonthKey(todayIso())
   const compare = opts?.compareMonth ?? previousMonthKey(current)
   const [currentBucket, previousBucket] = await Promise.all([
-    buildBucket(current),
+    buildBucket(current, opts?.through),
     buildBucket(compare),
   ])
   return { current: currentBucket, previous: previousBucket }

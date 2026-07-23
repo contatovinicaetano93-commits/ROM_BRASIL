@@ -75,30 +75,25 @@ export async function computeMonthOverview(opts?: {
 }): Promise<MonthOverview> {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
+  const completeness = await getMonthCompleteness(month)
 
-  const [finance, analytics, completeness] = await Promise.all([
-    computeFinanceKpis({ month }),
-    computePeriodAnalytics({ month }),
-    getMonthCompleteness(month),
+  const [finance, analytics] = await Promise.all([
+    computeFinanceKpis({ month, through: completeness.check_through }),
+    computePeriodAnalytics({ month, through: completeness.check_through }),
   ])
 
   let materializedAt: string | null = null
   if (opts?.materialize !== false) {
-    try {
-      const row = await materializeSalonMonthMetrics(month, {
-        analytics,
-        finance: {
-          revenue: finance.current.revenue,
-          expenses: finance.current.expenses,
-          cmv: finance.current.cmv,
-          payment_mix: finance.current.payment_mix,
-        },
-      })
-      materializedAt = row.materialized_at
-    } catch {
-      // Tabela ainda não migrada — overview continua com dados ao vivo.
-      materializedAt = null
-    }
+    const row = await materializeSalonMonthMetrics(month, {
+      analytics,
+      finance: {
+        revenue: finance.current.revenue,
+        expenses: finance.current.expenses,
+        cmv: finance.current.cmv,
+        payment_mix: finance.current.payment_mix,
+      },
+    })
+    materializedAt = row.materialized_at
   }
 
   return {

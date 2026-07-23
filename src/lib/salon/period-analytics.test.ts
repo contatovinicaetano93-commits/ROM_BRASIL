@@ -84,4 +84,18 @@ describe('period-analytics', () => {
     expect(result.new_clients_period).toBe(18)
     expect(result.return_rate).toBe(0.42)
   })
+
+  it('limita métricas e snapshots ao último dia coberto pelo fechamento', async () => {
+    sqlMock
+      .mockResolvedValueOnce([{ revenue: 10000, attended: 50 }])
+      .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+
+    const { computePeriodAnalytics } = await import('@/lib/salon/period-analytics')
+    const result = await computePeriodAnalytics({ month: '2026-07', through: '2026-07-22' })
+
+    expect(result.to).toBe('2026-07-22')
+    expect(getSalonP1DailyNear).toHaveBeenCalledWith('2026-07-22')
+    expect(getSalonP2DailyNear).toHaveBeenCalledWith('2026-07-22')
+    expect(getSalonP3DailyNear).toHaveBeenCalledWith('2026-07-22')
+  })
 })
