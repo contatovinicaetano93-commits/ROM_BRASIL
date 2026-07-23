@@ -21,16 +21,15 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
   (clientes `0004`, agendamentos `0051`, atendidos `0002`). Cron fast a cada 5 min,
   full a cada 10 min, ou tempo real via webhook. Manual com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do provedor WhatsApp
-  (Evolution API), responde com IA (primeiro atendimento guiado) e loga tudo.
+  (ManyChat), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
   linguagem natural, a IA responde puxando os KPIs do Neon.
 - `src/app/dashboard` — painel com contatos por dia, por canal, por status e
   taxa de conversão.
 - `src/app/contatos` — lista dos últimos contatos (todos os canais) e formulário
   pra registrar contato manual (`GET`/`POST /api/contacts`).
-- `src/lib/whatsapp/adapter.ts` — interface de mensageria. Hoje implementada
-  com Evolution API; trocar para WhatsApp Cloud API oficial no futuro é só
-  implementar a interface de novo, sem mexer no resto.
+- `src/lib/whatsapp/adapter.ts` — interface de mensageria. Implementada com
+  ManyChat (canal oficial Meta).
 
 Resiliência: todo evento (mensagem recebida, resposta da IA, erro) vira uma
 linha em `contact_events` — nada se perde silenciosamente, dá pra reprocessar
@@ -46,11 +45,10 @@ ou investigar depois.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
    Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec`. Backup: `CRON_SECRET` (cron fast 5 min + full 10 min).
-5. **Decidir o provedor de WhatsApp**: Evolution API (rápido, roda em minutos,
-   mas usa número real em modo não-oficial) ou WhatsApp Cloud API oficial
-   (mais lento pra configurar — verificação Meta Business — porém mais
-   resiliente a longo prazo). O código já está pronto pros dois, só falta a
-   decisão + credenciais.
+5. **WhatsApp via ManyChat** — `MANYCHAT_API_KEY` no painel ManyChat
+   (Settings → API). Canal oficial Meta. Para aftercare fora da janela 24h,
+   configure também `MANYCHAT_OUTBOUND_FLOW_NS` (fluxo com template aprovado).
+   Webhook: External Request → `/api/webhooks/whatsapp` + `WHATSAPP_WEBHOOK_SECRET`.
 6. **Criar um bot Telegram dedicado ao ROM** via `@BotFather` (2 min, token na
    hora) e configurar o `setWebhook` apontando para
    `/api/webhooks/telegram` com um `secret_token`.

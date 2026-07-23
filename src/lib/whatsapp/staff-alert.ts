@@ -17,7 +17,7 @@ async function sendWhatsAppAlerts(numbers: string[], text: string) {
     const adapter = getWhatsAppAdapter()
     await Promise.all(numbers.map((n) => adapter.sendMessage(n, text).catch(() => {})))
   } catch {
-    // Evolution API não configurada — segue só com Telegram.
+    // ManyChat não configurado — segue só com Telegram.
   }
 }
 
