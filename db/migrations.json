@@ -19,6 +19,7 @@
     { "id": "017_telegram_staff_links", "file": "delta-telegram-staff-links.sql", "panels": ["brasil"] },
     { "id": "017_parity_brasil", "file": "delta-parity-brasil.sql", "panels": ["iguatemi"] },
     { "id": "018_audit_alerts", "file": "delta-audit-alerts.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "019_whatsapp_aftercare", "file": "delta-whatsapp-aftercare.sql", "panels": ["brasil", "iguatemi"] }
+    { "id": "019_whatsapp_aftercare", "file": "delta-whatsapp-aftercare.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "020_month_metrics", "file": "delta-month-metrics.sql", "panels": ["brasil", "iguatemi"] }
   ]
 }
