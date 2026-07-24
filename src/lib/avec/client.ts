@@ -92,8 +92,10 @@ function addCalendarDays(isoYmd: string, delta: number) {
 
 function currentMonthRange() {
   const [year, month] = todayIso().split('-')
+  const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate()
   const inicio = fmtBrFromYmd(`${year}-${month}-01`)
-  return { inicio, fim: fmtBrFromYmd(todayIso()) }
+  const fim = fmtBrFromYmd(`${year}-${month}-${String(lastDay).padStart(2, '0')}`)
+  return { inicio, fim }
 }
 
 function brDateToIso(value: string | undefined) {

@@ -54,8 +54,14 @@ describe('withRequiredAvecReportParams', () => {
   it('preenche intervalo mensal para aniversariantes quando o caller nao envia datas', () => {
     const params = withRequiredAvecReportParams('0001', { limit: 250 })
     expect(params.limit).toBe(250)
-    expect(params.inicio).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
-    expect(params.fim).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(params.inicio).toMatch(/^01\/\d{2}\/\d{4}$/)
+    expect(params.fim).toMatch(/^(28|29|30|31)\/\d{2}\/\d{4}$/)
+    const [, startMonth, startYear] = String(params.inicio).split('/')
+    const [endDay, endMonth, endYear] = String(params.fim).split('/')
+    expect(endMonth).toBe(startMonth)
+    expect(endYear).toBe(startYear)
+    const lastDay = new Date(Date.UTC(Number(startYear), Number(startMonth), 0)).getUTCDate()
+    expect(Number(endDay)).toBe(lastDay)
   })
 
   it('converte inicio/fim do 0007 para os quatro parametros exigidos', () => {
