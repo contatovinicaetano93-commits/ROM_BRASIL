@@ -2,6 +2,7 @@
 // fast: 0149 (saldo) + 0046 (alerta, já com sugestão de reposição da Avec).
 // full: fast + 0044 (movimentos) + 0323 (enriquece origem) + valorização (0045/0242/0243/0142).
 import { getSql } from '@/lib/db'
+import { avecSiteParam } from '@/lib/brand'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   fetchAllAvecReport,
@@ -113,6 +114,7 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
     local: '',
     categoria: '',
     limit: 250,
+    site: avecSiteParam(),
   }
   try {
     const result = await fetchAllAvecReport(id, params)
@@ -149,13 +151,16 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     const seenAvecProductIds: string[] = []
+    let active = 0
     for (const row of result.rows) {
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
-      await applyStockAlert(alert)
-      seenAvecProductIds.push(alert.avecProductId)
+      const applied = await applyStockAlert(alert)
+      if (!applied) continue
+      seenAvecProductIds.push(applied.avecProductId)
+      active++
     }
-    stats.alerts_active = seenAvecProductIds.length
+    stats.alerts_active = active
     stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
   } catch (e) {
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)

@@ -192,6 +192,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   await snapshotReport('0051', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
+  const noShowsByDay = new Map<string, number>()
 
   for (const row of result.rows) {
     try {
@@ -201,6 +202,13 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       if (mode === 'fast' && appt.scheduledAt) {
         const day = toSalonDateIso(appt.scheduledAt)
         if (day !== today) continue
+      }
+
+      // No-show via status da agenda 0051 (0052 só traz cancelados).
+      const status = (appt.status ?? '').toLowerCase()
+      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
+        const day = toSalonDateIso(appt.scheduledAt)
+        if (day) noShowsByDay.set(day, (noShowsByDay.get(day) ?? 0) + 1)
       }
 
       const contact = await upsertContact({
@@ -236,6 +244,14 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       stats.appointments_synced++
     } catch (e) {
       stats.errors.push(`agendamento: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  for (const [day, no_shows] of noShowsByDay) {
+    try {
+      await upsertSalonMetrics(day, { no_shows })
+    } catch (e) {
+      stats.errors.push(`no-show ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 }
