@@ -492,15 +492,14 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       await syncClients(stats, syncRunId)
     }
     if (mode === 'fast') {
-      // KPI do dia primeiro e em paralelo (0088 + 0052); agenda/atendidos em seguida.
+      // KPI do dia em paralelo (0088 + 0052); agenda→atendidos em sequência
+      // (findOrCreateService não é seguro sob concorrência).
       await Promise.all([
         syncRevenue(stats, mode, syncRunId),
         syncCancellations(stats, mode, syncRunId),
       ])
-      await Promise.all([
-        syncAppointments(stats, mode, syncRunId),
-        syncAttendances(stats, mode, syncRunId),
-      ])
+      await syncAppointments(stats, mode, syncRunId)
+      await syncAttendances(stats, mode, syncRunId)
       try {
         await syncPaymentMixRecent(stats, syncRunId, 0)
       } catch (e) {
