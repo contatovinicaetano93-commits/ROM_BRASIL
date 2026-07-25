@@ -136,7 +136,7 @@ export async function listContactsWithSummary(
         `) as ContactRow[])
       : ((await sql`
           select * from contacts
-          where not (id = any(${urgentIds}::uuid[]))
+          where not (id = any(${urgentIds}))
           order by created_at desc
           limit ${remaining}
         `) as ContactRow[])
