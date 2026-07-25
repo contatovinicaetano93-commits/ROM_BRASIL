@@ -29,15 +29,12 @@ function getClient(databaseUrl: string): PostgresSql {
     client = postgres(databaseUrl, {
       ssl: 'require',
       max: 1,
-      // Transaction pooler (6543) does not support prepared statements.
+      // Transaction/Session pooler: prepared statements quebram no modo transaction.
       prepare: false,
-      idle_timeout: 60,
-      max_lifetime: 60 * 30,
-      connect_timeout: 30,
-      // Sync Avec/full pode passar de 2 min; free tier default costuma matar.
-      connection: {
-        statement_timeout: 600000,
-      },
+      idle_timeout: 20,
+      max_lifetime: 60 * 5,
+      connect_timeout: 15,
+      // Evita SET statement_timeout no startup (pode travar no pooler 6543).
     })
     clients.set(databaseUrl, client)
   }
