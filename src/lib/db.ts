@@ -36,7 +36,7 @@ function getClient(databaseUrl: string): PostgresSql {
       connect_timeout: 30,
       // Sync Avec/full pode passar de 2 min; free tier default costuma matar.
       connection: {
-        statement_timeout: '600000',
+        statement_timeout: 600000,
       },
     })
     clients.set(databaseUrl, client)
