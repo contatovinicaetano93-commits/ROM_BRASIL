@@ -1,4 +1,3 @@
-import 'server-only'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 
 // Prefer IPv4 (Supabase direct host is often IPv6-only; pooler is IPv4).
@@ -32,9 +31,13 @@ function getClient(databaseUrl: string): PostgresSql {
       max: 1,
       // Transaction pooler (6543) does not support prepared statements.
       prepare: false,
-      idle_timeout: 20,
+      idle_timeout: 60,
       max_lifetime: 60 * 30,
       connect_timeout: 30,
+      // Sync Avec/full pode passar de 2 min; free tier default costuma matar.
+      connection: {
+        statement_timeout: '600000',
+      },
     })
     clients.set(databaseUrl, client)
   }

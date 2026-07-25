@@ -25,7 +25,7 @@ create table if not exists contacts (
 create index if not exists contacts_channel_idx on contacts (channel);
 create index if not exists contacts_status_idx on contacts (status);
 create index if not exists contacts_created_at_idx on contacts (created_at desc);
-create unique index if not exists contacts_phone_idx on contacts (phone) where phone is not null;
+create unique index if not exists contacts_phone_idx on contacts (phone);
 
 -- Log granular de cada evento (mensagem recebida/enviada, webhook do Avec, etc).
 -- Existe pra tornar o sistema resiliente: nada some, tudo fica rastreável e reprocessável.
@@ -70,7 +70,7 @@ create index if not exists client_services_last_done_idx
   on client_services (contact_id, last_done_at desc nulls last)
   where active = true and last_done_at is not null;
 
-create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id) where avec_client_id is not null;
+create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id);
 
 -- Log de sincronizações com a API de Relatórios Avec.
 create table if not exists avec_sync_runs (
