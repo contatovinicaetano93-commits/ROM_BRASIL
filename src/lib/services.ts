@@ -314,6 +314,11 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and cs.scheduled_at is not null
         and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        -- Já concluídos no dia saem de Agendados (ficam só em Concluídos).
+        and (
+          cs.last_done_at is null
+          or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+        )
       order by cs.scheduled_at asc
     `,
     sql`
