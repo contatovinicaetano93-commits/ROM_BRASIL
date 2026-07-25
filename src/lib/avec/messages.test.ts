@@ -104,4 +104,19 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.warnings).toHaveLength(1)
     expect(ui.warnings[0]).toContain('0046')
   })
+
+  it('não trata partial em andamento (sem erros/avisos) como incompleto', () => {
+    const ui = deriveAvecSyncUi({
+      configured: true,
+      now,
+      last: {
+        status: 'partial',
+        created_at: '2026-07-25T11:59:00.000Z',
+        error: null,
+        stats: { warnings: [], errors: [] },
+      },
+    })
+    expect(ui.status).toBe('ok')
+    expect(ui.label).toMatch(/Sync ok/)
+  })
 })

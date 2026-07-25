@@ -133,13 +133,19 @@ export function deriveAvecSyncUi(opts: {
   }
 
   if (last.status === 'partial') {
-    return {
-      status: 'partial',
-      label: `Sync parcial ${ageLabel}`,
-      tone: 'gold',
-      detail: warnings[0] ?? detail,
-      warnings,
+    // beginAvecSyncRun inserts status=partial before work finishes; finished
+    // partials always have errors/warnings (see finish status logic in sync.ts).
+    const errors = asStringArray(last.stats?.errors)
+    if (errors.length > 0 || warnings.length > 0 || last.error) {
+      return {
+        status: 'partial',
+        label: `Sync parcial ${ageLabel}`,
+        tone: 'gold',
+        detail: warnings[0] ?? detail,
+        warnings,
+      }
     }
+    // In-flight run — fall through to ok/stale by age (avoid false "incompleto").
   }
 
   if (ageMs > staleAfterMs) {
