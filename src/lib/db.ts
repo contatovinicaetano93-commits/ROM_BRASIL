@@ -12,8 +12,10 @@ try {
  * Cliente postgres.js + helpers neon-compat (query / transaction).
  * Também expõe o helper de lista: sql`… where id in ${sql(ids)}`.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Sql = PostgresSql<any> & {
+export type Sql = {
+  // Tagged template + helper sql(ids) para IN (...)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (first: TemplateStringsArray | readonly any[], ...rest: any[]): any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: (query: string, params?: any[]) => Promise<any[]>
   transaction: <T>(
@@ -41,6 +43,7 @@ function getClient(databaseUrl: string): PostgresSql {
 }
 
 function wrap(sql: PostgresSql): Sql {
+  // Reutiliza a função sql do postgres.js (tagged template + helper sql(ids)).
   const client = sql as unknown as Sql
 
   client.query = async (query: string, params: unknown[] = []) => {
