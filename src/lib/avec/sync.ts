@@ -603,11 +603,7 @@ async function syncReturningFrom0002(
  * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
  * Se todos vierem null, não grava (UI continua "—").
  */
-async function syncDurationFrom0223(
-  stats: AvecSyncStats,
-  syncRunId?: string,
-  opts?: { soft?: boolean },
-) {
+async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
   const today = todayIso()
   const params = { profissional_id: '', limit: 250 }
   try {
@@ -634,9 +630,8 @@ async function syncDurationFrom0223(
       })
     }
   } catch (e) {
-    const msg = `TM 0223: ${e instanceof Error ? e.message : String(e)}`
-    if (opts?.soft) stats.warnings.push(msg)
-    else stats.errors.push(msg)
+    // TM é opcional — não invalida receita/agenda do dia.
+    stats.warnings.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -695,9 +690,8 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       // Sequencial: evita corrida no mesmo telefone entre agenda e atendidos.
       await syncAppointments(stats, mode, syncRunId)
       await syncAttendances(stats, mode, syncRunId)
-      // TM / 0081 são opcionais no fast — falha vira warning (callees engolem e não relançam).
-      await syncDurationFrom0223(stats, syncRunId, { soft: true })
-      await syncPaymentMixRecent(stats, syncRunId, 0, { soft: true })
+      // Fast não chama 0223/0081: 0223 pagina dezenas de milhares de linhas (lento + 403 WAF)
+      // e tempo costuma vir null; 0081 fica no full. Mantém o fast sob ~60s e estável.
     } else {
       // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
       for (const [label, fn] of [
@@ -723,7 +717,10 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     try {
       await syncReturningFrom0002(stats, mode, syncRunId)
     } catch (e) {
-      stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = `recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`
+      // No fast, WAF/403 em recorrentes não pode pintar o dia inteiro como falho.
+      if (mode === 'fast') stats.warnings.push(msg)
+      else stats.errors.push(msg)
     }
 
     stats.errors = formatAvecErrorList(stats.errors)

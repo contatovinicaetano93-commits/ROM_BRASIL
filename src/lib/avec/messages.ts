@@ -69,6 +69,11 @@ export function isAvecRowNoiseError(raw: string): boolean {
   )
 }
 
+/** Relatórios opcionais / WAF — core do dia (0088/0052/0051) pode estar OK. */
+export function isAvecOptionalReportNoise(raw: string): boolean {
+  return /^(TM 0223|P2 0081|recorrentes 0002)/i.test(raw)
+}
+
 export type AvecSyncOutcomeStatus = 'ok' | 'partial' | 'error'
 
 /**
@@ -105,13 +110,15 @@ export function classifyAvecSyncOutcome(stats: {
   const softWarning = (w: string) =>
     /AVEC_UNIT_ID vazio/i.test(w) ||
     /conflito de contato/i.test(w) ||
-    // TM / mix de pagamento opcionais no fast — não forçam partial com caixa OK
-    /^TM 0223:/i.test(w) ||
-    /^P2 0081 /i.test(w)
+    /TM 0223/i.test(w) ||
+    /recorrentes 0002/i.test(w) ||
+    /P2 0081/i.test(w) ||
+    /Relatório 0223/i.test(w)
 
   const materialWarnings = warnings.filter((w) => !softWarning(w))
 
-  if (hard.length > 0 && !coreOk) {
+  // Sem KPI core: erro hard ou só ruído de contato → error (não mascarar como ok).
+  if (!coreOk && (hard.length > 0 || noise.length > 0)) {
     return { status: 'error', errors: hard, warnings }
   }
   if (hard.length > 0 || materialWarnings.length > 0) {
