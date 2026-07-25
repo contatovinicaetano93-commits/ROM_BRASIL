@@ -714,16 +714,16 @@ export default function FinanceiroPage() {
           value={
             loading || !kpis
               ? '—'
-              : kpis.current.cmv_coverage.any_cost_pct != null
-                ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} c/ custo`
+              : kpis.current.cmv_coverage.saidas_total > 0
+                ? `${kpis.current.cmv_coverage.with_movement_cost}/${kpis.current.cmv_coverage.with_product_fallback}/${kpis.current.cmv_coverage.with_zero}`
                 : '—'
           }
           delta={
-            kpis?.current.cmv_coverage.saidas_total
-              ? `${kpis.current.cmv_coverage.with_movement_cost} saída · ${kpis.current.cmv_coverage.with_product_fallback} prod. · ${kpis.current.cmv_coverage.with_zero} zero`
+            kpis?.current.cmv_coverage.any_cost_pct != null
+              ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} com custo · ${formatPercentPoints(kpis.current.cmv_coverage.movement_cost_pct)} na saída`
               : null
           }
-          compareLabel="saídas no mês"
+          compareLabel="saídas (movimento/produto/zero)"
           positive={
             kpis?.current.cmv_coverage.movement_cost_pct != null
               ? kpis.current.cmv_coverage.movement_cost_pct >= 50
