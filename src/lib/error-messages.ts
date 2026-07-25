@@ -33,6 +33,8 @@ export const ERROR_MESSAGES = {
     AVEC_ERROR: 'Erro ao sincronizar com Avec',
     AVEC_TIMEOUT: 'Timeout na sincronização com Avec',
     AVEC_RATE_LIMIT: 'Limite de requisições à Avec atingido. Tente novamente em alguns minutos.',
+    AVEC_TOKEN_EXPIRED:
+      'Token Avec expirado — renovar (scripts/refresh-avec-token.mjs ou Admin → Sync Avec)',
     WEBHOOK_INVALID: 'Webhook inválido ou assinatura incorreta',
   },
 
@@ -66,7 +68,7 @@ export const ERROR_MESSAGES = {
     TIMEOUT: 'Requisição expirou. Tente novamente.',
     UNKNOWN_ERROR: 'Erro desconhecido. Contate o suporte.',
   },
-} as const;
+} as const
 
 /**
  * Get error message by category and key
@@ -76,5 +78,5 @@ export function getErrorMessage(
   category: keyof typeof ERROR_MESSAGES,
   key: keyof (typeof ERROR_MESSAGES)[typeof category],
 ): string {
-  return ERROR_MESSAGES[category][key] as string;
+  return ERROR_MESSAGES[category][key] as string
 }
