@@ -320,10 +320,7 @@ export async function materializeSalonMonthMetrics(
     sumStockCogs(from, to),
   ])
   const cash_flow = Math.round((totals.revenue - expenses) * 100) / 100
-  const payloadJson = JSON.stringify(payload)
-  const missingLiteral = `{${completeness.days_missing
-    .map((d) => `"${String(d).replace(/"/g, '')}"`)
-    .join(',')}}`
+  const missingDays = completeness.days_missing.map((d) => String(d).slice(0, 10))
 
   const rows = (await sql`
     insert into salon_month_metrics (
@@ -336,7 +333,7 @@ export async function materializeSalonMonthMetrics(
       ${to}::date,
       ${completeness.days_expected},
       ${completeness.days_present},
-      ${missingLiteral}::text[],
+      ${missingDays},
       ${completeness.status},
       ${totals.revenue},
       ${totals.attended},
@@ -349,7 +346,7 @@ export async function materializeSalonMonthMetrics(
       ${expenses},
       ${cmv},
       ${cash_flow},
-      ${payloadJson}::jsonb,
+      ${payload},
       now(),
       now()
     )

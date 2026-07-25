@@ -83,7 +83,7 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
   const sql = getSql()
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats, error)
-    values (${kind}, ${status}, ${JSON.stringify(stats)}::jsonb, ${error ?? null})
+    values (${kind}, ${status}, ${stats}, ${error ?? null})
     returning *
   `) as AvecSyncRun[]
   return rows[0]
@@ -94,7 +94,7 @@ async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<Ave
   const sql = getSql()
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${JSON.stringify(stats)}::jsonb)
+    values (${kind}, 'partial', ${stats})
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
@@ -109,7 +109,7 @@ async function finishAvecSyncRun(
   const sql = getSql()
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${JSON.stringify(stats)}::jsonb, error = ${error ?? null}
+    set status = ${status}, stats = ${stats}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as AvecSyncRun[]
