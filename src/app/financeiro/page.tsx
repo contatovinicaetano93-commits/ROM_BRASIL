@@ -18,6 +18,7 @@ import {
   formatPercentPoints,
   todayIso,
 } from '@/lib/salon/format'
+import { formatKpiSources } from '@/lib/kpi-source'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -35,6 +36,15 @@ interface PaymentReconciliation {
   tolerance: number
   status: 'aligned' | 'divergent' | 'missing_payments' | 'missing_revenue'
 }
+interface CmvCoverage {
+  cmv: number
+  saidas_total: number
+  with_movement_cost: number
+  with_product_fallback: number
+  with_zero: number
+  movement_cost_pct: number | null
+  any_cost_pct: number | null
+}
 interface FinanceKpiBucket {
   month: string
   label: string
@@ -46,6 +56,7 @@ interface FinanceKpiBucket {
   ticket_avg: number | null
   daily: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
   cmv: number
+  cmv_coverage: CmvCoverage
   margin_after_cmv: number | null
   gross_margin: number | null
   cash_flow: number
@@ -89,6 +100,7 @@ function FinanceKpiCard({
   compareLabel,
   positive,
   loading,
+  source,
 }: {
   label: string
   value: string
@@ -97,6 +109,8 @@ function FinanceKpiCard({
   compareLabel: string
   positive: boolean | null
   loading: boolean
+  /** Fonte curta (Avec / proxy / manual / incompleto) — padrão do glossário. */
+  source?: string
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -106,6 +120,9 @@ function FinanceKpiCard({
       ) : (
         <>
           <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+          {source ? (
+            <p className="mt-0.5 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
+          ) : null}
           {delta && (
             <p
               className={`mt-1 text-xs font-medium ${
@@ -189,11 +206,11 @@ function reconciliationStatusLabel(status: PaymentReconciliation['status']) {
 const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   {
     term: 'Receita',
-    meaning: 'Faturamento do período (sync Avec / métricas diárias do salão).',
+    meaning: 'Faturamento do período (fonte: Avec → métricas diárias ROM).',
   },
   {
     term: 'Atendidos',
-    meaning: 'Quantidade de atendimentos concluídos no mês.',
+    meaning: 'Quantidade de atendimentos concluídos no mês (fonte: Avec / ROM).',
   },
   {
     term: 'Ticket médio',
@@ -209,11 +226,17 @@ const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   },
   {
     term: 'CMV',
-    meaning: 'Custo das saídas de estoque no mês (proxy de produtos consumidos/vendidos).',
+    meaning:
+      'Proxy: custo das saídas de estoque no mês (Avec 0044). Usa cost da saída quando existe; senão qty × custo do produto. Não é CMV fiscal completo.',
+  },
+  {
+    term: 'Cobertura CMV',
+    meaning:
+      '% das saídas com custo na movimentação vs fallback do cadastro do produto vs zero. Mostra o quanto o CMV é confiável — não é silencioso.',
   },
   {
     term: 'Margem após CMV',
-    meaning: '((Receita − Despesas − CMV) ÷ Receita) × 100. CMV = custo das saídas de estoque.',
+    meaning: '((Receita − Despesas − CMV) ÷ Receita) × 100. CMV = proxy de saídas de estoque.',
   },
   {
     term: 'Fluxo',
@@ -232,6 +255,16 @@ const FINANCE_LEGEND: { term: string; meaning: string }[] = [
     meaning: 'Bruto pago vs CBS/IBS retidos e líquido (quando settlements importados).',
   },
 ]
+
+const EMPTY_CMV_COVERAGE: CmvCoverage = {
+  cmv: 0,
+  saidas_total: 0,
+  with_movement_cost: 0,
+  with_product_fallback: 0,
+  with_zero: 0,
+  movement_cost_pct: null,
+  any_cost_pct: null,
+}
 
 const EMPTY_FISCAL_SPLIT: FiscalSplitSummary = {
   gross_paid: 0,
@@ -258,6 +291,7 @@ function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
     ticket_avg: bucket.ticket_avg ?? null,
     daily: bucket.daily ?? [],
     cmv: bucket.cmv ?? 0,
+    cmv_coverage: bucket.cmv_coverage ?? EMPTY_CMV_COVERAGE,
     margin_after_cmv: bucket.margin_after_cmv ?? null,
     payment_mix: bucket.payment_mix ?? [],
     payment_reconciliation: bucket.payment_reconciliation ?? EMPTY_RECONCILIATION,
@@ -404,6 +438,24 @@ export default function FinanceiroPage() {
         csvMoney(cur.cmv),
         csvMoney(prev.cmv),
         csvMoney(cur.cmv - prev.cmv),
+      ),
+      csvRow(
+        'Cobertura CMV — custo na saída (%)',
+        csvPercentPoints(cur.cmv_coverage.movement_cost_pct),
+        csvPercentPoints(prev.cmv_coverage.movement_cost_pct),
+        '—',
+      ),
+      csvRow(
+        'Cobertura CMV — com algum custo (%)',
+        csvPercentPoints(cur.cmv_coverage.any_cost_pct),
+        csvPercentPoints(prev.cmv_coverage.any_cost_pct),
+        '—',
+      ),
+      csvRow(
+        'CMV saídas (movimento / produto / zero)',
+        `${cur.cmv_coverage.with_movement_cost}/${cur.cmv_coverage.with_product_fallback}/${cur.cmv_coverage.with_zero}`,
+        `${prev.cmv_coverage.with_movement_cost}/${prev.cmv_coverage.with_product_fallback}/${prev.cmv_coverage.with_zero}`,
+        '—',
       ),
       csvRow(
         'Margem após CMV (%)',
@@ -568,6 +620,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
           loading={loading}
+          source={formatKpiSources('avec', 'rom')}
         />
         <FinanceKpiCard
           label="Atendidos"
@@ -584,6 +637,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0) : null}
           loading={loading}
+          source={formatKpiSources('avec')}
         />
         <FinanceKpiCard
           label="Ticket médio"
@@ -606,6 +660,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('rom')}
         />
         <FinanceKpiCard
           label="Despesas"
@@ -614,6 +669,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.expenses <= kpis.previous.expenses : null}
           loading={loading}
+          source={formatKpiSources('manual')}
         />
         <FinanceKpiCard
           label="Margem bruta"
@@ -630,6 +686,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('rom')}
         />
         <FinanceKpiCard
           label="Fluxo (receita − despesas)"
@@ -638,10 +695,11 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
           loading={loading}
+          source={formatKpiSources('rom')}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-2 xl:max-w-xl">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:max-w-3xl">
         <FinanceKpiCard
           label="CMV (estoque)"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.cmv)}
@@ -649,6 +707,30 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cmv <= kpis.previous.cmv : null}
           loading={loading}
+          source={formatKpiSources('proxy', 'avec')}
+        />
+        <FinanceKpiCard
+          label="Cobertura CMV"
+          value={
+            loading || !kpis
+              ? '—'
+              : kpis.current.cmv_coverage.any_cost_pct != null
+                ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} c/ custo`
+                : '—'
+          }
+          delta={
+            kpis?.current.cmv_coverage.saidas_total
+              ? `${kpis.current.cmv_coverage.with_movement_cost} saída · ${kpis.current.cmv_coverage.with_product_fallback} prod. · ${kpis.current.cmv_coverage.with_zero} zero`
+              : null
+          }
+          compareLabel="saídas no mês"
+          positive={
+            kpis?.current.cmv_coverage.movement_cost_pct != null
+              ? kpis.current.cmv_coverage.movement_cost_pct >= 50
+              : null
+          }
+          loading={loading}
+          source={formatKpiSources('proxy', 'rom')}
         />
         <FinanceKpiCard
           label="Margem após CMV"
@@ -671,6 +753,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('proxy', 'rom')}
         />
       </div>
 
