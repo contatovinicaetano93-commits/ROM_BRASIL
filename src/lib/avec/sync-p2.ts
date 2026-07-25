@@ -108,6 +108,7 @@ export async function syncPaymentMixRecent(
   stats: SyncStatsLike,
   syncRunId?: string,
   daysBack = 0,
+  opts?: { soft?: boolean },
 ) {
   const id0081 = resolveId('payment_mix') ?? '0081'
   const today = todayIsoLocal()
@@ -128,7 +129,12 @@ export async function syncPaymentMixRecent(
       stats.p2_rows = (stats.p2_rows ?? 0) + payment_mix.length
       await upsertSalonP2Daily(day, { payment_mix })
     } catch (e) {
-      stats.errors.push(`P2 0081 ${day}: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = `P2 0081 ${day}: ${e instanceof Error ? e.message : String(e)}`
+      if (opts?.soft) {
+        ;(stats.warnings ??= []).push(msg)
+      } else {
+        stats.errors.push(msg)
+      }
     }
   }
 }

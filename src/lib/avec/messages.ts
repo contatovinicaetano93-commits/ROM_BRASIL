@@ -103,7 +103,11 @@ export function classifyAvecSyncOutcome(stats: {
     (stats.clients_upserted ?? 0) > 0
 
   const softWarning = (w: string) =>
-    /AVEC_UNIT_ID vazio/i.test(w) || /conflito de contato/i.test(w)
+    /AVEC_UNIT_ID vazio/i.test(w) ||
+    /conflito de contato/i.test(w) ||
+    // TM / mix de pagamento opcionais no fast — não forçam partial com caixa OK
+    /^TM 0223:/i.test(w) ||
+    /^P2 0081 /i.test(w)
 
   const materialWarnings = warnings.filter((w) => !softWarning(w))
 

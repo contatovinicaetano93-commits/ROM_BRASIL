@@ -141,4 +141,14 @@ describe('classifyAvecSyncOutcome', () => {
     })
     expect(out.status).toBe('partial')
   })
+
+  it('marca ok quando core OK e só falha opcional TM/P2 (fast soft)', () => {
+    const out = classifyAvecSyncOutcome({
+      errors: [],
+      warnings: ['TM 0223: HTTP 500', 'P2 0081 2026-07-25: timeout'],
+      revenue_rows: 1,
+    })
+    expect(out.status).toBe('ok')
+    expect(out.warnings).toHaveLength(2)
+  })
 })

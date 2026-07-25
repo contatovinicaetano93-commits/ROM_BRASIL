@@ -603,7 +603,11 @@ async function syncReturningFrom0002(
  * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
  * Se todos vierem null, não grava (UI continua "—").
  */
-async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
+async function syncDurationFrom0223(
+  stats: AvecSyncStats,
+  syncRunId?: string,
+  opts?: { soft?: boolean },
+) {
   const today = todayIso()
   const params = { profissional_id: '', limit: 250 }
   try {
@@ -630,7 +634,9 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
       })
     }
   } catch (e) {
-    stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
+    const msg = `TM 0223: ${e instanceof Error ? e.message : String(e)}`
+    if (opts?.soft) stats.warnings.push(msg)
+    else stats.errors.push(msg)
   }
 }
 
@@ -689,17 +695,9 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       // Sequencial: evita corrida no mesmo telefone entre agenda e atendidos.
       await syncAppointments(stats, mode, syncRunId)
       await syncAttendances(stats, mode, syncRunId)
-      // TM / 0081 são opcionais no fast — falha não pode derrubar o sync do dia.
-      try {
-        await syncDurationFrom0223(stats, syncRunId)
-      } catch (e) {
-        stats.warnings.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
-      }
-      try {
-        await syncPaymentMixRecent(stats, syncRunId, 0)
-      } catch (e) {
-        stats.warnings.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
-      }
+      // TM / 0081 são opcionais no fast — falha vira warning (callees engolem e não relançam).
+      await syncDurationFrom0223(stats, syncRunId, { soft: true })
+      await syncPaymentMixRecent(stats, syncRunId, 0, { soft: true })
     } else {
       // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
       for (const [label, fn] of [

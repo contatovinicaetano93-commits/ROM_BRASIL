@@ -112,7 +112,9 @@ async function applyContactMerge(
   })
 
   // Troca de telefone só se o número novo estiver livre.
-  let nextPhone = planned.phone
+  // Não usar planned.phone sem checar dono — planContactMerge anexa o incoming
+  // quando existing.phone é null e isso colide com contacts_phone_idx.
+  let nextPhone = existing.phone
   if (phone && existing.phone && phone !== existing.phone) {
     const owner = await getContactByPhone(phone)
     if (!owner || owner.id === existing.id) nextPhone = phone
