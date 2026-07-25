@@ -1,11 +1,12 @@
-import { setDefaultResultOrder } from 'dns'
+import 'server-only'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 
 // Prefer IPv4 (Supabase direct host is often IPv6-only; pooler is IPv4).
 try {
-  setDefaultResultOrder('ipv4first')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('dns').setDefaultResultOrder('ipv4first')
 } catch {
-  // older Node
+  // older Node / non-Node
 }
 
 /** Compatível com o uso anterior do neon tagged-template + query + transaction. */
