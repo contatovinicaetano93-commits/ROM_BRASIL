@@ -8,15 +8,15 @@ try {
   // older Node / non-Node
 }
 
-/** Compatível com o uso anterior do neon tagged-template + query + transaction. */
+/**
+ * Cliente postgres.js + helpers neon-compat (query / transaction).
+ * Também expõe o helper de lista: sql`… where id in ${sql(ids)}`.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Sql = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (strings: TemplateStringsArray, ...values: any[]): Promise<any[]>
+export type Sql = PostgresSql<any> & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: (query: string, params?: any[]) => Promise<any[]>
   transaction: <T>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fn: (txn: Sql) => Array<Promise<T>> | Promise<Array<Promise<T>>>,
   ) => Promise<T[]>
 }
@@ -34,7 +34,6 @@ function getClient(databaseUrl: string): PostgresSql {
       idle_timeout: 20,
       max_lifetime: 60 * 5,
       connect_timeout: 15,
-      // Evita SET statement_timeout no startup (pode travar no pooler 6543).
     })
     clients.set(databaseUrl, client)
   }
@@ -42,14 +41,13 @@ function getClient(databaseUrl: string): PostgresSql {
 }
 
 function wrap(sql: PostgresSql): Sql {
-  const tagged = ((strings: TemplateStringsArray, ...values: unknown[]) =>
-    sql(strings, ...(values as never[]))) as unknown as Sql
+  const client = sql as unknown as Sql
 
-  tagged.query = async (query: string, params: unknown[] = []) => {
+  client.query = async (query: string, params: unknown[] = []) => {
     return sql.unsafe(query, params as never[]) as unknown as unknown[]
   }
 
-  tagged.transaction = async (fn) => {
+  client.transaction = async (fn) => {
     return sql.begin(async (txn) => {
       const wrapped = wrap(txn as unknown as PostgresSql)
       const pending = await fn(wrapped)
@@ -61,12 +59,12 @@ function wrap(sql: PostgresSql): Sql {
     }) as Promise<never[]>
   }
 
-  return tagged
+  return client
 }
 
 /**
  * Cliente Postgres (Supabase pooler / Neon TCP) — só em route handlers (server-side).
- * DATABASE_URL: preferir Transaction pooler (porta 6543) no Vercel.
+ * DATABASE_URL: Session pooler (5432) ou Transaction (6543) no Vercel.
  */
 export function getSql(databaseUrl?: string): Sql {
   const url = (databaseUrl ?? process.env.DATABASE_URL)?.trim()
