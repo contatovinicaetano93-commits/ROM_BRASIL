@@ -41,7 +41,11 @@ import {
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
-import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import {
+  getSalonMetrics,
+  recomputeSalonMetricsFromRom,
+  upsertSalonMetrics,
+} from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
@@ -421,8 +425,16 @@ async function syncRevenue(
       }
 
       const attendedInt = Math.round(attended)
+      const revenueRounded = Math.round(revenue * 100) / 100
+      // 0 preenche dia faltante; não zera métricas já gravadas se o payload veio vazio/ilegível.
+      if (revenueRounded === 0 && attendedInt === 0) {
+        const existing = await getSalonMetrics(day)
+        if (existing && (Number(existing.revenue) > 0 || Number(existing.attended) > 0)) {
+          continue
+        }
+      }
       await upsertSalonMetrics(day, {
-        revenue: Math.round(revenue * 100) / 100,
+        revenue: revenueRounded,
         attended: attendedInt,
         ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
       })

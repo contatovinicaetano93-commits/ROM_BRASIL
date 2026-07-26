@@ -10,10 +10,11 @@
  */
 import { fetchAllAvecReport } from '../src/lib/avec/client'
 import { normalizeRevenueRow } from '../src/lib/avec/normalize'
+import { getDailyReports, resolveReportId } from '../src/lib/avec/registry'
 import { syncPaymentMixRecent } from '../src/lib/avec/sync-p2'
 import { avecSiteParam } from '../src/lib/brand'
 import { materializeSalonMonthMetrics, monthKeyFromDay } from '../src/lib/salon/month-metrics'
-import { upsertSalonMetrics } from '../src/lib/salon/metrics'
+import { getSalonMetrics, upsertSalonMetrics } from '../src/lib/salon/metrics'
 
 function todayIsoLocal() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -48,10 +49,16 @@ function monthStartOf(todayYmd: string) {
   return `${todayYmd.slice(0, 7)}-01`
 }
 
+function resolveRevenueReportId(): string {
+  const def = getDailyReports().find((r) => r.mapper === 'revenue')
+  return (def && resolveReportId(def)) || '0088'
+}
+
 async function backfillRevenue(from: string, to: string) {
   const days = listDaysInclusive(from, to)
   const summary: { day: string; revenue: number; attended: number }[] = []
   const errors: string[] = []
+  const reportId = resolveRevenueReportId()
 
   for (const day of days) {
     const params = {
@@ -61,7 +68,7 @@ async function backfillRevenue(from: string, to: string) {
       limit: 250,
     }
     try {
-      const result = await fetchAllAvecReport('0088', params)
+      const result = await fetchAllAvecReport(reportId, params)
       const rows = Array.isArray(result)
         ? result
         : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
@@ -78,20 +85,36 @@ async function backfillRevenue(from: string, to: string) {
       }
 
       const attendedInt = Math.round(attended)
+      const revenueRounded = Math.round(revenue * 100) / 100
       // Sempre grava a linha do dia (mesmo 0) — senão Relatórios marca INCOMPLETO.
+      // Mas não zera métricas já gravadas se o payload veio vazio/ilegível.
+      if (revenueRounded === 0 && attendedInt === 0) {
+        const existing = await getSalonMetrics(day)
+        if (existing && (Number(existing.revenue) > 0 || Number(existing.attended) > 0)) {
+          summary.push({
+            day,
+            revenue: Number(existing.revenue),
+            attended: Number(existing.attended),
+          })
+          console.log(
+            `${reportId} ${day} keep existing revenue=${Math.round(Number(existing.revenue))} attended=${existing.attended} rows=${rows.length}`,
+          )
+          continue
+        }
+      }
       await upsertSalonMetrics(day, {
-        revenue: Math.round(revenue * 100) / 100,
+        revenue: revenueRounded,
         attended: attendedInt,
         ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
       })
-      summary.push({ day, revenue: Math.round(revenue * 100) / 100, attended: attendedInt })
+      summary.push({ day, revenue: revenueRounded, attended: attendedInt })
       console.log(
-        `0088 ${day} revenue=${Math.round(revenue)} attended=${attendedInt} rows=${rows.length}`,
+        `${reportId} ${day} revenue=${Math.round(revenueRounded)} attended=${attendedInt} rows=${rows.length}`,
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       errors.push(`${day}: ${msg}`)
-      console.error(`0088 ERR ${day}`, msg)
+      console.error(`${reportId} ERR ${day}`, msg)
     }
   }
 
@@ -107,8 +130,12 @@ async function main() {
   const to = process.env.TO?.trim() || today
   if (to < from) throw new Error(`TO (${to}) < FROM (${from})`)
 
-  const daysBack = listDaysInclusive(from, to).length - 1
-  console.log('backfill', { from, to, daysBack, unit: process.env.AVEC_UNIT_ID ?? null })
+  console.log('backfill', {
+    from,
+    to,
+    reportId: resolveRevenueReportId(),
+    unit: process.env.AVEC_UNIT_ID ?? null,
+  })
 
   const revenue = await backfillRevenue(from, to)
 
@@ -118,8 +145,8 @@ async function main() {
     warnings: [] as string[],
     p2_rows: 0,
   }
-  console.log('0081 start', { daysBack })
-  await syncPaymentMixRecent(payStats, undefined, daysBack)
+  console.log('0081 start', { from, to })
+  await syncPaymentMixRecent(payStats, undefined, 0, { from, to })
   console.log(
     '0081 done',
     JSON.stringify({
