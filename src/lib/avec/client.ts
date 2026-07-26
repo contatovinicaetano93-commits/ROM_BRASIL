@@ -232,8 +232,13 @@ async function forceRefreshAvecToken(): Promise<string | null> {
         const { mintAvecApiToken } = await import('@/lib/avec/refresh-token')
         const { saveAvecApiToken } = await import('@/lib/avec/token-store')
         const minted = await mintAvecApiToken({ force: true })
-        await saveAvecApiToken(minted.token)
         process.env.AVEC_API_TOKEN = minted.token
+        // Neon best-effort — falha de save não descarta o JWT para o retry 401.
+        try {
+          await saveAvecApiToken(minted.token)
+        } catch {
+          /* ignore */
+        }
         return minted.token
       } catch {
         return null
