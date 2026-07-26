@@ -219,15 +219,17 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
       // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
       const status = (appt.status ?? '').toLowerCase()
-      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
-        if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
+      const isNoShow = /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status)
+      if (isNoShow && appt.scheduledAt && apptDay) {
+        noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
       }
 
       const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
       const isCancelled = /cancel/.test(status)
       if (apptDay === today) {
         todayRows++
-        if (!isCancelled) todayBooked++
+        // Agendados = abertos + pagos (não inclui no-show nem cancelado).
+        if (!isCancelled && !isNoShow) todayBooked++
       }
 
       const contact = await upsertContact({

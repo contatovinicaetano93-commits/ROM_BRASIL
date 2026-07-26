@@ -7,7 +7,8 @@ export interface P3CurvePoint {
 
 export interface SalonP3Daily {
   day: string
-  return_rate: number
+  /** null = ainda não calculado neste dia; 0 = taxa legítima de 0%. */
+  return_rate: number | null
   new_clients_period: number
   revenue_curve: P3CurvePoint[]
   updated_at: string
@@ -18,11 +19,32 @@ export async function ensureSalonP3Table() {
   await sql`
     create table if not exists salon_p3_daily (
       day date primary key,
-      return_rate numeric(6,4) not null default 0,
+      return_rate numeric(6,4),
       new_clients_period int not null default 0,
       revenue_curve jsonb not null default '[]',
       updated_at timestamptz not null default now()
     )
+  `
+  // Painéis com 014 (NOT NULL DEFAULT 0): 0 legado em linha vazia vira null uma vez.
+  await sql`
+    do $$
+    begin
+      if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'salon_p3_daily'
+          and column_name = 'return_rate'
+          and is_nullable = 'NO'
+      ) then
+        alter table salon_p3_daily alter column return_rate drop not null;
+        alter table salon_p3_daily alter column return_rate drop default;
+        update salon_p3_daily
+          set return_rate = null
+          where return_rate = 0
+            and new_clients_period = 0
+            and jsonb_array_length(coalesce(revenue_curve, '[]'::jsonb)) = 0;
+      end if;
+    end $$
   `
 }
 
@@ -41,7 +63,12 @@ export async function upsertSalonP3Daily(
   `) as SalonP3Daily[]
   const cur = existing[0]
 
-  const return_rate = patch.return_rate ?? Number(cur?.return_rate ?? 0)
+  const return_rate =
+    patch.return_rate !== undefined
+      ? patch.return_rate
+      : cur?.return_rate != null
+        ? Number(cur.return_rate)
+        : null
   const new_clients_period = patch.new_clients_period ?? Number(cur?.new_clients_period ?? 0)
   const revenue_curve =
     patch.revenue_curve ?? (cur?.revenue_curve as P3CurvePoint[] | undefined) ?? []
@@ -69,6 +96,7 @@ export async function upsertSalonP3Daily(
  * Snapshot P3 útil mais recente ≤ targetDay.
  * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
  * Se todos os snapshots estiverem vazios, cai naturalmente no mais novo.
+ * return_rate null = não calculado; 0 é taxa válida e conta como útil.
  */
 export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
   const sql = getSql()
@@ -84,7 +112,7 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
       where day <= ${targetDay}::date
       order by
         (
-          return_rate > 0
+          return_rate is not null
           or new_clients_period > 0
           or jsonb_array_length(coalesce(revenue_curve, '[]'::jsonb)) > 0
         ) desc,

@@ -105,6 +105,15 @@ export function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
+/** Mês corrente: acumula só até referenceDay (alinhado ao Financeiro / Relatórios). */
+export function monthToDateRange(
+  monthKey: string,
+  referenceDay = todayIso(),
+): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  return monthKey === monthKeyFromDay(referenceDay) ? { ...range, to: referenceDay } : range
+}
+
 function shiftDay(iso: string, delta: number): string {
   const d = new Date(`${iso}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + delta)
@@ -312,7 +321,7 @@ export async function materializeSalonMonthMetrics(
 ): Promise<SalonMonthMetricsRow> {
   await ensureSalonMonthMetricsTable()
   const sql = getSql()
-  const { from, to } = monthRange(monthKey)
+  const { from, to } = monthToDateRange(monthKey)
   const [completeness, totals, expenses, cmv] = await Promise.all([
     getMonthCompleteness(monthKey),
     sumDailyTotals(from, to),

@@ -193,15 +193,9 @@ export async function clearOrphanSchedulesForDay(
   keepServiceIds: string[],
 ): Promise<number> {
   const sql = getSql()
-  if (keepServiceIds.length === 0) {
-    const rows = (await sql`
-      update client_services set scheduled_at = null
-      where scheduled_at is not null
-        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      returning id
-    `) as { id: string }[]
-    return rows.length
-  }
+  // Sem abertos Avec pra preservar: não zera a agenda do dia (manteria
+  // WhatsApp/manual). Cancelados 0051 já são limpos individualmente no sync.
+  if (keepServiceIds.length === 0) return 0
   const rows = (await sql`
     update client_services set scheduled_at = null
     where scheduled_at is not null

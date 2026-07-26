@@ -3,8 +3,8 @@
 
 create table if not exists salon_p3_daily (
   day date primary key,
-  -- taxa de retorno do estabelecimento (0007) — 0..1
-  return_rate numeric(6,4) not null default 0,
+  -- taxa de retorno do estabelecimento (0007) — 0..1; null = ainda não calculado
+  return_rate numeric(6,4),
   -- novos clientes no período (0017)
   new_clients_period int not null default 0,
   -- [{ day, revenue }] — curva diária (0088; override AVEC_REPORT_REVENUE_CURVE)

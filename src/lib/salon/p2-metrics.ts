@@ -40,7 +40,7 @@ export async function getPaymentMixRange(from: string, to: string): Promise<P2Pa
 
   const totals = new Map<string, number>()
   for (const row of rows) {
-    for (const p of row.payment_mix ?? []) {
+    for (const p of asJsonArray<P2PaymentRow>(row.payment_mix)) {
       totals.set(p.method, (totals.get(p.method) ?? 0) + Number(p.amount))
     }
   }
