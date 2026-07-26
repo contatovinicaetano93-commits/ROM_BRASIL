@@ -32,7 +32,7 @@ function pctPoints(n: number | null | undefined): string {
 export function buildMonthOverviewCsv(overview: MonthOverview): string {
   const { finance: f, analytics: a, closing: c, completeness } = overview
   const lines: string[] = [
-    csvRow('=== OVERVIEW DO MÊS — ROM ==='),
+    csvRow('=== OVERVIEW DO MÊS ACUMULADO — ROM ==='),
     csvRow('Unidade', overview.unit),
     csvRow('Mês', overview.label, overview.month),
     csvRow('Gerado em', overview.generated_at),
@@ -47,25 +47,33 @@ export function buildMonthOverviewCsv(overview: MonthOverview): string {
     '',
     csvRow('=== FECHAMENTO ROM (soma diária) ==='),
     csvRow('Indicador', 'Valor'),
-    csvRow('Receita', money(c.revenue)),
-    csvRow('Atendidos', c.attended),
-    csvRow('Ticket médio', money(c.ticket_avg)),
-    csvRow('Cancelamentos', c.cancelled),
-    csvRow('No-shows', c.no_shows),
-    csvRow('Despesas', money(c.expenses)),
-    csvRow('CMV (estoque)', money(c.cmv)),
-    csvRow('Fluxo de caixa', money(c.cash_flow)),
+    csvRow('Receita do mês', money(c.revenue)),
+    csvRow('Atendidos no mês', c.attended),
+    csvRow('Ticket médio do mês', money(c.ticket_avg)),
+    csvRow('Cancelamentos do mês', c.cancelled),
+    csvRow('No-shows do mês', c.no_shows),
+    csvRow('Despesas do mês', money(c.expenses)),
+    csvRow('CMV do mês (estoque)', money(c.cmv)),
+    csvRow('Fluxo de caixa do mês', money(c.cash_flow)),
     csvRow('Margem bruta %', f.gross_margin != null ? String(f.gross_margin).replace('.', ',') : ''),
     csvRow('Margem após CMV %', f.margin_after_cmv != null ? String(f.margin_after_cmv).replace('.', ',') : ''),
     '',
     csvRow('=== OPERAÇÃO / VISÃO ANALÍTICA ==='),
     csvRow('Indicador', 'Valor', 'Fonte'),
-    csvRow('Ocupação média', a.occupancy_avg != null ? pct(a.occupancy_avg) : '', 'avec_snapshot'),
-    csvRow('Receita perdida (est.)', money(a.lost_revenue), 'rom_daily'),
-    csvRow('Pacotes vendidos', a.packages_sold, 'avec_snapshot'),
-    csvRow('Receita pacotes', money(a.packages_revenue), 'avec_snapshot'),
-    csvRow('Taxa de retorno', a.return_rate != null ? pct(a.return_rate) : '', 'avec_snapshot'),
-    csvRow('Novos no período', a.new_clients_period, 'avec_snapshot'),
+    csvRow(
+      'Ocupação média do mês',
+      a.occupancy_avg != null ? pct(a.occupancy_avg) : '',
+      'avec_snapshot',
+    ),
+    csvRow('Receita perdida no mês (est.)', money(a.lost_revenue), 'rom_daily'),
+    csvRow('Pacotes vendidos no mês', a.packages_sold, 'avec_snapshot'),
+    csvRow('Receita pacotes no mês', money(a.packages_revenue), 'avec_snapshot'),
+    csvRow(
+      'Taxa de retorno do mês',
+      a.return_rate != null ? pct(a.return_rate) : '',
+      'avec_snapshot',
+    ),
+    csvRow('Novos no mês', a.new_clients_period, 'avec_snapshot'),
     csvRow('Snapshot ops (dia)', a.snapshot_day ?? '', 'avec_snapshot'),
     '',
     csvRow('=== FORMAS DE PAGAMENTO ==='),
@@ -118,7 +126,7 @@ export function buildMonthOverviewCsv(overview: MonthOverview): string {
     '',
     csvRow(
       'Observação',
-      'ROM é a fonte de fechamento do mês. Atendidos = comandas/atendimentos (não clientes únicos).',
+      'ROM é a fonte de fechamento do mês acumulado. Atendidos = comandas/atendimentos (não clientes únicos).',
     ),
   ]
   return '\uFEFF' + lines.join('\n')
@@ -127,21 +135,27 @@ export function buildMonthOverviewCsv(overview: MonthOverview): string {
 /** CSV só da Visão analítica (período). */
 export function buildPeriodAnalyticsCsv(period: PeriodAnalytics, unit: string): string {
   const lines: string[] = [
-    csvRow('=== VISÃO ANALÍTICA — ROM ==='),
+    csvRow('=== VISÃO ANALÍTICA — MÊS ACUMULADO — ROM ==='),
     csvRow('Unidade', unit),
     csvRow('Mês', period.label, period.month),
     csvRow('Snapshot ops', period.snapshot_day ?? ''),
     '',
     csvRow('Indicador', 'Valor'),
-    csvRow('Ocupação média', period.occupancy_avg != null ? pct(period.occupancy_avg) : ''),
-    csvRow('Cancelamentos', period.cancelled),
-    csvRow('No-shows', period.no_shows),
-    csvRow('Ticket médio', money(period.ticket_avg)),
-    csvRow('Receita perdida (est.)', money(period.lost_revenue)),
-    csvRow('Pacotes vendidos', period.packages_sold),
-    csvRow('Receita pacotes', money(period.packages_revenue)),
-    csvRow('Taxa de retorno', period.return_rate != null ? pct(period.return_rate) : ''),
-    csvRow('Novos no período', period.new_clients_period),
+    csvRow(
+      'Ocupação média do mês',
+      period.occupancy_avg != null ? pct(period.occupancy_avg) : '',
+    ),
+    csvRow('Cancelamentos do mês', period.cancelled),
+    csvRow('No-shows do mês', period.no_shows),
+    csvRow('Ticket médio do mês', money(period.ticket_avg)),
+    csvRow('Receita perdida no mês (est.)', money(period.lost_revenue)),
+    csvRow('Pacotes vendidos no mês', period.packages_sold),
+    csvRow('Receita pacotes no mês', money(period.packages_revenue)),
+    csvRow(
+      'Taxa de retorno do mês',
+      period.return_rate != null ? pct(period.return_rate) : '',
+    ),
+    csvRow('Novos no mês', period.new_clients_period),
     '',
     csvRow('=== TOP SERVIÇOS ==='),
     csvRow('Serviço', 'Qtd', 'Receita'),
@@ -197,7 +211,7 @@ export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
 </style>
 </head>
 <body>
-  <h1>Overview do mês — ${escapeHtml(overview.unit)}</h1>
+  <h1>Overview do mês acumulado — ${escapeHtml(overview.unit)}</h1>
   <div class="meta">
     <div>${escapeHtml(overview.label)} (${escapeHtml(overview.month)})</div>
     <div>Status: <span class="badge">${escapeHtml(overview.status_label)}</span>
@@ -209,25 +223,25 @@ export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
 
   <h2>Fechamento ROM</h2>
   <table>
-    ${row('Receita', money(overview.closing.revenue))}
-    ${row('Atendidos', String(overview.closing.attended))}
-    ${row('Ticket médio', money(overview.closing.ticket_avg))}
-    ${row('Cancelamentos', String(overview.closing.cancelled))}
-    ${row('No-shows', String(overview.closing.no_shows))}
-    ${row('Despesas', money(overview.closing.expenses))}
-    ${row('CMV', money(overview.closing.cmv))}
-    ${row('Fluxo de caixa', money(overview.closing.cash_flow))}
+    ${row('Receita do mês', money(overview.closing.revenue))}
+    ${row('Atendidos no mês', String(overview.closing.attended))}
+    ${row('Ticket médio do mês', money(overview.closing.ticket_avg))}
+    ${row('Cancelamentos do mês', String(overview.closing.cancelled))}
+    ${row('No-shows do mês', String(overview.closing.no_shows))}
+    ${row('Despesas do mês', money(overview.closing.expenses))}
+    ${row('CMV do mês', money(overview.closing.cmv))}
+    ${row('Fluxo de caixa do mês', money(overview.closing.cash_flow))}
     ${row('Margem bruta %', f.gross_margin != null ? String(f.gross_margin) : '—')}
   </table>
 
   <h2>Operação / Visão analítica</h2>
   <table>
-    ${row('Ocupação média', a.occupancy_avg != null ? pct(a.occupancy_avg) : '—')}
-    ${row('Receita perdida (est.)', money(a.lost_revenue))}
-    ${row('Pacotes vendidos', String(a.packages_sold))}
-    ${row('Receita pacotes', money(a.packages_revenue))}
-    ${row('Taxa de retorno', a.return_rate != null ? pct(a.return_rate) : '—')}
-    ${row('Novos no período', String(a.new_clients_period))}
+    ${row('Ocupação média do mês', a.occupancy_avg != null ? pct(a.occupancy_avg) : '—')}
+    ${row('Receita perdida no mês (est.)', money(a.lost_revenue))}
+    ${row('Pacotes vendidos no mês', String(a.packages_sold))}
+    ${row('Receita pacotes no mês', money(a.packages_revenue))}
+    ${row('Taxa de retorno do mês', a.return_rate != null ? pct(a.return_rate) : '—')}
+    ${row('Novos no mês', String(a.new_clients_period))}
     ${row('Snapshot ops', a.snapshot_day ?? '—')}
   </table>
 
@@ -262,7 +276,7 @@ export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
   </table>
 
   <p class="note">
-    ROM é a fonte de fechamento. Indicadores marcados como snapshot Avec (ocupação, canais, pacotes, retorno)
+    ROM é a fonte de fechamento do mês acumulado. Indicadores marcados como snapshot Avec (ocupação, canais, pacotes, retorno)
     não são soma diária. Status ${escapeHtml(statusLabelPt(completeness.status))}.
     Atendidos = comandas/atendimentos (não clientes únicos).
   </p>
@@ -289,19 +303,19 @@ export function buildPeriodAnalyticsPrintHtml(period: PeriodAnalytics, unit: str
 </style>
 </head>
 <body>
-  <h1>Visão analítica — ${escapeHtml(unit)}</h1>
+  <h1>Visão analítica do mês acumulado — ${escapeHtml(unit)}</h1>
   <p>${escapeHtml(period.label)} · snapshot ${escapeHtml(period.snapshot_day ?? '—')}</p>
   <h2>Indicadores</h2>
   <table>
-    ${row('Ocupação média', period.occupancy_avg != null ? pct(period.occupancy_avg) : '—')}
-    ${row('Cancelamentos', String(period.cancelled))}
-    ${row('No-shows', String(period.no_shows))}
-    ${row('Ticket médio', money(period.ticket_avg))}
-    ${row('Receita perdida', money(period.lost_revenue))}
-    ${row('Pacotes vendidos', String(period.packages_sold))}
-    ${row('Receita pacotes', money(period.packages_revenue))}
-    ${row('Taxa de retorno', period.return_rate != null ? pct(period.return_rate) : '—')}
-    ${row('Novos no período', String(period.new_clients_period))}
+    ${row('Ocupação média do mês', period.occupancy_avg != null ? pct(period.occupancy_avg) : '—')}
+    ${row('Cancelamentos do mês', String(period.cancelled))}
+    ${row('No-shows do mês', String(period.no_shows))}
+    ${row('Ticket médio do mês', money(period.ticket_avg))}
+    ${row('Receita perdida no mês', money(period.lost_revenue))}
+    ${row('Pacotes vendidos no mês', String(period.packages_sold))}
+    ${row('Receita pacotes no mês', money(period.packages_revenue))}
+    ${row('Taxa de retorno do mês', period.return_rate != null ? pct(period.return_rate) : '—')}
+    ${row('Novos no mês', String(period.new_clients_period))}
   </table>
   <h2>Top serviços</h2>
   <table>

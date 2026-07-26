@@ -119,6 +119,11 @@ function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
+function monthToDateRange(monthKey: string, referenceDay = todayIso()): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+}
+
 function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
@@ -341,7 +346,7 @@ export interface FinanceKpis {
 }
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
-  const { from, to } = monthRange(monthKey)
+  const { from, to } = monthToDateRange(monthKey)
   const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),

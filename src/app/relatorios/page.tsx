@@ -77,9 +77,9 @@ export default function RelatoriosOverviewPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Relatórios</p>
-          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Overview do mês</h1>
+          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Overview do mês acumulado</h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
-            Fechamento oficial {brand.displayName} — dados acumulados no ROM (não Avec ao vivo).
+            Fechamento oficial {brand.displayName} — dados do mês acumulados no ROM (não Avec ao vivo).
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -93,7 +93,7 @@ export default function RelatoriosOverviewPage() {
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:bg-card disabled:opacity-50"
           >
-            <RefreshCw size={14} /> Atualizar fechamento
+            <RefreshCw size={14} /> Atualizar mês
           </button>
           <button
             type="button"
@@ -156,14 +156,14 @@ export default function RelatoriosOverviewPage() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { label: 'Receita', value: formatCurrency(data.closing.revenue) },
-              { label: 'Atendidos', value: String(data.closing.attended) },
-              { label: 'Ticket', value: formatCurrency(data.closing.ticket_avg) },
-              { label: 'Fluxo', value: formatCurrency(data.closing.cash_flow) },
-              { label: 'Despesas', value: formatCurrency(data.closing.expenses) },
-              { label: 'CMV', value: formatCurrency(data.closing.cmv) },
-              { label: 'Cancelamentos', value: String(data.closing.cancelled) },
-              { label: 'No-shows', value: String(data.closing.no_shows) },
+              { label: 'Receita do mês', value: formatCurrency(data.closing.revenue) },
+              { label: 'Atendidos no mês', value: String(data.closing.attended) },
+              { label: 'Ticket médio do mês', value: formatCurrency(data.closing.ticket_avg) },
+              { label: 'Fluxo do mês', value: formatCurrency(data.closing.cash_flow) },
+              { label: 'Despesas do mês', value: formatCurrency(data.closing.expenses) },
+              { label: 'CMV do mês', value: formatCurrency(data.closing.cmv) },
+              { label: 'Cancelamentos do mês', value: String(data.closing.cancelled) },
+              { label: 'No-shows do mês', value: String(data.closing.no_shows) },
             ].map((kpi) => (
               <div key={kpi.label} className="rounded-xl border border-border bg-card px-4 py-3">
                 <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kpi.label}</p>
@@ -173,10 +173,10 @@ export default function RelatoriosOverviewPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard title="Operação (Visão analítica)">
+            <SectionCard title="Operação do mês (Visão analítica)">
               <ul className="flex flex-col gap-2 text-sm">
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Ocupação média</span>
+                  <span className="text-muted">Ocupação média do mês</span>
                   <span className="tabular-nums">
                     {data.analytics.occupancy_avg != null
                       ? formatPercentPoints(data.analytics.occupancy_avg * 100)
@@ -184,17 +184,17 @@ export default function RelatoriosOverviewPage() {
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Receita perdida (est.)</span>
+                  <span className="text-muted">Receita perdida no mês (est.)</span>
                   <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Pacotes / receita</span>
+                  <span className="text-muted">Pacotes do mês / receita</span>
                   <span className="tabular-nums">
                     {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Retorno / novos</span>
+                  <span className="text-muted">Retorno / novos no mês</span>
                   <span className="tabular-nums">
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)

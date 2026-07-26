@@ -26,6 +26,11 @@ function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
+function monthToDateRange(monthKey: string, referenceDay = todayIso()): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+}
+
 function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
@@ -142,7 +147,7 @@ export async function computePeriodAnalytics(opts?: {
   month?: string
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? currentMonthKey(todayIso())
-  const { from, to } = monthRange(month)
+  const { from, to } = monthToDateRange(month)
   const [totals, loss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),

@@ -110,8 +110,9 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
 /**
  * syncP1Kpis grava um snapshot por dia, mas cada snapshot já é uma janela
  * rolante de 30 dias (não um delta diário) — então "comparação de período"
- * aqui é o snapshot mais recente vs o snapshot disponível mais próximo de N
- * dias atrás, não meses de calendário como no TM.
+ * aqui é o snapshot útil mais recente vs o snapshot disponível mais próximo de N
+ * dias atrás, não meses de calendário como no TM. Se todos estiverem vazios,
+ * cai naturalmente no snapshot mais novo.
  */
 export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
   const sql = getSql()
@@ -126,7 +127,14 @@ export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Dai
         updated_at
       from salon_p1_daily
       where day <= ${targetDay}::date
-      order by day desc
+      order by
+        (
+          jsonb_array_length(coalesce(professionals, '[]'::jsonb)) > 0
+          or jsonb_array_length(coalesce(services, '[]'::jsonb)) > 0
+          or jsonb_array_length(coalesce(acquisition, '[]'::jsonb)) > 0
+          or reactivation_count > 0
+        ) desc,
+        day desc
       limit 1
     `) as SalonP1Daily[]
     return rows[0] ?? null
@@ -147,7 +155,14 @@ export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
         reactivation_count,
         updated_at
       from salon_p1_daily
-      order by day desc
+      order by
+        (
+          jsonb_array_length(coalesce(professionals, '[]'::jsonb)) > 0
+          or jsonb_array_length(coalesce(services, '[]'::jsonb)) > 0
+          or jsonb_array_length(coalesce(acquisition, '[]'::jsonb)) > 0
+          or reactivation_count > 0
+        ) desc,
+        day desc
       limit 1
     `) as SalonP1Daily[]
     return rows[0] ?? null

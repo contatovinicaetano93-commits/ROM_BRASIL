@@ -56,6 +56,7 @@ interface HojeData {
     appointments: number
     attended: number
     cancelled: number
+    no_shows: number
     ticket_avg: number | null
     new_clients: number
   }
@@ -160,7 +161,7 @@ export default function HojePage() {
         {canViewRevenue && (
           <KpiCard
             icon={<DollarSign size={16} />}
-            label="Faturamento"
+            label="Faturamento do dia"
             value={loading ? '—' : formatCurrency(salon?.revenue ?? 0)}
             loading={loading}
             source={avecSource}
@@ -168,29 +169,29 @@ export default function HojePage() {
         )}
         <KpiCard
           icon={<Calendar size={16} />}
-          label="Agendados"
+          label="Agendados hoje"
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={avecSource}
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
-          label="Atendidos"
+          label="Atendidos do dia"
           value={loading ? '—' : String(salon?.attended ?? 0)}
           loading={loading}
           source={avecSource}
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
-          label="Cancelados"
-          value={loading ? '—' : String(salon?.cancelled ?? 0)}
+          label="Cancel. · no-show do dia"
+          value={loading ? '—' : `${salon?.cancelled ?? 0} · ${salon?.no_shows ?? 0}`}
           loading={loading}
-          warn={(salon?.cancelled ?? 0) > 0}
+          warn={(salon?.cancelled ?? 0) + (salon?.no_shows ?? 0) > 0}
           source={avecSource}
         />
         <KpiCard
           icon={<Clock size={16} />}
-          label="TM atendimento"
+          label="TM do dia"
           value={
             loading
               ? '—'

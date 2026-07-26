@@ -180,7 +180,7 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Comercial e performance do período. Operação do dia fica em Hoje · dinheiro em Financeiro ·
+            Comercial e performance em mês acumulado. Rotina de hoje fica em Hoje · dinheiro em Financeiro ·
             fechamento em Relatórios.
           </p>
         </div>
@@ -220,11 +220,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pulso comercial do período (Avec + métricas) */}
+      {/* Pulso comercial do mês acumulado (Avec + métricas) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <MiniStat
           icon={<Percent size={15} />}
-          label={`Ocupação · ${period?.label ?? '—'}`}
+          label={`Ocupação · mês acum. ${period?.label ?? '—'}`}
           value={
             loading || !period
               ? '—'
@@ -235,12 +235,12 @@ export default function DashboardPage() {
         />
         <MiniStat
           icon={<AlertTriangle size={15} />}
-          label="Receita perdida"
+          label="Receita perdida · mês acum."
           value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
         />
         <MiniStat
           icon={<Users size={15} />}
-          label="Cancel. + no-show"
+          label="Cancel. + no-show · mês acum."
           value={
             loading || !period
               ? '—'
@@ -249,17 +249,17 @@ export default function DashboardPage() {
         />
         <MiniStat
           icon={<Package size={15} />}
-          label="Pacotes (receita)"
+          label="Pacotes · mês acum."
           value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
         />
         <MiniStat
           icon={<Sparkles size={15} />}
-          label="Novos no período"
+          label="Novos · mês acum."
           value={loading || !period ? '—' : String(period.new_clients_period)}
         />
         <MiniStat
           icon={<TrendingUp size={15} />}
-          label="Taxa de retorno"
+          label="Retorno · mês acum."
           value={
             loading || !period
               ? '—'
@@ -274,7 +274,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
-              <p className="text-xs text-muted">Contatos totais</p>
+              <p className="text-xs text-muted">Contatos totais (CRM · base)</p>
               {loading ? (
                 <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
               ) : (
@@ -288,15 +288,19 @@ export default function DashboardPage() {
                 <span className="text-xs text-muted">conversão</span>
               </div>
             </div>
-            <MiniStat icon={<Users size={15} />} label="Novos aguardando" value={loading ? '—' : String(novos)} />
+            <MiniStat
+              icon={<Users size={15} />}
+              label="Novos aguardando · CRM base"
+              value={loading ? '—' : String(novos)}
+            />
             <MiniStat
               icon={<Layers size={15} />}
-              label="Canais ativos (CRM)"
+              label="Canais ativos · CRM 30 dias"
               value={loading ? '—' : String(activeChannels)}
             />
           </div>
 
-          <SectionCard title="Contatos por dia">
+          <SectionCard title="Contatos por dia (CRM · 30 dias)">
             <div className="h-52 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
@@ -331,11 +335,14 @@ export default function DashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Tempo Médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
+          <SectionCard
+            title="Tempo Médio de atendimento (TM) por período"
+            badge={<Clock size={15} className="text-muted" />}
+          >
             {tm ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
-                <TmCompareCol title="Trimestre" current={tm.quarter.current} previous={tm.quarter.previous} />
+                <TmCompareCol title="Mês acumulado" current={tm.month.current} previous={tm.month.previous} />
+                <TmCompareCol title="Trimestre acumulado" current={tm.quarter.current} previous={tm.quarter.previous} />
               </div>
             ) : (
               <div className="h-16 animate-pulse rounded-2xl bg-card" />
@@ -354,13 +361,16 @@ export default function DashboardPage() {
                 <span className="font-semibold text-gold">
                   {CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}
                 </span>{' '}
-                é o canal CRM que mais traz contatos ({topChannel[1]} de {channelTotal}).
+                é o canal CRM que mais trouxe contatos nos últimos 30 dias ({topChannel[1]} de {channelTotal}).
               </p>
             </div>
           )}
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <SectionCard title="Contatos por canal (CRM)" badge={<CountBadge value={`${channelTotal}`} />}>
+            <SectionCard
+              title="Contatos por canal (CRM · 30 dias)"
+              badge={<CountBadge value={`${channelTotal}`} />}
+            >
               <div className="divide-y divide-border">
                 {channelData.map(([channel, count]) => (
                   <div key={channel} className="flex items-center justify-between py-3 text-sm">
@@ -374,7 +384,7 @@ export default function DashboardPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Status dos contatos" badge={<CountBadge value={`${statusTotal}`} />}>
+            <SectionCard title="Status dos contatos (CRM · base)" badge={<CountBadge value={`${statusTotal}`} />}>
               <div className="flex flex-col gap-2.5">
                 {[...(data?.byStatus ?? [])]
                   .sort(
@@ -399,7 +409,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6 lg:col-span-4">
-          <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
+          <SectionCard title={`Canais de agenda · snapshot do mês ${period?.label ?? '—'}`}>
             <p className="mb-2 text-xs text-muted">Avec 0056 (snapshot ~30 dias).</p>
             {(period?.booking_channels.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem canais sincronizados.</p>
@@ -415,7 +425,7 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="Como nos conheceram">
+          <SectionCard title="Como nos conheceram · snapshot do mês">
             <p className="mb-2 text-xs text-muted">Avec 0003 (aquisição).</p>
             {(period?.acquisition.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem dados de aquisição.</p>
@@ -431,7 +441,7 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
+          <SectionCard title={`Pacotes · mês acumulado ${period?.label ?? '—'}`}>
             <p className="mb-2 text-xs text-muted">
               Avec 0061 · {period?.packages_sold ?? 0} vendidos ·{' '}
               {period ? formatCurrency(period.packages_revenue) : '—'}
@@ -452,7 +462,7 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="Top serviços">
+          <SectionCard title="Top serviços · snapshot do mês">
             <p className="mb-2 text-xs text-muted">Avec 0032 (resumo). Detalhe em Relatórios.</p>
             {(period?.top_services.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem ranking sincronizado.</p>
@@ -471,7 +481,7 @@ export default function DashboardPage() {
           </SectionCard>
 
           <p className="text-xs text-muted">
-            Operação do dia:{' '}
+            Rotina diária:{' '}
             <Link href="/hoje" className="text-gold hover:underline">
               Hoje
             </Link>
@@ -490,7 +500,7 @@ export default function DashboardPage() {
       </div>
 
       <SectionCard
-        title="Ranking de profissionais"
+        title="Ranking de profissionais (snapshot · 30 dias)"
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (

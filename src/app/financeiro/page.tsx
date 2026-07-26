@@ -579,6 +579,7 @@ export default function FinanceiroPage() {
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Financeiro</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{kpis ? kpis.current.label : 'Este mês'}</h1>
+          <p className="mt-1 text-xs text-muted">KPIs do mês acumulado selecionado.</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">

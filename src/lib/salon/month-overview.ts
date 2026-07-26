@@ -65,7 +65,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'ocupação / top serviços / aquisição / canais / pacotes / retorno / novos',
     source: 'avec_snapshot',
-    note: 'Snapshot Avec (P1/P2/P3) mais próximo do fim do mês — não é soma diária ROM.',
+    note: 'Snapshot Avec (P1/P2/P3) mais próximo do limite do mês acumulado — não é soma diária ROM.',
   },
 ]
 
