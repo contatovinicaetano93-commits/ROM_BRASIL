@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "db:migrate": "node scripts/run-migrations.mjs",
     "check:db-driver": "node scripts/check-db-driver.mjs",
+    "check:brasil-db-host": "node scripts/check-brasil-db-host.mjs",
     "verify:deploy": "bash scripts/post-deploy-verification.sh"
   },
   "dependencies": {
