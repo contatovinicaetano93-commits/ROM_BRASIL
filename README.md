@@ -5,9 +5,9 @@ WhatsApp (IA de primeiro atendimento), Telegram (secretária de consulta prátic
 pra equipe) e Avec (sync de agenda/clientes), e centraliza tudo num painel de
 KPIs.
 
-Stack: Next.js (App Router) + TypeScript + Tailwind + Neon (Postgres serverless),
-API-first (front-end só fala com `/api/*`). Acesso ao banco por SQL direto
-(`@neondatabase/serverless`).
+Stack: Next.js (App Router) + TypeScript + Tailwind + Postgres (Supabase via
+`postgres.js`), API-first (front-end só fala com `/api/*`). Acesso ao banco por
+SQL direto. (Iguatemi continua em Neon — ver `deploy/SETUP-IGUATEMI.md`.)
 
 **Interface adaptativa:** mobile-first no celular (bottom bar, drawer) e layout
 desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
@@ -23,7 +23,7 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
   (Meta), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
-  linguagem natural, a IA responde puxando os KPIs do Neon.
+  linguagem natural, a IA responde puxando os KPIs do banco.
 - `src/app/dashboard` — painel com contatos por dia, por canal, por status e
   taxa de conversão.
 - `src/app/contatos` — lista dos últimos contatos (todos os canais) e formulário
@@ -37,9 +37,9 @@ ou investigar depois.
 
 ## PENDENTE — você precisa fazer manualmente
 
-1. **Criar um projeto Neon dedicado ao ROM** e copiar a `DATABASE_URL`
-   (connection string com `sslmode=require`) pro `.env.local`.
-2. **Rodar `db/schema.sql`** no SQL Editor do Neon (ou `psql`).
+1. **Criar um projeto Supabase (Postgres) dedicado ao ROM Brasil** e copiar a
+   `DATABASE_URL` (pooler com `sslmode=require`) pro `.env.local`.
+2. **Rodar `db/schema.sql`** no SQL Editor do Supabase (ou `psql`).
 3. **Claude (Anthropic)** — `ANTHROPIC_API_KEY` em [console.anthropic.com](https://console.anthropic.com)
    para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é

@@ -1,5 +1,5 @@
 -- ROM · Onboarding & KPIs de contato
--- Rodar no banco Neon (Postgres) dedicado ao ROM.
+-- Rodar no Postgres dedicado ao ROM (Brasil: Supabase; Iguatemi: Neon).
 
 create extension if not exists "pgcrypto";
 

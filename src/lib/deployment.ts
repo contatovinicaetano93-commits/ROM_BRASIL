@@ -53,7 +53,9 @@ export function validateDeploymentEnv(): DeploymentValidation {
   }
 
   if (!process.env.DATABASE_URL?.trim()) {
-    warnings.push('DATABASE_URL ausente — use um banco Neon dedicado por unidade (nunca compartilhe entre Brasil e Iguatemi).')
+    warnings.push(
+      'DATABASE_URL ausente — use um banco Postgres dedicado por unidade (Brasil: Supabase; Iguatemi: Neon — nunca compartilhe).',
+    )
   }
 
   if (!process.env.AVEC_API_TOKEN?.trim() && process.env.AVEC_MOCK !== '1' && process.env.AVEC_MOCK !== 'true') {
