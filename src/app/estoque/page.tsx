@@ -365,6 +365,7 @@ export default function EstoquePage() {
       `Gerado em ${new Date().toLocaleString('pt-BR')}`,
     )
     if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setError(null)
   }
 
   const notOnboarded =

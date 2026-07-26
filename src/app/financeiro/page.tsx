@@ -547,6 +547,7 @@ export default function FinanceiroPage() {
       `vs ${kpis.previous.label} · gerado em ${new Date().toLocaleString('pt-BR')}`,
     )
     if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setError(null)
   }
 
   async function removeExpense(id: string) {

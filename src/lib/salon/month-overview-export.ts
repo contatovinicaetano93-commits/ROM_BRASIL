@@ -2,6 +2,8 @@ import type { MonthOverview } from '@/lib/salon/month-overview'
 import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
 import { statusLabelPt } from '@/lib/salon/month-metrics'
 
+export { downloadTextFile, openPrintHtml } from '@/lib/salon/csv-print'
+
 function csvEscape(value: string | number | null | undefined): string {
   const s = value == null ? '' : String(value)
   if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -326,23 +328,3 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-/** Dispara download de CSV no browser. */
-export function downloadTextFile(filename: string, content: string, mime = 'text/csv;charset=utf-8') {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-/** Abre HTML em nova janela e aciona diálogo de impressão (salvar como PDF). */
-export function openPrintHtml(html: string) {
-  const w = window.open('', '_blank')
-  if (!w) return false
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  return true
-}

@@ -319,6 +319,7 @@ export default function RelatorioDiretoriaPage() {
     const csv = await res.text()
     const ok = await openCsvAsPdf(title, csv, `Gerado em ${new Date().toLocaleString('pt-BR')}`)
     if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setError(null)
   }
 
   function buildStockReportCsv(): string {
@@ -375,6 +376,7 @@ export default function RelatorioDiretoriaPage() {
       `Gerado em ${new Date().toLocaleString('pt-BR')}`,
     )
     if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setError(null)
   }
 
   async function send0011() {
@@ -1066,11 +1068,16 @@ export default function RelatorioDiretoriaPage() {
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
             <span className="text-foreground">Etapa 3 · estoque valorizado</span>
             <span className="ml-auto flex flex-wrap gap-2">
-              <ExportBtn onClick={downloadStockCsv} label="CSV estoque" />
+              <ExportBtn
+                onClick={downloadStockCsv}
+                label="CSV estoque"
+                disabled={!stockKpis}
+              />
               <ExportBtn
                 onClick={() => void downloadStockPdf()}
                 label="PDF estoque"
                 icon="pdf"
+                disabled={!stockKpis}
               />
             </span>
           </div>
@@ -1279,17 +1286,20 @@ function ExportBtn({
   onClick,
   label,
   icon = 'csv',
+  disabled = false,
 }: {
   onClick: () => void
   label: string
   icon?: 'csv' | 'pdf'
+  disabled?: boolean
 }) {
   const Icon = icon === 'pdf' ? FileText : Download
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[0.65rem] text-foreground hover:border-gold/40 hover:text-gold"
+      disabled={disabled}
+      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[0.65rem] text-foreground hover:border-gold/40 hover:text-gold disabled:opacity-50 disabled:hover:border-border disabled:hover:text-foreground"
     >
       <Icon size={12} />
       {label}
