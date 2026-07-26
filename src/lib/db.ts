@@ -11,6 +11,10 @@ try {
 /**
  * Cliente postgres.js + helpers neon-compat (query / transaction).
  * Também expõe o helper de lista: sql`… where id in ${sql(ids)}`.
+ *
+ * Do NOT switch back to neon() from @neondatabase/serverless:
+ * neon() is HTTP-only and fails against *.supabase.com / pooler hosts.
+ * Iguatemi remains on Neon in its own repo.
  */
 export type Sql = {
   // Tagged template + helper sql(ids) para IN (...)
