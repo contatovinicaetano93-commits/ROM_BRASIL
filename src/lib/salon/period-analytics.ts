@@ -1,6 +1,6 @@
 import { getSql } from '@/lib/db'
-import { asJsonArray } from '@/lib/sql-json'
 import { todayIso } from '@/lib/salon/format'
+import { asJsonArray } from '@/lib/sql-json'
 import {
   getSalonP1DailyNear,
   type P1AcquisitionRow,
@@ -26,13 +26,31 @@ function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
+/** Mês corrente: até hoje; meses fechados: 1º→último dia. */
+export function monthToDateRange(
+  monthKey: string,
+  referenceDay = todayIso(),
+): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+}
+
 function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
   return `${MONTH_PT[idx] ?? m}/${y}`
 }
 
-/** Média de ocupação 0–1 a partir do ranking 0126 (ponderada por atendidos). */
+/**
+ * Coerce ocupação para fração (≥0), sem clipar overbooking.
+ * Snapshot já vem de parsePct (0.8 / 1.063); só corrige legado em pontos (ex.: 67.79).
+ */
+export function coerceOccupancyFraction(raw: number): number | null {
+  if (!Number.isFinite(raw) || raw < 0) return null
+  return raw > 2 ? raw / 100 : raw
+}
+
+/** Média de ocupação 0–1+ a partir do 0126 (ponderada por atendidos). */
 export function averageOccupancy(professionals: P1ProfessionalRow[]): number | null {
   if (!professionals.length) return null
   let weighted = 0
@@ -41,8 +59,8 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
   let count = 0
   for (const p of professionals) {
     if (p.occupancy == null) continue
-    const occ = Number(p.occupancy)
-    if (!(occ >= 0) || Number.isNaN(occ)) continue
+    const occ = coerceOccupancyFraction(Number(p.occupancy))
+    if (occ == null) continue
     simple += occ
     count += 1
     const w = Math.max(0, Number(p.attended) || 0)
@@ -142,7 +160,7 @@ export async function computePeriodAnalytics(opts?: {
   month?: string
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? currentMonthKey(todayIso())
-  const { from, to } = monthRange(month)
+  const { from, to } = monthToDateRange(month)
   const [totals, loss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
@@ -152,10 +170,11 @@ export async function computePeriodAnalytics(opts?: {
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
-  const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals).slice(0, 8)
-  const packages = asJsonArray<P2PackageRow>(p2?.packages).slice(0, 10)
+  const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals)
+  const allPackages = asJsonArray<P2PackageRow>(p2?.packages)
+  // revenue no snapshot 0061 já é faturamento da linha (não preço unitário).
   const packages_revenue =
-    Math.round(packages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+    Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
 
   return {
     month,
@@ -168,14 +187,14 @@ export async function computePeriodAnalytics(opts?: {
     no_shows: loss.no_shows,
     ticket_avg,
     lost_revenue: estimateLostRevenue(loss.cancelled, loss.no_shows, ticket_avg),
-    packages,
+    packages: allPackages.slice(0, 10),
     packages_sold: Number(p2?.packages_sold ?? 0) || 0,
     packages_revenue,
     booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
     acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
     return_rate: p3 != null ? Number(p3.return_rate) : null,
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
-    top_professionals: professionals,
+    top_professionals: professionals.slice(0, 8),
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
   }
 }

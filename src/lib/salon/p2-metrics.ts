@@ -102,7 +102,7 @@ export async function ensureSalonP2Table() {
 }
 
 function jsonArrLen(v: unknown): number {
-  return Array.isArray(v) ? v.length : 0
+  return asJsonArray(v).length
 }
 
 /** Último dia com canais/pacotes/notas — usado quando o 0081 cria o dia sem comércio. */
