@@ -13,7 +13,6 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
-  clearOrphanSchedulesForDay,
   clearServiceSchedule,
 } from '@/lib/services'
 import {
@@ -194,6 +193,15 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   }
 }
 
+/** Status 0051 de comanda fechada — match por palavra, não substring. */
+function isPaidAppointmentStatus(status: string): boolean {
+  const s = status.toLowerCase()
+  if (/\bn[aã]o\s+realizad/.test(s) || /inconclus/.test(s)) return false
+  return /\b(pago|paga|finalizado|finalizada|conclu[ií]do|conclu[ií]da|atendido|atendida|realizado|realizada)\b/.test(
+    s,
+  )
+}
+
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
@@ -204,10 +212,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
   const today = todayIso()
   const noShowsByDay = new Map<string, number>()
-  /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
-  const todayOpenServiceIds: string[] = []
   let todayBooked = 0
-  let todayRows = 0
 
   for (const row of result.rows) {
     try {
@@ -223,12 +228,10 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
       }
 
-      const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
+      // Palavras inteiras — evita falso positivo em "inconcluso" / "não realizado" / "atendimento".
+      const isPaid = isPaidAppointmentStatus(status)
       const isCancelled = /cancel/.test(status)
-      if (apptDay === today) {
-        todayRows++
-        if (!isCancelled) todayBooked++
-      }
+      if (apptDay === today && !isCancelled) todayBooked++
 
       const contact = await upsertContact({
         avecClientId: appt.avecClientId ?? undefined,
@@ -263,7 +266,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
               professionalName: appt.professional,
             })
           }
-          if (apptDay === today) todayOpenServiceIds.push(service.id)
         } else if (isCancelled && apptDay === today && service.scheduled_at) {
           await clearServiceSchedule(service.id)
         }
@@ -281,17 +283,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia.
-  if (todayRows > 0) {
-    try {
-      const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
-      if (cleared > 0) {
-        stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
-      }
-      await upsertSalonMetrics(today, { appointments: todayBooked })
-    } catch (e) {
-      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
-    }
+  // KPI Agendados = abertos+pagos do dia (fonte 0051). Atualiza mesmo com 0 linhas do dia.
+  try {
+    await upsertSalonMetrics(today, { appointments: todayBooked })
+  } catch (e) {
+    stats.errors.push(`agenda kpi: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   for (const [day, no_shows] of noShowsByDay) {

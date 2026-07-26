@@ -116,12 +116,12 @@ async function computeReturnRateFromAvec(
     }
     if (cohort.size <= 0) return null
 
-    let nonInCohort = 0
+    const nonInCohort = new Set<string>()
     for (const row of nonReturnerRows) {
       const k = clientMatchKey(row)
-      if (k && cohort.has(k)) nonInCohort++
+      if (k && cohort.has(k)) nonInCohort.add(k)
     }
-    const returned = Math.max(0, cohort.size - nonInCohort)
+    const returned = Math.max(0, cohort.size - nonInCohort.size)
     return Math.round((returned / cohort.size) * 10000) / 10000
   } catch (e) {
     stats.warnings?.push(

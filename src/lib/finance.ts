@@ -119,8 +119,23 @@ function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
-function monthToDateRange(monthKey: string, referenceDay = todayIso()): { from: string; to: string } {
+function monthToDateRange(
+  monthKey: string,
+  referenceDay = todayIso(),
+  opts?: { alignMtdToDay?: string },
+): { from: string; to: string } {
   const range = monthRange(monthKey)
+  const mtdDay = opts?.alignMtdToDay
+  if (mtdDay) {
+    const dayNum = Number(mtdDay.slice(8, 10))
+    const lastDay = Number(range.to.slice(8, 10))
+    if (Number.isFinite(dayNum) && dayNum > 0) {
+      return {
+        from: range.from,
+        to: `${monthKey}-${String(Math.min(dayNum, lastDay)).padStart(2, '0')}`,
+      }
+    }
+  }
   return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
 }
 
@@ -345,8 +360,11 @@ export interface FinanceKpis {
   previous: FinanceKpiBucket
 }
 
-async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
-  const { from, to } = monthToDateRange(monthKey)
+async function buildBucket(
+  monthKey: string,
+  opts?: { alignMtdToDay?: string },
+): Promise<FinanceKpiBucket> {
+  const { from, to } = monthToDateRange(monthKey, todayIso(), opts)
   const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
@@ -393,11 +411,15 @@ export async function computeFinanceKpis(opts?: {
   compareMonth?: string
 }): Promise<FinanceKpis> {
   await ensureFiscalSplitTable().catch(() => undefined)
-  const current = opts?.month ?? currentMonthKey(todayIso())
+  const today = todayIso()
+  const current = opts?.month ?? currentMonthKey(today)
   const compare = opts?.compareMonth ?? previousMonthKey(current)
+  // Mês corrente vs anterior: ambos MTD no mesmo dia (não comparar parcial com mês cheio).
+  const alignMtdToDay = current === currentMonthKey(today) ? today : undefined
+  const mtdOpts = alignMtdToDay ? { alignMtdToDay } : undefined
   const [currentBucket, previousBucket] = await Promise.all([
-    buildBucket(current),
-    buildBucket(compare),
+    buildBucket(current, mtdOpts),
+    buildBucket(compare, mtdOpts),
   ])
   return { current: currentBucket, previous: previousBucket }
 }

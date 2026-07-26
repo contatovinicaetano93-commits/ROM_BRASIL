@@ -2,7 +2,11 @@
  * One-shot: só 0044 (movimentos) → stock_movements / CMV.
  * Usage: DATABASE_URL=... AVEC_API_TOKEN=... AVEC_UNIT_ID=... npx tsx scripts/run-stock-movements-once.ts
  */
-import { fetchAllAvecReport, periodRange } from '../src/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  formatTruncationWarning,
+  periodRange,
+} from '../src/lib/avec/client'
 import { normalizeStockMovementRow } from '../src/lib/avec/normalize'
 import { applyStockMovement } from '../src/lib/stock'
 import { getSql } from '../src/lib/db'
@@ -26,15 +30,18 @@ async function main() {
     const params = { inicio, fim, limit: 250 }
     console.log('0044', params)
     const result = await fetchAllAvecReport('0044', params)
-    const rows = Array.isArray(result)
-      ? result
-      : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
-    await saveReportSnapshot('0044', params, rows as Record<string, unknown>[])
+    if (result.truncated) {
+      const msg = formatTruncationWarning('0044', result)
+      console.error(msg)
+      throw new Error(msg)
+    }
+    const rows = result.rows
+    await saveReportSnapshot('0044', params, rows)
 
     let synced = 0
     let skipped = 0
     let bad = 0
-    for (const row of rows as Record<string, unknown>[]) {
+    for (const row of rows) {
       const mv = normalizeStockMovementRow(row)
       if (!mv) {
         bad++
