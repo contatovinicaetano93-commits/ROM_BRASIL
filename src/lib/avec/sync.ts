@@ -303,7 +303,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 }
 
-function servicesCreatedRecentlyfunction servicesCreatedRecently(service: { created_at: string }) {
+function servicesCreatedRecently(service: { created_at: string }) {
   return Date.now() - new Date(service.created_at).getTime() < 5000
 }
 
