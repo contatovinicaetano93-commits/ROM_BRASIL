@@ -102,6 +102,7 @@ select
   status,
   count(*)::int as contacts_count
 from contacts
+where anonymized_at is null
 group by 1;
 
 create or replace view v_kpi_conversion as
@@ -112,7 +113,8 @@ select
     0
   ) as conversion_rate,
   count(*)::int as total_contacts
-from contacts;
+from contacts
+where anonymized_at is null;
 
 -- Snapshots imutáveis dos relatórios Avec — reprocessável e resiliente.
 create table if not exists avec_report_snapshots (
