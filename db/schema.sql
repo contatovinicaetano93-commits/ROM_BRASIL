@@ -86,12 +86,14 @@ create index if not exists avec_sync_runs_created_idx on avec_sync_runs (created
 
 -- KPIs agregados por dia e canal — o painel administrativo lê daqui.
 -- count(*) é bigint; o cast ::int garante que o driver retorne número (não string).
+-- day = data de calendário America/Sao_Paulo do primeiro contato (não timestamptz).
 create or replace view v_kpi_daily as
 select
-  date_trunc('day', created_at) as day,
+  (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date as day,
   channel,
   count(*)::int as contacts_count
 from contacts
+where anonymized_at is null
 group by 1, 2
 order by 1 desc;
 

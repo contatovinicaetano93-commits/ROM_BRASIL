@@ -21,6 +21,7 @@
     { "id": "018_audit_alerts", "file": "delta-audit-alerts.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "019_whatsapp_aftercare", "file": "delta-whatsapp-aftercare.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "020_month_metrics", "file": "delta-month-metrics.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "021_contact_importado", "file": "delta-contact-importado.sql", "panels": ["brasil", "iguatemi"] }
+    { "id": "021_contact_importado", "file": "delta-contact-importado.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "022_kpi_daily_window", "file": "delta-kpi-daily-window.sql", "panels": ["brasil", "iguatemi"] }
   ]
 }
