@@ -57,14 +57,16 @@ async function main() {
   const byAvec = new Map(products.map((p) => [String(p.avec_product_id), p]))
   console.log('products cached', byAvec.size)
 
+  // Epoch ms matches applyStockMovement's occurred_at::timestamptz equality
+  // (truncated text keys diverge across PG session TZ vs ISO from normalize).
   const existing = (await sql`
     select product_id::text as product_id, type, quantity::float8 as quantity,
-           occurred_at::text as occurred_at
+           occurred_at
     from stock_movements where source = 'avec_0044'
-  `) as { product_id: string; type: string; quantity: number; occurred_at: string }[]
+  `) as { product_id: string; type: string; quantity: number; occurred_at: Date | string }[]
   const seen = new Set(
     existing.map(
-      (r) => `${r.product_id}|${r.type}|${r.quantity}|${String(r.occurred_at).slice(0, 19)}`,
+      (r) => `${r.product_id}|${r.type}|${r.quantity}|${new Date(r.occurred_at).getTime()}`,
     ),
   )
   console.log('existing movements', seen.size)
@@ -129,8 +131,7 @@ async function main() {
           prod = inserted[0]!
           byAvec.set(String(mv.avecProductId), prod)
         }
-        const occurredKey = String(mv.occurredAt).replace('T', ' ').slice(0, 19)
-        const key = `${prod.id}|${mv.type}|${mv.quantity}|${occurredKey}`
+        const key = `${prod.id}|${mv.type}|${mv.quantity}|${new Date(mv.occurredAt).getTime()}`
         if (seen.has(key)) {
           skipped++
           continue

@@ -463,7 +463,7 @@ async function syncCancellations(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 

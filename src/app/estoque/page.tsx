@@ -120,12 +120,22 @@ interface SyncStatus {
   last_full: SyncRun | null
 }
 
+/** Run de estoque mais recente (fast ou full) — mesma regra do banner de erro. */
+function latestStockRun(status: SyncStatus | null): SyncRun | null {
+  if (!status) return null
+  const fast = status.last_fast
+  const full = status.last_full
+  const fastAt = fast?.created_at ? Date.parse(fast.created_at) : 0
+  const fullAt = full?.created_at ? Date.parse(full.created_at) : 0
+  return fastAt >= fullAt ? fast : full
+}
+
 function SyncBadge({ status }: { status: SyncStatus | null }) {
   if (!status) return null
   if (!status.stock_auth_configured) {
     return <CountBadge value="Login do estoque não configurado" tone="danger" />
   }
-  const run = status.last_fast
+  const run = latestStockRun(status)
   if (!run) return <CountBadge value="Ainda não sincronizado" tone="danger" />
 
   const ui = deriveAvecSyncUi({
@@ -148,13 +158,7 @@ function stockSyncWarnings(status: SyncStatus | null): string[] {
 
 /** Erro só do sync de estoque mais recente — não herda falha antiga do full. */
 function latestStockRunError(status: SyncStatus | null): string | null {
-  if (!status) return null
-  const fast = status.last_fast
-  const full = status.last_full
-  const fastAt = fast?.created_at ? Date.parse(fast.created_at) : 0
-  const fullAt = full?.created_at ? Date.parse(full.created_at) : 0
-  const latest = fastAt >= fullAt ? fast : full
-  return latest?.error ?? null
+  return latestStockRun(status)?.error ?? null
 }
 
 function StockKpiCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warning' | 'success' }) {
