@@ -7,9 +7,9 @@ Instância **100% isolada** do ROM CLUB BRASIL. Mesmo repositório GitHub, proje
 | Recurso | Brasil | Iguatemi |
 |---------|--------|----------|
 | Repositório Git | `ROM` (compartilhado) | `ROM` (compartilhado) |
-| Projeto Vercel | `rom-club-brasil` | `rom-club-iguatemi` |
-| Projeto Neon | `rom-club-brasil` | `rom-club-iguatemi` |
-| `DATABASE_URL` | exclusivo | exclusivo |
+| Projeto Vercel | `rom-club-brasil` / `rom-brasil` | `rom-club-iguatemi` / `rom-iguatemi` |
+| Banco | **Supabase** (pooler) | **Neon** `rom-club-iguatemi` |
+| `DATABASE_URL` | exclusivo (Supabase) | exclusivo (Neon) |
 | `AVEC_API_TOKEN` | loja Brasil | loja Iguatemi |
 | WhatsApp / Telegram | instância/bot Brasil | instância/bot Iguatemi |
 

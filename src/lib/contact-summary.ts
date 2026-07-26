@@ -41,8 +41,9 @@ function withUrgency(
 async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   if (ids.length === 0) return []
   const sql = getSql()
+  // postgres.js exige o helper sql(ids) para expandir IN (...); neon aceitava array cru.
   return (await sql`
-    select * from contacts where id in ${ids}
+    select * from contacts where id in ${sql(ids)}
   `) as ContactRow[]
 }
 
@@ -136,7 +137,7 @@ export async function listContactsWithSummary(
         `) as ContactRow[])
       : ((await sql`
           select * from contacts
-          where not (id = any(${urgentIds}::uuid[]))
+          where id not in ${sql(urgentIds)}
           order by created_at desc
           limit ${remaining}
         `) as ContactRow[])

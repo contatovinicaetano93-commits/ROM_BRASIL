@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { asJsonArray } from '@/lib/sql-json'
 
 export interface P2ChannelRow {
   channel: string
@@ -162,15 +163,20 @@ export async function upsertSalonP2Daily(
     (patch.ratings_count === undefined && Number(cur?.ratings_count ?? 0) === 0)
   const prev = needsPrev ? await previousCommerceSnapshot(day) : null
 
+  const curChannels = asJsonArray<P2ChannelRow>(cur?.booking_channels)
+  const curPackages = asJsonArray<P2PackageRow>(cur?.packages)
+  const prevChannels = asJsonArray<P2ChannelRow>(prev?.booking_channels)
+  const prevPackages = asJsonArray<P2PackageRow>(prev?.packages)
+
   const booking_channels =
     patch.booking_channels ??
-    (curChannelsEmpty ? undefined : (cur?.booking_channels as P2ChannelRow[] | undefined)) ??
-    (prev?.booking_channels as P2ChannelRow[] | undefined) ??
+    (curChannelsEmpty ? undefined : curChannels) ??
+    (prevChannels.length ? prevChannels : undefined) ??
     []
   const packages =
     patch.packages ??
-    (curPackagesEmpty ? undefined : (cur?.packages as P2PackageRow[] | undefined)) ??
-    (prev?.packages as P2PackageRow[] | undefined) ??
+    (curPackagesEmpty ? undefined : curPackages) ??
+    (prevPackages.length ? prevPackages : undefined) ??
     []
   const packages_sold =
     patch.packages_sold ??
@@ -185,7 +191,7 @@ export async function upsertSalonP2Daily(
     (Number(cur?.ratings_count ?? 0) === 0 && prev
       ? Number(prev.ratings_count ?? 0)
       : Number(cur?.ratings_count ?? 0))
-  const payment_mix = patch.payment_mix ?? (cur?.payment_mix as P2PaymentRow[] | undefined) ?? []
+  const payment_mix = patch.payment_mix ?? asJsonArray<P2PaymentRow>(cur?.payment_mix)
   const birthday_count =
     patch.birthday_count ??
     (Number(cur?.birthday_count ?? 0) === 0 && prev
@@ -199,12 +205,12 @@ export async function upsertSalonP2Daily(
     )
     values (
       ${day}::date,
-      ${JSON.stringify(booking_channels)}::jsonb,
-      ${JSON.stringify(packages)}::jsonb,
+      ${booking_channels},
+      ${packages},
       ${packages_sold},
       ${ratings_avg},
       ${ratings_count},
-      ${JSON.stringify(payment_mix)}::jsonb,
+      ${payment_mix},
       ${birthday_count},
       now()
     )

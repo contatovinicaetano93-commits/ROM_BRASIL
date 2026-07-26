@@ -54,7 +54,7 @@ export async function upsertSalonP3Daily(
       ${day}::date,
       ${return_rate},
       ${new_clients_period},
-      ${JSON.stringify(revenue_curve)}::jsonb,
+      ${revenue_curve},
       now()
     )
     on conflict (day) do update set

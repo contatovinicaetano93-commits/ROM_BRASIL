@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Import AvecLake comanda_itens into client_services.last_done_at history."""
+"""Import AvecLake comanda_itens into client_services.last_done_at history.
+
+DB URLs (never commit secrets):
+  DATABASE_URL_BRASIL  → Supabase pooler (prefer SESSION :5432; see
+                         /tmp/rom-dbs/supabase-brasil.env + brasil-supabase.env.note)
+  DATABASE_URL_IGUATEMI → Neon Iguatemi (unchanged)
+  DATABASE_URL_ROMSALES → Neon RomSales (unchanged)
+
+Do NOT use dead Neon BR (ep-long-sun-*.neon.tech).
+"""
 from __future__ import annotations
 
 import os
@@ -17,7 +26,12 @@ SALONS = {"brasil": 40613, "iguatemi": 99801}
 
 
 def load_env():
-    for path in ("/tmp/avec-lake/env", "/tmp/rom-dbs/env"):
+    # Prefer canonical Supabase BR file, then aggregate helper (may redefine BRASIL).
+    for path in (
+        "/tmp/rom-dbs/supabase-brasil.env",
+        "/tmp/rom-dbs/env",
+        "/tmp/avec-lake/env",
+    ):
         if not os.path.exists(path):
             continue
         for line in open(path):
@@ -27,6 +41,11 @@ def load_env():
             if "=" in line and not line.startswith("#"):
                 k, v = line.split("=", 1)
                 os.environ[k] = v.strip().strip("'\"")
+    # Map SESSION alias → DATABASE_URL_BRASIL if aggregate missing/ stale Neon
+    session = os.environ.get("DATABASE_URL_BRASIL_SUPABASE_SESSION", "").strip()
+    br = os.environ.get("DATABASE_URL_BRASIL", "").strip()
+    if session and ("neon.tech" in br or not br):
+        os.environ["DATABASE_URL_BRASIL"] = session
 
 
 def athena():
