@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AVEC_DUMP_SOURCE_PREFIXES,
   isAvecImportSource,
   mergeContactStatus,
   resolveConflictStatus,
@@ -85,5 +86,14 @@ describe('isAvecImportSource', () => {
     expect(isAvecImportSource('avec_sync_attended')).toBe(false)
     expect(isAvecImportSource('whatsapp')).toBe(false)
     expect(isAvecImportSource(null)).toBe(false)
+  })
+
+  it('prefixos exportados cobrem os mesmos dumps', () => {
+    expect(AVEC_DUMP_SOURCE_PREFIXES).toEqual([
+      'avec_sync_clients',
+      'avec_sync_returning',
+      'avec_backfill',
+      'avec_lake',
+    ])
   })
 })

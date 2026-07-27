@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
+import { sqlNotDumpSource } from '@/lib/contacts'
 
 export interface ContactKpis {
   /** Entrada real no funil (exclui dump Avec `importado` / sources de dump). */
@@ -23,6 +24,7 @@ export { contactKpiWindow }
 export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
   const sql = getSql()
   const window = contactKpiWindow(dayLimit)
+  const notDump = sqlNotDumpSource(sql)
 
   // byDay = aquisição recente (exclui dump Avec por status e source).
   // byStatus = inventário completo da base (transparência).
@@ -36,10 +38,7 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
       from contacts
       where anonymized_at is null
         and status <> 'importado'
-        and coalesce(source, '') not like 'avec_sync_clients%'
-        and coalesce(source, '') not like 'avec_sync_returning%'
-        and coalesce(source, '') not like 'avec_backfill%'
-        and coalesce(source, '') not like 'avec_lake%'
+        and ${notDump}
         and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
           >= ${window.from}::date
         and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date

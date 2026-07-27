@@ -2,7 +2,6 @@ import { getSql } from '@/lib/db'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
-  updateContact,
   logEvent,
   setPreferredManicurist,
   setPreferredHairstylist,
@@ -296,8 +295,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         durationCount++
       }
 
-      // Passa convertido no upsert — default 'novo' não pode rebaixar importado nem
-      // criar falso "Novo lead" antes do updateContact.
+      // status convertido no upsert — default 'novo' não rebaixa importado.
       const contact = await upsertContact({
         avecClientId: att.avecClientId ?? undefined,
         name: att.clientName,
@@ -306,8 +304,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         source: mode === 'fast' ? 'avec_sync_attended_fast' : 'avec_sync_attended',
         status: 'convertido',
       })
-
-      await updateContact(contact.id, { status: 'convertido' })
 
       if (att.serviceName) {
         const service = await findOrCreateService(contact.id, att.serviceName)

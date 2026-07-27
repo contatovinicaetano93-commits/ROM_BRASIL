@@ -1,4 +1,4 @@
-import { getSql } from '@/lib/db'
+import { getSql, type Sql } from '@/lib/db'
 import { normalizePhone } from '@/lib/avec/normalize'
 
 type Channel = 'whatsapp' | 'telegram' | 'avec' | 'instagram' | 'manual'
@@ -61,15 +61,50 @@ export function resolveConflictStatus(
   return mergeContactStatus(current, incoming)
 }
 
-/** Origens de dump Avec / lake — não contam como aquisição de funil (gráfico 30d). */
+/** Prefixos de source = dump Avec / lake (não são aquisição de funil). */
+export const AVEC_DUMP_SOURCE_PREFIXES = [
+  'avec_sync_clients',
+  'avec_sync_returning',
+  'avec_backfill',
+  'avec_lake',
+] as const
+
 export function isAvecImportSource(source: string | null | undefined): boolean {
   const s = source ?? ''
-  return (
-    s.startsWith('avec_sync_clients') ||
-    s.startsWith('avec_sync_returning') ||
-    s.startsWith('avec_backfill') ||
-    s.startsWith('avec_lake')
-  )
+  return AVEC_DUMP_SOURCE_PREFIXES.some((prefix) => s.startsWith(prefix))
+}
+
+/** Fragmento SQL: source não é dump Avec. Alinhar com AVEC_DUMP_SOURCE_PREFIXES. */
+export function sqlNotDumpSource(sql: Sql) {
+  return sql`(
+    coalesce(source, '') not like 'avec_sync_clients%'
+    and coalesce(source, '') not like 'avec_sync_returning%'
+    and coalesce(source, '') not like 'avec_backfill%'
+    and coalesce(source, '') not like 'avec_lake%'
+  )`
+}
+
+/** CASE do ON CONFLICT — único para phone e avec_client_id. */
+function sqlUpsertConflictStatus(sql: Sql) {
+  return sql`case
+    when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+    when excluded.status = 'perdido' then 'perdido'
+    when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+    when contacts.status = 'perdido' then 'perdido'
+    when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
+    when (
+      case excluded.status
+        when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+        when 'agendado' then 3 when 'convertido' then 4 else 0
+      end
+    ) > (
+      case contacts.status
+        when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+        when 'agendado' then 3 when 'convertido' then 4 else 0
+      end
+    ) then excluded.status
+    else contacts.status
+  end`
 }
 
 export interface ContactRow {
@@ -95,6 +130,7 @@ export interface ContactRow {
 export async function upsertContact(input: UpsertContactInput): Promise<ContactRow> {
   const sql = getSql()
   const phone = input.phone ? normalizePhone(input.phone) ?? input.phone.trim() : null
+  const statusCase = sqlUpsertConflictStatus(sql)
 
   // Optimized UPSERT: use avec_client_id when available (primary upsert key)
   // Falls back to phone-based lookup only if no avec_client_id
@@ -116,26 +152,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         name = coalesce(excluded.name, contacts.name),
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
-        -- Rank espelha mergeContactStatus: não rebaixa; importado≠novo.
-        status = case
-          when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-          when excluded.status = 'perdido' then 'perdido'
-          when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
-          when contacts.status = 'perdido' then 'perdido'
-          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-          when (
-            case excluded.status
-              when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
-              when 'agendado' then 3 when 'convertido' then 4 else 0
-            end
-          ) > (
-            case contacts.status
-              when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
-              when 'agendado' then 3 when 'convertido' then 4 else 0
-            end
-          ) then excluded.status
-          else contacts.status
-        end
+        status = ${statusCase}
       returning *
     `) as ContactRow[]
     return rows[0]
@@ -157,26 +174,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
-      -- Rank espelha mergeContactStatus: não rebaixa; importado≠novo.
-      status = case
-        when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-        when excluded.status = 'perdido' then 'perdido'
-        when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
-        when contacts.status = 'perdido' then 'perdido'
-        when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-        when (
-          case excluded.status
-            when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
-            when 'agendado' then 3 when 'convertido' then 4 else 0
-          end
-        ) > (
-          case contacts.status
-            when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
-            when 'agendado' then 3 when 'convertido' then 4 else 0
-          end
-        ) then excluded.status
-        else contacts.status
-      end
+      status = ${statusCase}
     where contacts.phone is not null
     returning *
   `) as ContactRow[]

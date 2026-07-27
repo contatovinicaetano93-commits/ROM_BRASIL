@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { sqlNotDumpSource } from '@/lib/contacts'
 import { todayIso } from '@/lib/salon/format'
 
 export interface SalonDailyMetrics {
@@ -117,6 +118,7 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
+  const notDump = sqlNotDumpSource(sql)
 
   const [apptRows, newRows] = await Promise.all([
     sql`
@@ -129,10 +131,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       select count(*)::int as n from contacts
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
         and status <> 'importado'
-        and coalesce(source, '') not like 'avec_sync_clients%'
-        and coalesce(source, '') not like 'avec_sync_returning%'
-        and coalesce(source, '') not like 'avec_backfill%'
-        and coalesce(source, '') not like 'avec_lake%'
+        and ${notDump}
     ` as unknown as Promise<{ n: number }[]>,
   ])
 
