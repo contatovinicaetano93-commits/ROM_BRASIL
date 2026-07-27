@@ -100,10 +100,12 @@ export default function AdminPage() {
   const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [refreshingToken, setRefreshingToken] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
   const [seedPreset, setSeedPreset] = useState<RomSeedPreset>(brand.panel)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
   const [connMsg, setConnMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -164,6 +166,49 @@ export default function AdminPage() {
       if (json.data) setAvec(json.data)
     } catch (e) {
       setConnMsg(String(e))
+    }
+  }
+
+  async function refreshAvecToken() {
+    setRefreshingToken(true)
+    setRefreshMsg(null)
+    try {
+      const res = await apiFetch('/api/avec/refresh-token?force=1', {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      const json = await res.json()
+      if (json.error) {
+        setRefreshMsg(`Erro: ${json.error}`)
+        return
+      }
+      const data = json.data as {
+        refreshed?: boolean
+        skipped?: boolean
+        hours_left?: number
+        note?: string
+      } | null
+      if (data?.refreshed) {
+        setRefreshMsg(
+          `Token renovado (~${Math.round(Number(data.hours_left ?? 0))}h). Rodando sync…`,
+        )
+        const syncRes = await apiFetch('/api/avec/sync?mode=full', {
+          method: 'POST',
+          cache: 'no-store',
+        })
+        const syncJson = await syncRes.json()
+        if (syncJson.error) setRefreshMsg(`Token ok, mas sync falhou: ${syncJson.error}`)
+        else {
+          setRefreshMsg(`Token ok + sync ${syncJson.data?.status ?? 'ok'}.`)
+        }
+      } else {
+        setRefreshMsg(data?.note ?? 'Refresh adiado (token ainda válido).')
+      }
+      await load()
+    } catch (e) {
+      setRefreshMsg(String(e))
+    } finally {
+      setRefreshingToken(false)
     }
   }
 
@@ -426,10 +471,10 @@ export default function AdminPage() {
                         )}
                         {isAvecTokenExpiredError(avec.last.error) && (
                           <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                            Token Avec expirado — renovar com{' '}
-                            <code className="text-[0.7rem]">node scripts/refresh-avec-token.mjs</code>{' '}
-                            e atualizar <code className="text-[0.7rem]">AVEC_API_TOKEN</code> na
-                            Vercel.
+                            Token Avec expirado — use o botão <strong>Renovar token Avec</strong>{' '}
+                            abaixo (precisa de <code className="text-[0.7rem]">AVEC_LOGIN_EMAIL</code>{' '}
+                            / <code className="text-[0.7rem]">AVEC_LOGIN_PASSWORD</code> na Vercel).
+                            Fallback: <code className="text-[0.7rem]">node scripts/refresh-avec-token.mjs</code>.
                           </p>
                         )}
                       </>
@@ -463,9 +508,22 @@ export default function AdminPage() {
                 <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 5 min + full 10 min
                 como backup; webhook dispara sync em tempo real.
               </p>
-              <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
-                {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
+              <PrimaryButton
+                type="button"
+                onClick={refreshAvecToken}
+                disabled={refreshingToken || syncing}
+              >
+                {refreshingToken ? 'Renovando token…' : 'Renovar token Avec (force) + sync'}
               </PrimaryButton>
+              {refreshMsg && <p className="text-xs text-muted">{refreshMsg}</p>}
+              <button
+                type="button"
+                onClick={runAvecSync}
+                disabled={syncing || refreshingToken || !avec.configured}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground/90 disabled:opacity-50 lg:hover:bg-card"
+              >
+                {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
+              </button>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
             </div>
           ) : (
