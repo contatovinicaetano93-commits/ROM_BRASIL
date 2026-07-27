@@ -1,4 +1,10 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  periodRange,
+  periodRangeEndingOn,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
+import type { SyncKpiAnchorOpts } from '@/lib/avec/sync-p1'
 import {
   isP3NonReturnerRow,
   normalizeP3CurveRow,
@@ -27,17 +33,18 @@ function todayIsoLocal() {
 }
 
 /**
- * Taxa de retorno local: clientes com visita nos 45 dias antes do mês corrente
- * que também tiveram visita no mês corrente.
+ * Taxa de retorno local: clientes com visita nos 45 dias antes do mês da âncora
+ * que também tiveram visita no mês (até o dia âncora).
  */
-async function computeLocalReturnRate(): Promise<number | null> {
+async function computeLocalReturnRate(anchorDay = todayIsoLocal()): Promise<number | null> {
   const sql = getSql()
+  const monthStart = `${anchorDay.slice(0, 7)}-01`
   const rows = (await sql`
     with bounds as (
       select
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date - 45) as p1_start,
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date) as month_start,
-        timezone('America/Sao_Paulo', now())::date as today
+        (${monthStart}::date - 45) as p1_start,
+        ${monthStart}::date as month_start,
+        ${anchorDay}::date as today
     ),
     visited_p1 as (
       select distinct cs.contact_id
@@ -104,19 +111,41 @@ function resolveId(mapper: string): string | null {
 
 /**
  * P3 — sync full: 0007, 0088, 0017 → salon_p3_daily
+ * Com `anchorDay`, snapshot no fim do mês (backfill Visão analítica).
  */
-export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP3Kpis(
+  stats: SyncStatsLike,
+  syncRunId?: string,
+  opts?: SyncKpiAnchorOpts,
+) {
+  const historical = Boolean(opts?.anchorDay && /^\d{4}-\d{2}-\d{2}$/.test(opts.anchorDay))
+  const day = historical ? opts!.anchorDay! : todayIsoLocal()
+  const daysBack = opts?.daysBack ?? 30
+  const { inicio, fim } = historical
+    ? periodRangeEndingOn(day, daysBack)
+    : periodRange(daysBack, 0)
   const params = { inicio, fim, limit: 250 }
+  const monthStartIso = `${day.slice(0, 7)}-01`
+  const returnRateParams = {
+    inicio: historical
+      ? `${monthStartIso.slice(8, 10)}/${monthStartIso.slice(5, 7)}/${monthStartIso.slice(0, 4)}`
+      : undefined,
+    fim: historical ? fim : undefined,
+    limit: 250,
+  }
 
   let return_rate = 0
   let returnRateOk = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      // 0007 exige inicio1/fim1/inicio2/fim2 (mês corrente + 45d antes) — não passar inicio/fim rolantes.
-      const reportParams = withRequiredAvecReportParams(id0007, { limit: 250 })
+      // 0007 exige inicio1/fim1/inicio2/fim2 — withRequired deriva do mês da âncora.
+      const reportParams = withRequiredAvecReportParams(id0007, {
+        ...(returnRateParams.inicio && returnRateParams.fim
+          ? { inicio: returnRateParams.inicio, fim: returnRateParams.fim }
+          : {}),
+        limit: 250,
+      })
       const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       let sum = 0
@@ -138,7 +167,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
       } else if (nonReturners > 0) {
         // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
         // usando cohort local (visitas no período 1 implícito via ROM).
-        const local = await computeLocalReturnRate()
+        const local = await computeLocalReturnRate(day)
         if (local != null) {
           return_rate = local
           returnRateOk = true
@@ -157,7 +186,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   // Fallback ROM se 0007 falhou/vazio
   if (!returnRateOk) {
     try {
-      const local = await computeLocalReturnRate()
+      const local = await computeLocalReturnRate(day)
       if (local != null) {
         return_rate = local
         returnRateOk = true

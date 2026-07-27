@@ -1,4 +1,10 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  periodRange,
+  periodRangeEndingOn,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
+import type { SyncKpiAnchorOpts } from '@/lib/avec/sync-p1'
 import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
@@ -138,11 +144,26 @@ export async function syncPaymentMixRecent(
 
 /**
  * C — sync full: 0056, 0061, 0104, 0001, 0081 → salon_p2_daily
+ * Com `anchorDay`, snapshot no fim do mês (backfill); não roda 0081 trailing de 7d.
  */
-export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP2Kpis(
+  stats: SyncStatsLike,
+  syncRunId?: string,
+  opts?: SyncKpiAnchorOpts,
+) {
+  const historical = Boolean(opts?.anchorDay && /^\d{4}-\d{2}-\d{2}$/.test(opts.anchorDay))
+  const day = historical ? opts!.anchorDay! : todayIsoLocal()
+  const daysBack = opts?.daysBack ?? 30
+  const { inicio, fim } = historical
+    ? periodRangeEndingOn(day, daysBack)
+    : periodRange(daysBack, 0)
   const params = { inicio, fim, limit: 250 }
+  const monthStartIso = `${day.slice(0, 7)}-01`
+  const birthdayParams = {
+    inicio: isoToBr(monthStartIso),
+    fim: isoToBr(day),
+    limit: 250,
+  }
 
   const booking_channels: { channel: string; count: number }[] = []
   let bookingChannelsOk = false
@@ -220,8 +241,8 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0001 = resolveId('birthdays')
   if (id0001) {
     try {
-      // Aniversariantes do mês corrente (sem período longo)
-      const reportParams = withRequiredAvecReportParams(id0001, { limit: 250 })
+      // Aniversariantes do mês do snapshot (histórico: mês da âncora)
+      const reportParams = withRequiredAvecReportParams(id0001, birthdayParams)
       const rows = asRows(await fetchAllAvecReport(id0001, reportParams))
       await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
       let counted = 0
@@ -265,6 +286,8 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
     }
   }
 
-  // 0081: últimos 7 dias (full) — dia a dia para o Financeiro somar o mês sem double-count.
-  await syncPaymentMixRecent(stats, syncRunId, 7)
+  // 0081: últimos 7 dias (full) — só no sync diário; backfill histórico já cobre via revenue-backfill.
+  if (!historical) {
+    await syncPaymentMixRecent(stats, syncRunId, 7)
+  }
 }

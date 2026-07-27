@@ -1,4 +1,9 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  periodRange,
+  periodRangeEndingOn,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
 import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
@@ -103,13 +108,31 @@ function applyOccupancy(
   cur.occupancy = occupancy
 }
 
+export type SyncKpiAnchorOpts = {
+  /** Dia ISO (YYYY-MM-DD) no qual gravar o snapshot; default = hoje SP. */
+  anchorDay?: string
+  /** Dias atrás na janela Avec (igual ao sync diário: 30). */
+  daysBack?: number
+}
+
 /**
  * P1 — sync diário (full): 0021, 0126, 0032, 0107, 0003 → salon_p1_daily
  * Não roda no fast (evita custo/API).
+ * Com `anchorDay`, puxa a janela ~30d terminando nesse dia (backfill de mês fechado).
  */
-export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP1Kpis(
+  stats: SyncStatsLike,
+  syncRunId?: string,
+  opts?: SyncKpiAnchorOpts,
+) {
+  const day = opts?.anchorDay && /^\d{4}-\d{2}-\d{2}$/.test(opts.anchorDay)
+    ? opts.anchorDay
+    : todayIsoLocal()
+  const daysBack = opts?.daysBack ?? 30
+  const { inicio, fim } =
+    day === todayIsoLocal() && !opts?.anchorDay
+      ? periodRange(daysBack, 0)
+      : periodRangeEndingOn(day, daysBack)
   const params = { inicio, fim, limit: 250 }
 
   // professionals é alimentado por DOIS relatórios independentes (0021 revenue +

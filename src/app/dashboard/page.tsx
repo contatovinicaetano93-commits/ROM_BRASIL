@@ -94,7 +94,7 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         setLoading(true)
-        const kpisRes = await apiFetch('/api/kpis', { cache: 'no-store' })
+        const kpisRes = await apiFetch(`/api/kpis?month=${month}`, { cache: 'no-store' })
         const kpisJson = await kpisRes.json()
         if (cancelled) return
         if (kpisJson.error) setError(kpisJson.error)
@@ -313,7 +313,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <SectionCard title="Contatos por dia (funil · 30 dias)">
+          <SectionCard title={`Contatos por dia (funil · ${month})`}>
             <p className="mb-2 text-xs text-muted">
               Entradas reais no funil (exclui dump Avec / status importado) · {crmWindow.from} →{' '}
               {crmWindow.to}

@@ -452,6 +452,21 @@ async function syncCancellations(
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
+  const today = todayIso()
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  await syncCancellationsRange(from, today, stats, syncRunId)
+}
+
+/**
+ * Cancelamentos (0052) dia a dia em [from, to] — usado no sync diário e no backfill analítico.
+ */
+export async function syncCancellationsRange(
+  from: string,
+  to: string,
+  stats: AvecSyncStats,
+  syncRunId?: string,
+) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
 
@@ -462,10 +477,7 @@ async function syncCancellations(
     return
   }
 
-  const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
-  const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysInclusive(from, today)
+  const days = listDaysInclusive(from, to)
 
   for (const day of days) {
     const params = {
@@ -516,9 +528,22 @@ async function syncNoShows0248(
   const today = todayIso()
   const daysBack = mode === 'fast' ? 1 : 7
   const from = addCalendarDaysYmd(today, -daysBack)
+  await syncNoShows0248Range(from, today, stats, syncRunId, { zeroTodayIfEmpty: true })
+}
+
+/**
+ * No-shows 0248 no intervalo [from, to].
+ */
+export async function syncNoShows0248Range(
+  from: string,
+  to: string,
+  stats: AvecSyncStats,
+  syncRunId?: string,
+  opts?: { zeroTodayIfEmpty?: boolean },
+) {
   const params = {
     inicio: isoToBr(from),
-    fim: isoToBr(today),
+    fim: isoToBr(to),
     status: '0.6',
     limit: 250,
   }
@@ -543,7 +568,8 @@ async function syncNoShows0248(
     }
 
     // Dias sem falta no intervalo: zera só o dia de hoje (evita manter stale do fast).
-    if (!byDay.has(today)) {
+    const today = todayIso()
+    if (opts?.zeroTodayIfEmpty && !byDay.has(today) && today >= from && today <= to) {
       await upsertSalonMetrics(today, { no_shows: 0 })
     }
   } catch (e) {
