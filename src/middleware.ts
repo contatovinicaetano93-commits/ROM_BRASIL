@@ -11,7 +11,13 @@ function isPublicApi(pathname: string) {
 }
 
 function isFinancePath(pathname: string) {
-  return pathname === '/financeiro' || pathname.startsWith('/financeiro/') || pathname.startsWith('/api/financeiro/')
+  return (
+    pathname === '/financeiro' ||
+    pathname.startsWith('/financeiro/') ||
+    pathname.startsWith('/api/financeiro/') ||
+    // Backfill de receita: handler usa requireFinance (admin + financeiro).
+    pathname === '/api/admin/revenue-backfill'
+  )
 }
 
 function isRelatoriosPath(pathname: string) {
@@ -59,7 +65,7 @@ function isAdminOnlyPath(pathname: string) {
     pathname.startsWith('/api/kpis') ||
     pathname === '/api/avec/sync' ||
     pathname === '/api/seed' ||
-    pathname.startsWith('/api/admin/') ||
+    (pathname.startsWith('/api/admin/') && pathname !== '/api/admin/revenue-backfill') ||
     pathname === '/api/lgpd/purge' ||
     pathname === '/observability' ||
     pathname.startsWith('/api/observability')

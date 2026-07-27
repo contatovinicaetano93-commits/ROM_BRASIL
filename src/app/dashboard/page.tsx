@@ -96,6 +96,10 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         setLoading(true)
+        // Evita KPIs do mês anterior com rótulos do mês novo enquanto as requests resolvem.
+        setTm(null)
+        setPerformance(null)
+        setPeriod(null)
         const kpisRes = await apiFetch(`/api/kpis?month=${month}`, { cache: 'no-store' })
         const kpisJson = await kpisRes.json()
         if (cancelled) return
