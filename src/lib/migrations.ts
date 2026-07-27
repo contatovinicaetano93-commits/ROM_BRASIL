@@ -73,6 +73,13 @@ async function runPendingUnlocked(
     }
 
     try {
+      // 023 muda o tipo de v_kpi_daily.day (timestamptz → date); CREATE OR REPLACE
+      // não troca tipo — precisa DROP antes (idempotente se a view já for date).
+      if (migration.id === '023_kpi_funnel_real') {
+        await sql.query('drop view if exists v_kpi_daily')
+        await sql.query('drop view if exists v_kpi_status')
+        await sql.query('drop view if exists v_kpi_conversion')
+      }
       const statements = await executeSqlFile(sql, migration.file, cwd)
       await sql.query(`insert into schema_migrations (id) values ($1) on conflict (id) do nothing`, [
         migration.id,
