@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     const month = req.nextUrl.searchParams.get('month')?.trim()
     const latest =
       month && /^\d{4}-\d{2}$/.test(month)
-        ? await getSalonP1DailyNear(monthToDateRange(month).to)
+        ? await getSalonP1DailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
         : await getLatestSalonP1Daily()
 
     if (!latest) {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
     const compareTarget = addDays(latest.day, -30)
-    const compare = await getSalonP1DailyNear(compareTarget)
+    const compare = await getSalonP1DailyNear(compareTarget, { maxSkewDays: 14 })
     const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
     const compareByName = new Map(comparePros.map((p) => [p.name, p]))
 

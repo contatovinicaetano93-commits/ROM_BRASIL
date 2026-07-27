@@ -161,12 +161,13 @@ export async function computePeriodAnalytics(opts?: {
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? currentMonthKey(todayIso())
   const { from, to } = monthToDateRange(month)
+  const nearOpts = { maxSkewDays: 14 }
   const [totals, loss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
-    getSalonP1DailyNear(to),
-    getSalonP2DailyNear(to),
-    getSalonP3DailyNear(to),
+    getSalonP1DailyNear(to, nearOpts),
+    getSalonP2DailyNear(to, nearOpts),
+    getSalonP3DailyNear(to, nearOpts),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null

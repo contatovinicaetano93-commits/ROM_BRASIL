@@ -59,7 +59,10 @@ export async function getPaymentMixRange(from: string, to: string): Promise<P2Pa
  * Snapshot P2 mais recente ≤ targetDay.
  * booking_channels / packages são janelas rolantes (~30d) no sync full — não deltas diários.
  */
-export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Daily | null> {
+export async function getSalonP2DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP2Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -78,10 +81,19 @@ export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Dai
       order by day desc
       limit 1
     `) as SalonP2Daily[]
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
 }
 
 export async function ensureSalonP2Table() {

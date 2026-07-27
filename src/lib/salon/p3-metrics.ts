@@ -69,7 +69,10 @@ export async function upsertSalonP3Daily(
  * Snapshot P3 mais recente ≤ targetDay.
  * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
  */
-export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
+export async function getSalonP3DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP3Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -84,8 +87,17 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
       order by day desc
       limit 1
     `) as SalonP3Daily[]
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
 }

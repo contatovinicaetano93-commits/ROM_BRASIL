@@ -112,8 +112,14 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
  * rolante de 30 dias (não um delta diário) — então "comparação de período"
  * aqui é o snapshot mais recente vs o snapshot disponível mais próximo de N
  * dias atrás, não meses de calendário como no TM.
+ *
+ * `maxSkewDays`: se o dia encontrado estiver mais antigo que target−N, retorna null
+ * (evita Abr herdar snapshot de Jan quando o mês não foi backfillado).
  */
-export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
+export async function getSalonP1DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP1Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -129,10 +135,19 @@ export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Dai
       order by day desc
       limit 1
     `) as SalonP1Daily[]
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
 }
 
 export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
