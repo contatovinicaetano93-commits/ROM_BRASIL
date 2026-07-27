@@ -411,7 +411,7 @@ export default function DashboardPage() {
 
             <SectionCard title="Status na base (inventário)" badge={<CountBadge value={`${statusTotal}`} />}>
               <p className="mb-2 text-xs text-muted">
-                Novo lead ≠ Importado Avec. Importado é dump 0004/returning — não é aquisição do mês.
+                Novo lead ≠ Importado Avec. Importado é dump 0004/backfill/lake — não é aquisição do mês.
               </p>
               <div className="flex flex-col gap-2.5">
                 {[...(data?.byStatus ?? [])]

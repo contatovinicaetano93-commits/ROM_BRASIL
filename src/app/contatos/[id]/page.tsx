@@ -516,12 +516,26 @@ export default function ContactDetailPage() {
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {STATUS_FLOW.map((s) => {
             const active = contact.status === s
+            // importado ↔ novo são paralelos (merge no-op); não oferecer clique enganoso.
+            const illegalParallel =
+              (contact.status === 'importado' && s === 'novo') ||
+              (contact.status === 'novo' && s === 'importado') ||
+              (s === 'importado' && contact.status !== 'importado')
+            const disabled = illegalParallel && !active
             return (
               <button
                 key={s}
-                onClick={() => changeStatus(s)}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  if (!disabled) changeStatus(s)
+                }}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                  active ? 'border-gold bg-gold/15 text-gold' : 'border-border text-muted active:text-foreground'
+                  active
+                    ? 'border-gold bg-gold/15 text-gold'
+                    : disabled
+                      ? 'cursor-not-allowed border-border/50 text-muted/50'
+                      : 'border-border text-muted active:text-foreground'
                 }`}
               >
                 {STATUS_LABEL[s] ?? s}

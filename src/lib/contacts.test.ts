@@ -3,6 +3,7 @@ import {
   AVEC_DUMP_SOURCE_PREFIXES,
   isAvecImportSource,
   mergeContactStatus,
+  resolveConflictSource,
   resolveConflictStatus,
 } from '@/lib/contacts'
 
@@ -80,6 +81,18 @@ describe('isAvecImportSource', () => {
     expect(isAvecImportSource('avec_sync_visit_0002')).toBe(false)
     expect(isAvecImportSource('avec_backfill_0004')).toBe(true)
     expect(isAvecImportSource('avec_lake_clients')).toBe(true)
+  })
+
+  it('promove source dump → visita no conflito', () => {
+    expect(resolveConflictSource('avec_sync_clients', 'avec_sync_visit_0002')).toBe(
+      'avec_sync_visit_0002',
+    )
+    expect(resolveConflictSource('avec_sync_returning_0002', 'avec_sync_attended')).toBe(
+      'avec_sync_attended',
+    )
+    expect(resolveConflictSource('avec_sync_visit_0002', 'avec_sync_clients')).toBe(
+      'avec_sync_visit_0002',
+    )
   })
 
   it('não marca agenda / WhatsApp / atendimento como dump', () => {

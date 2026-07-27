@@ -170,8 +170,8 @@ export default function ContatosPage() {
           <p className="text-[0.7rem] leading-relaxed text-muted">
             <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
             {' '}
-            <span className="font-medium text-foreground/80">Importado Avec</span> = base 0004 /
-            returning — não é lead novo do funil.
+            <span className="font-medium text-foreground/80">Importado Avec</span> = dump 0004 /
+            backfill / lake — não é lead novo (visitas 0002 vão como convertido).
           </p>
         </div>
       )}

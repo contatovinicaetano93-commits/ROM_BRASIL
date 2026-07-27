@@ -75,6 +75,12 @@ export function isAvecImportSource(source: string | null | undefined): boolean {
   return AVEC_DUMP_SOURCE_PREFIXES.some((prefix) => s.startsWith(prefix))
 }
 
+/** Promove source dump → não-dump no conflito (espelhado no SQL do upsert). */
+export function resolveConflictSource(current: string, incoming: string): string {
+  if (isAvecImportSource(current) && !isAvecImportSource(incoming)) return incoming
+  return current
+}
+
 /** Fragmento SQL: source não é dump Avec. Alinhar com AVEC_DUMP_SOURCE_PREFIXES. */
 export function sqlNotDumpSource(sql: Sql) {
   return sql`(
@@ -83,6 +89,24 @@ export function sqlNotDumpSource(sql: Sql) {
     and coalesce(source, '') not like 'avec_backfill%'
     and coalesce(source, '') not like 'avec_lake%'
   )`
+}
+
+/** CASE: dump source → source de visita/atendimento no conflito (espelha resolveConflictSource). */
+function sqlUpsertConflictSource(sql: Sql) {
+  return sql`case
+    when (
+      contacts.source like 'avec_sync_clients%'
+      or contacts.source like 'avec_sync_returning%'
+      or contacts.source like 'avec_backfill%'
+      or contacts.source like 'avec_lake%'
+    ) and not (
+      excluded.source like 'avec_sync_clients%'
+      or excluded.source like 'avec_sync_returning%'
+      or excluded.source like 'avec_backfill%'
+      or excluded.source like 'avec_lake%'
+    ) then excluded.source
+    else contacts.source
+  end`
 }
 
 /** CASE do ON CONFLICT — único para phone e avec_client_id. */
@@ -132,6 +156,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
   const sql = getSql()
   const phone = input.phone ? normalizePhone(input.phone) ?? input.phone.trim() : null
   const statusCase = sqlUpsertConflictStatus(sql)
+  const sourceCase = sqlUpsertConflictSource(sql)
 
   // Optimized UPSERT: use avec_client_id when available (primary upsert key)
   // Falls back to phone-based lookup only if no avec_client_id
@@ -153,6 +178,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         name = coalesce(excluded.name, contacts.name),
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
+        source = ${sourceCase},
         status = ${statusCase}
       returning *
     `) as ContactRow[]
@@ -175,6 +201,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
+      source = ${sourceCase},
       status = ${statusCase}
     where contacts.phone is not null
     returning *
