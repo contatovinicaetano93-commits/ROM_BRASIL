@@ -3,6 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
+import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
 /** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
@@ -17,7 +18,10 @@ export async function GET(req: NextRequest) {
 
     const format = req.nextUrl.searchParams.get('format')
     const materialize = req.nextUrl.searchParams.get('materialize') !== '0'
-    const overview = await computeMonthOverview({ month, materialize })
+    const [overview, sync] = await Promise.all([
+      computeMonthOverview({ month, materialize }),
+      loadAvecSyncMeta(),
+    ])
 
     if (format === 'csv') {
       const csv = buildMonthOverviewCsv(overview)
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return ok(overview)
+    return ok({ ...overview, sync })
   } catch (e) {
     return handleError(e)
   }

@@ -29,18 +29,28 @@ export interface SalonP1Daily {
   updated_at: string
 }
 
+let p1TableReady: Promise<void> | null = null
+
 export async function ensureSalonP1Table() {
-  const sql = getSql()
-  await sql`
-    create table if not exists salon_p1_daily (
-      day date primary key,
-      professionals jsonb not null default '[]',
-      services jsonb not null default '[]',
-      acquisition jsonb not null default '[]',
-      reactivation_count int not null default 0,
-      updated_at timestamptz not null default now()
-    )
-  `
+  if (!p1TableReady) {
+    p1TableReady = (async () => {
+      const sql = getSql()
+      await sql`
+        create table if not exists salon_p1_daily (
+          day date primary key,
+          professionals jsonb not null default '[]',
+          services jsonb not null default '[]',
+          acquisition jsonb not null default '[]',
+          reactivation_count int not null default 0,
+          updated_at timestamptz not null default now()
+        )
+      `
+    })().catch((err) => {
+      p1TableReady = null
+      throw err
+    })
+  }
+  await p1TableReady
 }
 
 export async function upsertSalonP1Daily(

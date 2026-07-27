@@ -75,7 +75,7 @@ export function validateDeploymentEnv(): DeploymentValidation {
 
   if (!process.env.ROM_SESSION_SECRET?.trim() && process.env.VERCEL_ENV === 'production') {
     warnings.push(
-      'ROM_SESSION_SECRET ausente — sessões usam fallback da senha admin; defina um segredo dedicado.',
+      'CRÍTICO: ROM_SESSION_SECRET ausente em produção — sessões usam fallback da senha admin; defina um segredo dedicado e peça relogin.',
     )
   }
 

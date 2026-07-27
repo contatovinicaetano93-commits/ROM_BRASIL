@@ -10,14 +10,25 @@ function isPublicApi(pathname: string) {
   return PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+function isFinanceAllowedAdminApi(pathname: string) {
+  // Handlers usam requireFinance (admin + financeiro).
+  return (
+    pathname === '/api/admin/revenue-backfill' ||
+    pathname === '/api/admin/analytics-backfill'
+  )
+}
+
 function isFinancePath(pathname: string) {
   return (
     pathname === '/financeiro' ||
     pathname.startsWith('/financeiro/') ||
     pathname.startsWith('/api/financeiro/') ||
-    // Backfill de receita: handler usa requireFinance (admin + financeiro).
-    pathname === '/api/admin/revenue-backfill'
+    isFinanceAllowedAdminApi(pathname)
   )
+}
+
+function isLgpdAnonymizePath(pathname: string) {
+  return /^\/api\/contacts\/[^/]+\/anonymize$/.test(pathname)
 }
 
 function isRelatoriosPath(pathname: string) {
@@ -64,9 +75,11 @@ function isAdminOnlyPath(pathname: string) {
     pathname === '/dashboard' ||
     pathname.startsWith('/api/kpis') ||
     pathname === '/api/avec/sync' ||
+    pathname === '/api/avec/refresh-token' ||
     pathname === '/api/seed' ||
-    (pathname.startsWith('/api/admin/') && pathname !== '/api/admin/revenue-backfill') ||
+    (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
     pathname === '/api/lgpd/purge' ||
+    isLgpdAnonymizePath(pathname) ||
     pathname === '/observability' ||
     pathname.startsWith('/api/observability')
   )
@@ -171,6 +184,9 @@ export async function middleware(req: NextRequest) {
     !onboardingPath &&
     !relatoriosPath
   ) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
+    }
     return NextResponse.redirect(new URL('/financeiro', req.url))
   }
 
@@ -180,6 +196,9 @@ export async function middleware(req: NextRequest) {
     !stockPath &&
     !onboardingPath
   ) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
+    }
     return NextResponse.redirect(new URL('/estoque', req.url))
   }
   if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {

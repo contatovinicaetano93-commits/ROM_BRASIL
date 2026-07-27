@@ -193,7 +193,7 @@ export default function HojePage() {
         />
         <KpiCard
           icon={<Clock size={16} />}
-          label="TM atendimento"
+          label="TM cadastrado"
           value={
             loading
               ? '—'
@@ -212,7 +212,7 @@ export default function HojePage() {
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando duração na Avec (relatório 0223 · campo tempo, ou início/fim no 0002).
+          TM aguardando duração cadastrada na Avec (relatório 0223 · campo tempo).
         </p>
       )}
 

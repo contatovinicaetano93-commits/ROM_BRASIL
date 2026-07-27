@@ -13,17 +13,27 @@ export interface SalonP3Daily {
   updated_at: string
 }
 
+let p3TableReady: Promise<void> | null = null
+
 export async function ensureSalonP3Table() {
-  const sql = getSql()
-  await sql`
-    create table if not exists salon_p3_daily (
-      day date primary key,
-      return_rate numeric(6,4) not null default 0,
-      new_clients_period int not null default 0,
-      revenue_curve jsonb not null default '[]',
-      updated_at timestamptz not null default now()
-    )
-  `
+  if (!p3TableReady) {
+    p3TableReady = (async () => {
+      const sql = getSql()
+      await sql`
+        create table if not exists salon_p3_daily (
+          day date primary key,
+          return_rate numeric(6,4) not null default 0,
+          new_clients_period int not null default 0,
+          revenue_curve jsonb not null default '[]',
+          updated_at timestamptz not null default now()
+        )
+      `
+    })().catch((err) => {
+      p3TableReady = null
+      throw err
+    })
+  }
+  await p3TableReady
 }
 
 export async function upsertSalonP3Daily(

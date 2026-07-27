@@ -96,21 +96,31 @@ function addDaysIso(day: string, delta: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+let p2TableReady: Promise<void> | null = null
+
 export async function ensureSalonP2Table() {
-  const sql = getSql()
-  await sql`
-    create table if not exists salon_p2_daily (
-      day date primary key,
-      booking_channels jsonb not null default '[]',
-      packages jsonb not null default '[]',
-      packages_sold int not null default 0,
-      ratings_avg numeric(4,2) not null default 0,
-      ratings_count int not null default 0,
-      payment_mix jsonb not null default '[]',
-      birthday_count int not null default 0,
-      updated_at timestamptz not null default now()
-    )
-  `
+  if (!p2TableReady) {
+    p2TableReady = (async () => {
+      const sql = getSql()
+      await sql`
+        create table if not exists salon_p2_daily (
+          day date primary key,
+          booking_channels jsonb not null default '[]',
+          packages jsonb not null default '[]',
+          packages_sold int not null default 0,
+          ratings_avg numeric(4,2) not null default 0,
+          ratings_count int not null default 0,
+          payment_mix jsonb not null default '[]',
+          birthday_count int not null default 0,
+          updated_at timestamptz not null default now()
+        )
+      `
+    })().catch((err) => {
+      p2TableReady = null
+      throw err
+    })
+  }
+  await p2TableReady
 }
 
 function jsonArrLen(v: unknown): number {

@@ -15,15 +15,18 @@ import {
   openPrintHtml,
 } from '@/lib/salon/month-overview-export'
 import type { MonthOverview } from '@/lib/salon/month-overview'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
 
 function currentMonthKey() {
   return todayIso().slice(0, 7)
 }
 
+type OverviewPayload = MonthOverview & { sync?: AvecSyncMeta }
+
 export default function RelatoriosOverviewPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(currentMonthKey)
-  const [data, setData] = useState<MonthOverview | null>(null)
+  const [data, setData] = useState<OverviewPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null)
@@ -35,7 +38,7 @@ export default function RelatoriosOverviewPage() {
       const res = await apiFetch(`/api/relatorios/overview?month=${month}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
-      setData(json.data as MonthOverview)
+      setData(json.data as OverviewPayload)
     } catch (e) {
       setData(null)
       setError(e instanceof Error ? e.message : String(e))
@@ -117,6 +120,25 @@ export default function RelatoriosOverviewPage() {
       {error && (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
+        </p>
+      )}
+
+      {data?.sync && (data.sync.stale || data.sync.status === 'partial' || data.sync.status === 'error') && (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {data.sync.stale
+            ? 'Sync Avec desatualizado (>24h) — números podem estar velhos.'
+            : data.sync.status === 'partial'
+              ? 'Último sync Avec parcial — confira Admin.'
+              : 'Último sync Avec com erro — confira Admin.'}
+        </p>
+      )}
+
+      {data?.finance.revenue_source && data.finance.revenue_source !== 'metrics' && (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong>{data.label}</strong>
+          {data.finance.revenue_source === 'payments_0081'
+            ? ' — receita via fallback 0081 (formas de pagamento), não métricas diárias.'
+            : ' — sem receita nas métricas diárias.'}
         </p>
       )}
 

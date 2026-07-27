@@ -26,6 +26,7 @@ import {
   todayIso,
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -312,6 +313,7 @@ export default function FinanceiroPage() {
   const [month, setMonth] = useState(currentMonthKey())
   const [compareMonth, setCompareMonth] = useState('')
   const [kpis, setKpis] = useState<FinanceKpis | null>(null)
+  const [syncMeta, setSyncMeta] = useState<AvecSyncMeta | null>(null)
   const [categories, setCategories] = useState<FinanceCategory[]>([])
   const [expenses, setExpenses] = useState<FinanceExpense[]>([])
   const [loading, setLoading] = useState(true)
@@ -336,11 +338,12 @@ export default function FinanceiroPage() {
       ])
       const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
-      const raw = kpisJson.data as FinanceKpis
+      const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta }
       setKpis({
         current: normalizeKpiBucket(raw.current),
         previous: normalizeKpiBucket(raw.previous),
       })
+      setSyncMeta(raw.sync ?? null)
       setCategories(catJson.data ?? [])
       setExpenses(expJson.data?.expenses ?? [])
     } catch (e) {
@@ -524,6 +527,16 @@ export default function FinanceiroPage() {
       {yearBackfillMsg && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground/90">
           {yearBackfillMsg}
+        </div>
+      )}
+
+      {syncMeta && (syncMeta.stale || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
+          {syncMeta.stale
+            ? 'Sync Avec desatualizado (>24h) — números podem estar velhos.'
+            : syncMeta.status === 'partial'
+              ? 'Último sync Avec parcial — confira Admin.'
+              : 'Último sync Avec com erro — confira Admin.'}
         </div>
       )}
 
