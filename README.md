@@ -18,8 +18,8 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/api/webhooks/avec` — **tempo real** (push): agendamento, atendimento, cliente.
   Header `x-avec-secret` = `AVEC_WEBHOOK_SECRET`.
 - `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec
-  (clientes `0004`, agendamentos `0051`, atendidos `0002`). Cron fast a cada 5 min,
-  full a cada 10 min, ou tempo real via webhook. Manual com `CRON_SECRET`.
+  (clientes `0004`, agendamentos `0051`, atendidos `0002`). Cron fast a cada 15 min,
+  full 2×/dia (leve no DB/Avec), ou tempo real via webhook. Manual com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
   (Meta), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em

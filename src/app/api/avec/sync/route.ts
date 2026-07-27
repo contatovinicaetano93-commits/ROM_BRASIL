@@ -28,8 +28,9 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-const FAST_MIN_GAP_MS = 45_000
-const FULL_MIN_GAP_MS = 120_000
+/** Espaçamento mínimo mesmo se o cron Vercel for reconfigurado à força. */
+const FAST_MIN_GAP_MS = 12 * 60_000
+const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 
 async function executeSync(
   req: NextRequest,
@@ -122,10 +123,10 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/5 * * * *', mode: 'fast', path: '/api/avec/sync' },
-        full: { schedule: '*/10 * * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
+        fast: { schedule: '*/15 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        full: { schedule: '20 10,22 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         cadence:
-          'fast a cada 5 min + full a cada 10 min (backup) — tempo real via webhook Avec',
+          'fast a cada 15 min · full 2×/dia (UTC 10:20 e 22:20 ≈ 07:20/19:20 BRT) — tempo real via webhook',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

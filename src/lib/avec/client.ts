@@ -158,8 +158,16 @@ export function withRequiredAvecReportParams(
       const origin = site === '' || site === '0' || site === '1' ? site : ''
       return { ...params, site: origin, profissional_id: params.profissional_id ?? '' }
     }
-    case '0223':
-      return { ...params, profissional_id: params.profissional_id ?? '' }
+    case '0223': {
+      // Sem janela a Avec devolve histórico enorme (100k+ linhas) e estoura paginação/DB.
+      const today = currentMonthRange().fim
+      return {
+        ...params,
+        profissional_id: params.profissional_id ?? '',
+        inicio: params.inicio ?? today,
+        fim: params.fim ?? today,
+      }
+    }
     case '0248': {
       // Status Agendamento: Faltou = 0.6 (descoberta via validation do endpoint).
       const range = currentMonthRange()

@@ -39,7 +39,7 @@ import {
   isHairService,
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
-import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { pruneAvecSyncHistory, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   getSalonMetrics,
@@ -658,16 +658,24 @@ async function syncReturningFrom0002(
 }
 
 /**
- * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
- * Se todos vierem null, não grava (UI continua "—").
+ * TM cadastrado — 0223 (`tempo`) só do dia (métrica de Hoje).
+ * Fast: poucas páginas. Full: um pouco mais. Snapshot só no full (DB leve).
  */
-async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
+async function syncDurationFrom0223(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
   const today = todayIso()
-  const params = { profissional_id: '', limit: 250 }
+  const params = { ...periodRange(0, 0), profissional_id: '', limit: 250 }
+  // 20×250 = 5k linhas (fast); 40×250 = 10k (full) — suficiente p/ um dia.
+  const maxPages = mode === 'fast' ? 20 : 40
   try {
-    const result = await fetchAllAvecReport('0223', params)
+    const result = await fetchAllAvecReport('0223', params, maxPages)
     warnIfTruncated(stats, '0223', result)
-    await snapshotReport('0223', params, result.rows, stats, syncRunId)
+    if (mode === 'full') {
+      await snapshotReport('0223', params, result.rows, stats, syncRunId)
+    }
 
     let sum = 0
     let count = 0
@@ -749,7 +757,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         syncAttendances(stats, mode, syncRunId),
       ])
       try {
-        await syncDurationFrom0223(stats, syncRunId)
+        await syncDurationFrom0223(stats, mode, syncRunId)
       } catch (e) {
         stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
@@ -766,7 +774,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
-        ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
+        ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
@@ -784,6 +792,15 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       await syncReturningFrom0002(stats, mode, syncRunId)
     } catch (e) {
       stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
+    if (mode === 'full') {
+      // Limpeza silenciosa — não vira warning (senão full ok marca "partial").
+      try {
+        await pruneAvecSyncHistory()
+      } catch {
+        /* ignore */
+      }
     }
 
     stats.errors = formatAvecErrorList(stats.errors)

@@ -84,6 +84,13 @@ describe('withRequiredAvecReportParams', () => {
   })
 
   it('0248 default status Faltou (0.6)', () => {
+    expect(withRequiredAvecReportParams('0223', { limit: 250 })).toMatchObject({
+      profissional_id: '',
+    })
+    const tm = withRequiredAvecReportParams('0223', { limit: 250 })
+    expect(tm.inicio).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(tm.fim).toBe(tm.inicio)
+
     expect(withRequiredAvecReportParams('0248', { inicio: '01/07/2026', fim: '24/07/2026' })).toMatchObject({
       status: '0.6',
     })

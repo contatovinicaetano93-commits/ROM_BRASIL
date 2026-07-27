@@ -3,11 +3,14 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
-import { runStockSync, type StockSyncMode } from '@/lib/avec/sync-stock'
+import { getLastStockSync, runStockSync, type StockSyncMode } from '@/lib/avec/sync-stock'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 
 /** Sync de estoque pode demorar (vários relatórios paginados). */
 export const maxDuration = 300
+
+const STOCK_FAST_MIN_GAP_MS = 25 * 60_000
+const STOCK_FULL_MIN_GAP_MS = 20 * 60 * 60_000
 
 function parseMode(req: NextRequest): StockSyncMode {
   return req.nextUrl.searchParams.get('mode') === 'full' ? 'full' : 'fast'
@@ -22,6 +25,26 @@ async function execute(req: NextRequest, cron: boolean) {
   }
 
   const mode = parseMode(req)
+  const force = req.nextUrl.searchParams.get('force') === '1'
+
+  // Gap só no cron — trigger manual (diagnóstico) pode forçar na hora.
+  if (cron && !force) {
+    const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
+    const minGap = mode === 'full' ? STOCK_FULL_MIN_GAP_MS : STOCK_FAST_MIN_GAP_MS
+    const last = await getLastStockSync(kind).catch(() => null)
+    if (last?.created_at) {
+      const age = Date.now() - new Date(last.created_at).getTime()
+      if (age >= 0 && age < minGap) {
+        return ok({
+          skipped: true,
+          reason: 'sync_recente',
+          mode,
+          last,
+          note: `Último estoque ${mode} há ${Math.round(age / 60_000)} min — janela ${Math.round(minGap / 60_000)} min`,
+        })
+      }
+    }
+  }
 
   try {
     const run = await runStockSync(mode)
