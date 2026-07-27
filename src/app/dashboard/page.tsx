@@ -176,6 +176,8 @@ export default function DashboardPage() {
   const statusTotal = data?.byStatus.reduce((s, r) => s + r.contacts_count, 0) ?? 0
   const channelTotal = channelData.reduce((s, [, v]) => s + v, 0)
   const novos = data?.byStatus.find((s) => s.status === 'novo')?.contacts_count ?? 0
+  const importadosEstoque =
+    data?.byStatus.find((s) => s.status === 'importado')?.contacts_count ?? importedContacts
   const topChannel = channelData[0]
   const snapshotHint = period?.snapshot_day
     ? `Avec snapshot ${period.snapshot_day} · janela ~30 dias`
@@ -279,7 +281,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
               <p className="text-xs text-muted">Funil ativo (CRM · sem importado)</p>
               {loading ? (
@@ -296,15 +298,19 @@ export default function DashboardPage() {
               </div>
               {!loading && (
                 <p className="mt-2 text-[0.7rem] text-muted">
-                  Base Avec importada: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
-                  {totalContacts.toLocaleString('pt-BR')}
+                  Total na base: {totalContacts.toLocaleString('pt-BR')}
                 </p>
               )}
             </div>
             <MiniStat
               icon={<Users size={15} />}
-              label="Novos aguardando · funil"
+              label="Novos leads · estoque"
               value={loading ? '—' : String(novos)}
+            />
+            <MiniStat
+              icon={<Package size={15} />}
+              label="Importados Avec · base"
+              value={loading ? '—' : importadosEstoque.toLocaleString('pt-BR')}
             />
             <MiniStat
               icon={<Layers size={15} />}
@@ -404,7 +410,7 @@ export default function DashboardPage() {
 
             <SectionCard title="Status na base (inventário)" badge={<CountBadge value={`${statusTotal}`} />}>
               <p className="mb-2 text-xs text-muted">
-                Inclui importado (base Avec 0004) — não é volume de aquisição do mês.
+                Novo lead ≠ Importado Avec. Importado é dump 0004/returning — não é aquisição do mês.
               </p>
               <div className="flex flex-col gap-2.5">
                 {[...(data?.byStatus ?? [])]

@@ -37,6 +37,7 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
       where anonymized_at is null
         and status <> 'importado'
         and coalesce(source, '') not like 'avec_sync_clients%'
+        and coalesce(source, '') not like 'avec_sync_returning%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
         and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date

@@ -15,6 +15,7 @@ from contacts
 where anonymized_at is null
   and status <> 'importado'
   and coalesce(source, '') not like 'avec_sync_clients%'
+  and coalesce(source, '') not like 'avec_sync_returning%'
   and coalesce(source, '') not like 'avec_backfill%'
   and coalesce(source, '') not like 'avec_lake%'
 group by 1, 2

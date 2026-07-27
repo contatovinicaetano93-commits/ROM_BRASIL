@@ -6,7 +6,7 @@ import { CollapsibleBody, SectionToggleHeader, useSectionOpen } from './Collapsi
 
 export const STATUS_LABEL: Record<string, string> = {
   novo: 'Novo lead',
-  importado: 'Importado',
+  importado: 'Importado Avec',
   em_atendimento: 'Em atendimento',
   agendado: 'Agendado',
   convertido: 'Convertido',

@@ -23,8 +23,14 @@ export const CONTACT_STATUSES = [
 ] as const
 export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 
+/**
+ * `importado` e `novo` são entradas paralelas (mesmo rank):
+ * - importado = base Avec (0004 / returning / lake) — não é lead de aquisição
+ * - novo = lead real (WhatsApp / manual / Instagram)
+ * Um não “avança” o outro; só em_atendimento+ sobe no funil.
+ */
 const STATUS_RANK: Record<ContactStatus, number> = {
-  importado: 0,
+  importado: 1,
   novo: 1,
   em_atendimento: 2,
   agendado: 3,
@@ -36,7 +42,41 @@ const STATUS_RANK: Record<ContactStatus, number> = {
 export function mergeContactStatus(current: ContactStatus, incoming: ContactStatus): ContactStatus {
   if (incoming === 'perdido') return 'perdido'
   if (current === 'perdido' && incoming !== 'convertido') return current
+  // Entradas paralelas: nunca trocar importado ↔ novo via updateContact.
+  if (current === 'importado' && incoming === 'novo') return 'importado'
+  if (current === 'novo' && incoming === 'importado') return 'novo'
   return STATUS_RANK[incoming] > STATUS_RANK[current] ? incoming : current
+}
+
+/**
+ * Espelha a regra do ON CONFLICT do upsertContact.
+ * Dump Avec (`importado`) não rebaixa quem já está no funil; default `novo`
+ * nunca rebaixa `importado`.
+ */
+export function resolveConflictStatus(
+  current: ContactStatus,
+  incoming: ContactStatus,
+): ContactStatus {
+  if (incoming === 'importado' && current !== 'importado') return current
+  if (current === 'importado' && incoming === 'novo') return 'importado'
+  if (current === 'convertido') return 'convertido'
+  if (current === 'perdido') return incoming === 'convertido' ? 'convertido' : 'perdido'
+  if (current === 'agendado') return incoming === 'convertido' ? 'convertido' : 'agendado'
+  if (current === 'importado' || current === 'novo' || current === 'em_atendimento') {
+    return incoming
+  }
+  return current
+}
+
+/** Origens de dump Avec / lake — não contam como aquisição de funil. */
+export function isAvecImportSource(source: string | null | undefined): boolean {
+  const s = source ?? ''
+  return (
+    s.startsWith('avec_sync_clients') ||
+    s.startsWith('avec_sync_returning') ||
+    s.startsWith('avec_backfill') ||
+    s.startsWith('avec_lake')
+  )
 }
 
 function resolveStatus(current: ContactStatus | string | undefined, incoming?: ContactStatus) {
@@ -90,8 +130,10 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         name = coalesce(excluded.name, contacts.name),
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
+        -- importado ≠ novo: dump Avec não vira "Novo lead"; default 'novo' não rebaixa importado.
         status = case
           when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
           when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
           when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'convertido' then 'convertido'
@@ -119,8 +161,10 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
+      -- importado ≠ novo: dump Avec não vira "Novo lead"; default 'novo' não rebaixa importado.
       status = case
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+        when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
         when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'

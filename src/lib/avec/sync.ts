@@ -296,12 +296,15 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         durationCount++
       }
 
+      // Passa convertido no upsert — default 'novo' não pode rebaixar importado nem
+      // criar falso "Novo lead" antes do updateContact.
       const contact = await upsertContact({
         avecClientId: att.avecClientId ?? undefined,
         name: att.clientName,
         phone: att.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_attended_fast' : 'avec_sync_attended',
+        status: 'convertido',
       })
 
       await updateContact(contact.id, { status: 'convertido' })
@@ -566,12 +569,14 @@ async function syncReturningFrom0002(
       // Backfill last_done_at só p/ quem veio hoje (evita reescrever milhares no cron).
       if (att.lastVisitDay === today) {
         try {
+          // Cliente Avec recorrente ≠ lead novo do funil.
           const contact = await upsertContact({
             avecClientId: att.avecClientId ?? undefined,
             name: att.clientName,
             phone: att.phone,
             channel: 'avec',
             source: 'avec_sync_returning_0002',
+            status: 'importado',
           })
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)

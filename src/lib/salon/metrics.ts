@@ -130,6 +130,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
         and status <> 'importado'
         and coalesce(source, '') not like 'avec_sync_clients%'
+        and coalesce(source, '') not like 'avec_sync_returning%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
     ` as unknown as Promise<{ n: number }[]>,
