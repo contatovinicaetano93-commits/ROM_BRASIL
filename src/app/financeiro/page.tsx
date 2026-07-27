@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
+import { Plus, X, Trash2, Download, Camera, Paperclip, FileText } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -14,8 +14,9 @@ import { apiFetch } from '@/lib/api-client'
 import {
   buildFinanceCompareCsv,
   downloadFinanceCompareCsv,
-  printFinanceCompareReport,
 } from '@/lib/finance-report-export'
+import { buildFinanceComparePrintHtml } from '@/lib/finance-compare-export'
+import { openPrintHtml } from '@/lib/salon/month-overview-export'
 import { getBrand } from '@/lib/brand'
 import {
   formatCurrency,
@@ -369,11 +370,11 @@ export default function FinanceiroPage() {
     )
   }
 
-  function printReport() {
+  function printCompareReport() {
     if (!kpis) return
-    const opened = printFinanceCompareReport(kpis, getBrand().displayName)
-    if (!opened) {
-      setError('Permita pop-ups para gerar o PDF (imprimir → salvar como PDF).')
+    const ok = openPrintHtml(buildFinanceComparePrintHtml(kpis, getBrand().displayName))
+    if (!ok) {
+      setError('Permita pop-ups para gerar o PDF do relatório comparativo.')
     }
   }
 
@@ -442,15 +443,15 @@ export default function FinanceiroPage() {
             disabled={!kpis}
             className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
-            <Download size={14} /> Relatório CSV
+            <Download size={14} /> Relatório do mês (CSV)
           </button>
           <button
             type="button"
-            onClick={printReport}
+            onClick={printCompareReport}
             disabled={!kpis}
-            className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
-            <Download size={14} /> PDF c/ gráficos
+            <FileText size={14} /> PDF com gráficos
           </button>
         </div>
       </div>

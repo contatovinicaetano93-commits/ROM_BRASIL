@@ -5,7 +5,6 @@ import {
   formatNumberBr,
   formatPercentPoints,
 } from '@/lib/salon/format'
-import { openPrintHtml } from '@/lib/salon/month-overview-export'
 
 export interface FinanceExpenseRow {
   expense_date: string
@@ -234,132 +233,6 @@ export function buildFinanceCompareCsv(opts: {
   return '\uFEFF' + lines.join('\n')
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function barPair(label: string, a: number, b: number, aLabel: string, bLabel: string): string {
-  const max = Math.max(a, b, 1)
-  const wa = Math.round((a / max) * 100)
-  const wb = Math.round((b / max) * 100)
-  return `<div class="metric">
-    <div class="metric-label">${escapeHtml(label)}</div>
-    <div class="bars">
-      <div class="bar-row"><span class="bar-name">${escapeHtml(aLabel)}</span>
-        <div class="track"><div class="fill cur" style="width:${wa}%"></div></div>
-        <span class="bar-val">${escapeHtml(formatCurrency(a))}</span></div>
-      <div class="bar-row"><span class="bar-name">${escapeHtml(bLabel)}</span>
-        <div class="track"><div class="fill prev" style="width:${wb}%"></div></div>
-        <span class="bar-val">${escapeHtml(formatCurrency(b))}</span></div>
-    </div>
-  </div>`
-}
-
-function barPairNumber(
-  label: string,
-  a: number,
-  b: number,
-  aLabel: string,
-  bLabel: string,
-  format: (n: number) => string = (n) => formatNumberBr(n, 0),
-): string {
-  const max = Math.max(a, b, 1)
-  const wa = Math.round((a / max) * 100)
-  const wb = Math.round((b / max) * 100)
-  return `<div class="metric">
-    <div class="metric-label">${escapeHtml(label)}</div>
-    <div class="bars">
-      <div class="bar-row"><span class="bar-name">${escapeHtml(aLabel)}</span>
-        <div class="track"><div class="fill cur" style="width:${wa}%"></div></div>
-        <span class="bar-val">${escapeHtml(format(a))}</span></div>
-      <div class="bar-row"><span class="bar-name">${escapeHtml(bLabel)}</span>
-        <div class="track"><div class="fill prev" style="width:${wb}%"></div></div>
-        <span class="bar-val">${escapeHtml(format(b))}</span></div>
-    </div>
-  </div>`
-}
-
-/** HTML imprimível: resumo + página de gráficos Jul vs mês comparado. */
-export function buildFinanceComparePrintHtml(opts: {
-  kpis: FinanceKpis
-  unit: string
-}): string {
-  const cur = opts.kpis.current
-  const prev = opts.kpis.previous
-  const deltaPct =
-    prev.revenue > 0 ? Math.round(((cur.revenue - prev.revenue) / prev.revenue) * 1000) / 10 : null
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8" />
-<title>Financeiro ${escapeHtml(cur.label)} vs ${escapeHtml(prev.label)} — ${escapeHtml(opts.unit)}</title>
-<style>
-  body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; margin: 28px; }
-  h1 { font-size: 22px; margin: 0 0 6px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin: 22px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-  .meta { color: #555; font-size: 13px; margin-bottom: 16px; }
-  .warn { background: #fff7e6; border: 1px solid #e6c200; padding: 8px 10px; font-size: 12px; margin: 12px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  td, th { text-align: left; padding: 5px 6px; border-bottom: 1px solid #eee; }
-  .metric { margin: 0 0 14px; }
-  .metric-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; color: #444; }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
-  .bar-name { width: 72px; font-size: 12px; color: #555; }
-  .track { flex: 1; height: 14px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
-  .fill { height: 100%; border-radius: 3px; }
-  .fill.cur { background: #1f6f5b; }
-  .fill.prev { background: #8a8a8a; }
-  .bar-val { width: 110px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .page-break { page-break-before: always; }
-  .note { font-size: 11px; color: #666; margin-top: 18px; }
-  @media print { body { margin: 12mm; } .page-break { page-break-before: always; } }
-</style>
-</head>
-<body>
-  <h1>Relatório financeiro — ${escapeHtml(opts.unit)}</h1>
-  <div class="meta">${escapeHtml(cur.label)} vs ${escapeHtml(prev.label)} · gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
-  ${
-    prev.revenue_source !== 'metrics'
-      ? `<div class="warn"><strong>${escapeHtml(prev.label)}:</strong> ${escapeHtml(revenueSourceNote(prev))}. Comparativo de receita pode estar incompleto até o backfill do mês.</div>`
-      : ''
-  }
-
-  <h2>Resumo</h2>
-  <table>
-    <tr><th>Métrica</th><th>${escapeHtml(cur.label)}</th><th>${escapeHtml(prev.label)}</th><th>Δ</th></tr>
-    <tr><td>Receita</td><td>${escapeHtml(formatCurrency(cur.revenue))}</td><td>${escapeHtml(formatCurrency(prev.revenue))}</td><td>${escapeHtml(formatCurrency(cur.revenue - prev.revenue))}${deltaPct != null ? ` (${deltaPct > 0 ? '+' : ''}${deltaPct}%)` : ''}</td></tr>
-    <tr><td>Atendidos</td><td>${escapeHtml(formatNumberBr(cur.attended, 0))}</td><td>${escapeHtml(formatNumberBr(prev.attended, 0))}</td><td>${escapeHtml(formatNumberBr(cur.attended - prev.attended, 0))}</td></tr>
-    <tr><td>Ticket médio</td><td>${cur.ticket_avg != null ? escapeHtml(formatCurrency(cur.ticket_avg)) : '—'}</td><td>${prev.ticket_avg != null ? escapeHtml(formatCurrency(prev.ticket_avg)) : '—'}</td><td>—</td></tr>
-    <tr><td>Despesas</td><td>${escapeHtml(formatCurrency(cur.expenses))}</td><td>${escapeHtml(formatCurrency(prev.expenses))}</td><td>${escapeHtml(formatCurrency(cur.expenses - prev.expenses))}</td></tr>
-    <tr><td>CMV</td><td>${escapeHtml(formatCurrency(cur.cmv))}</td><td>${escapeHtml(formatCurrency(prev.cmv))}</td><td>${escapeHtml(formatCurrency(cur.cmv - prev.cmv))}</td></tr>
-    <tr><td>Fluxo</td><td>${escapeHtml(formatCurrency(cur.cash_flow))}</td><td>${escapeHtml(formatCurrency(prev.cash_flow))}</td><td>${escapeHtml(formatCurrency(cur.cash_flow - prev.cash_flow))}</td></tr>
-  </table>
-
-  <div class="page-break"></div>
-  <h1>Gráficos — ${escapeHtml(cur.label)} × ${escapeHtml(prev.label)}</h1>
-  <div class="meta">Barras comparativas (valores absolutos)</div>
-  ${barPair('Receita', cur.revenue, prev.revenue, cur.label, prev.label)}
-  ${barPairNumber('Atendidos', cur.attended, prev.attended, cur.label, prev.label)}
-  ${barPair('Ticket médio', cur.ticket_avg ?? 0, prev.ticket_avg ?? 0, cur.label, prev.label)}
-  ${barPair('CMV', cur.cmv, prev.cmv, cur.label, prev.label)}
-  ${barPair('Despesas', cur.expenses, prev.expenses, cur.label, prev.label)}
-  ${barPair('Fluxo', cur.cash_flow, prev.cash_flow, cur.label, prev.label)}
-
-  <p class="note">
-    Fonte receita ${escapeHtml(cur.label)}: ${escapeHtml(revenueSourceNote(cur))}.
-    Fonte receita ${escapeHtml(prev.label)}: ${escapeHtml(revenueSourceNote(prev))}.
-    Se o mês comparado estiver vazio nas métricas diárias, rode o backfill de receita do mês.
-  </p>
-  <script>window.onload = function () { window.print(); }</script>
-</body>
-</html>`
-}
-
 export function downloadFinanceCompareCsv(filename: string, csv: string) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -368,8 +241,4 @@ export function downloadFinanceCompareCsv(filename: string, csv: string) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
-}
-
-export function printFinanceCompareReport(kpis: FinanceKpis, unit: string) {
-  return openPrintHtml(buildFinanceComparePrintHtml({ kpis, unit }))
 }

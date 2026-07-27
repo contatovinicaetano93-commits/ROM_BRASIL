@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_CMV_COVERAGE, type FinanceKpis } from '@/lib/finance'
-import {
-  buildFinanceCompareCsv,
-  buildFinanceComparePrintHtml,
-} from '@/lib/finance-report-export'
+import { buildFinanceCompareCsv } from '@/lib/finance-report-export'
 
 function bucket(partial: Partial<FinanceKpis['current']> = {}): FinanceKpis['current'] {
   return {
@@ -66,24 +63,5 @@ describe('finance-report-export', () => {
     expect(csv).toContain('fallback 0081')
     expect(csv).toContain('=== RECEITA DIÁRIA — Jun/2026 ===')
     expect(csv).toContain('=== FORMAS DE PAGAMENTO — Jun/2026 ===')
-  })
-
-  it('HTML do PDF traz página de gráficos comparativos', () => {
-    const html = buildFinanceComparePrintHtml({
-      unit: 'ROM CLUB BRASIL',
-      kpis: {
-        current: bucket(),
-        previous: bucket({
-          month: '2026-06',
-          label: 'Jun/2026',
-          revenue: 800,
-          revenue_source: 'empty',
-        }),
-      },
-    })
-    expect(html).toContain('page-break')
-    expect(html).toContain('Gráficos')
-    expect(html).toContain('Jul/2026')
-    expect(html).toContain('Jun/2026')
   })
 })
