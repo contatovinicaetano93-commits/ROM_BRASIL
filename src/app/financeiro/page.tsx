@@ -175,23 +175,6 @@ function recentExpenseDates(count = 30): string[] {
   return Array.from({ length: count }, (_, i) => shiftIsoDate(today, -i))
 }
 
-function reconciliationStatusLabel(status: PaymentReconciliation['status']) {
-  switch (status) {
-    case 'aligned':
-      return 'Conciliado'
-    case 'divergent':
-      return 'Divergente'
-    case 'missing_payments':
-      return 'Sem formas de pagamento'
-    case 'missing_revenue':
-      return 'Sem receita'
-    default: {
-      const _exhaustive: never = status
-      return _exhaustive
-    }
-  }
-}
-
 const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   {
     term: 'Receita',
