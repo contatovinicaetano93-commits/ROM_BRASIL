@@ -15,7 +15,7 @@ import { todayIso } from '@/lib/salon/format'
 import { getDeploymentContext } from '@/lib/deployment'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
 
-export type AnalyticsBackfillStep = 'snapshots' | 'cancellations'
+export type AnalyticsBackfillStep = 'p1' | 'p2' | 'p3' | 'snapshots' | 'cancellations'
 
 export type AnalyticsBackfillResult = {
   month: string
@@ -37,11 +37,14 @@ export type AnalyticsBackfillResult = {
 }
 
 export type AnalyticsBackfillOpts = {
-  /** Default: ['snapshots'] — P1/P2/P3 cabem numa invocação Vercel. */
+  /**
+   * Default: ['p1'] — uma fatia por invocação evita timeout Avec/Vercel.
+   * 'snapshots' = p1+p2+p3 na mesma chamada (só se a API estiver rápida).
+   */
   steps?: AnalyticsBackfillStep[]
   /** Início do chunk de cancelamentos (default = 1º do mês). */
   cancelFrom?: string
-  /** Tamanho do chunk de cancelamentos (1–14, default 7). */
+  /** Tamanho do chunk de cancelamentos (1–14, default 5). */
   cancelMaxDays?: number
 }
 
@@ -122,36 +125,39 @@ export async function runAnalyticsMonthBackfill(
   }
 
   const { from, to } = monthToDateRange(monthKey)
-  const stepsRaw = opts?.steps?.length ? opts.steps : (['snapshots'] as AnalyticsBackfillStep[])
-  const steps = [...new Set(stepsRaw)].filter(
-    (s): s is AnalyticsBackfillStep => s === 'snapshots' || s === 'cancellations',
-  )
+  const stepsRaw = opts?.steps?.length ? opts.steps : (['p1'] as AnalyticsBackfillStep[])
+  const expanded: AnalyticsBackfillStep[] = []
+  for (const s of stepsRaw) {
+    if (s === 'snapshots') {
+      expanded.push('p1', 'p2', 'p3')
+    } else if (s === 'p1' || s === 'p2' || s === 'p3' || s === 'cancellations') {
+      expanded.push(s)
+    }
+  }
+  const steps = [...new Set(expanded)]
   if (!steps.length) {
-    throw new Error("steps deve incluir 'snapshots' e/ou 'cancellations'")
+    throw new Error("steps deve incluir 'p1'|'p2'|'p3'|'snapshots'|'cancellations'")
   }
 
-<<<<<<< HEAD
-  await syncP1Kpis(stats, undefined, opts)
-  await syncP2Kpis(stats, undefined, opts)
-  await syncP3Kpis(stats, undefined, opts)
-  await syncCancellationsRange(from, to, stats, undefined, { zeroEmptyDays: true })
-  await syncNoShows0248Range(from, to, stats, undefined, { zeroEmptyDays: true })
-=======
   const stats = emptyStats()
   let cancel_from: string | null = null
   let cancel_to: string | null = null
   let next_cancel_from: string | null = null
   let cancellations_done = !steps.includes('cancellations')
+  const snapOpts = { anchorDay: to, daysBack: 30 }
 
-  if (steps.includes('snapshots')) {
-    const snapOpts = { anchorDay: to, daysBack: 30 }
+  if (steps.includes('p1')) {
     await syncP1Kpis(stats, undefined, snapOpts)
+  }
+  if (steps.includes('p2')) {
     await syncP2Kpis(stats, undefined, snapOpts)
+  }
+  if (steps.includes('p3')) {
     await syncP3Kpis(stats, undefined, snapOpts)
   }
 
   if (steps.includes('cancellations')) {
-    const maxDaysRaw = opts?.cancelMaxDays ?? 7
+    const maxDaysRaw = opts?.cancelMaxDays ?? 5
     const maxDays = Math.min(14, Math.max(1, Math.floor(maxDaysRaw)))
     const start =
       opts?.cancelFrom && /^\d{4}-\d{2}-\d{2}$/.test(opts.cancelFrom) && opts.cancelFrom >= from
@@ -161,8 +167,8 @@ export async function runAnalyticsMonthBackfill(
     const end = endCandidate > to ? to : endCandidate
     cancel_from = start
     cancel_to = end
-    await syncCancellationsRange(start, end, stats)
-    await syncNoShows0248Range(start, end, stats)
+    await syncCancellationsRange(start, end, stats, undefined, { zeroEmptyDays: true })
+    await syncNoShows0248Range(start, end, stats, undefined, { zeroEmptyDays: true })
     if (end < to) {
       next_cancel_from = addCalendarDays(end, 1)
       cancellations_done = false
@@ -170,7 +176,6 @@ export async function runAnalyticsMonthBackfill(
       cancellations_done = true
     }
   }
->>>>>>> 94bfc7a (fix(analytics): fatiar backfill em snapshots + cancelamentos)
 
   return {
     month: monthKey,

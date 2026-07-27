@@ -28,7 +28,8 @@ function parseMonth(value: unknown): string | undefined {
 
 function parseSteps(value: unknown): AnalyticsBackfillStep[] | undefined {
   if (!Array.isArray(value)) return undefined
-  const steps = value.filter((s): s is AnalyticsBackfillStep => s === 'snapshots' || s === 'cancellations')
+  const allowed = new Set(['p1', 'p2', 'p3', 'snapshots', 'cancellations'])
+  const steps = value.filter((s): s is AnalyticsBackfillStep => typeof s === 'string' && allowed.has(s))
   return steps.length ? steps : undefined
 }
 
@@ -73,11 +74,13 @@ export async function POST(req: NextRequest) {
     if (unique.length === 0) {
       return err('Informe month (YYYY-MM) ou months[]', 400)
     }
-    if (unique.length > 2) {
-      return err('Máximo 2 meses por chamada (evita timeout Avec/Vercel)', 400)
+    if (unique.length > 3) {
+      return err('Máximo 3 meses por chamada quando steps=p1|p2|p3 (evita timeout)', 400)
     }
 
     const steps = parseSteps(body.steps)
+    // Default seguro: um slice por vez. Se caller passar months[] sem steps, usa p1.
+    const effectiveSteps = steps ?? (unique.length > 1 ? (['p1'] as AnalyticsBackfillStep[]) : undefined)
     const cancelFrom = parseIsoDay(body.cancelFrom)
     const cancelMaxDaysRaw = body.cancelMaxDays
     const cancelMaxDays =
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
     for (const month of unique) {
       results.push(
         await runAnalyticsMonthBackfill(month, {
-          steps,
+          steps: effectiveSteps,
           cancelFrom,
           cancelMaxDays,
         }),
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
     return ok({
       results,
       suggested_remaining: monthsNeedingAnalyticsBackfill().filter((m) => !unique.includes(m)),
-      note: 'Default = snapshots. Para cancelamentos, repita com steps=["cancellations"] e cancelFrom=next_cancel_from.',
+      note: 'Default = p1. Rode p2, p3 e cancellations em chamadas separadas. cancelFrom=next_cancel_from até done.',
     })
   } catch (e) {
     return handleError(e)
@@ -118,13 +121,13 @@ export async function GET(req: NextRequest) {
       method: 'POST',
       body: {
         month: 'YYYY-MM (um mês)',
-        months: 'string[] (máx. 2)',
-        steps: '["snapshots"] | ["cancellations"] | ambos',
+        months: 'string[] (máx. 3 com steps finos)',
+        steps: '["p1"] | ["p2"] | ["p3"] | ["snapshots"] | ["cancellations"]',
         cancelFrom: 'YYYY-MM-DD (chunk cancelamentos)',
-        cancelMaxDays: '1–14 (default 7)',
+        cancelMaxDays: '1–14 (default 5)',
       },
       suggested: monthsNeedingAnalyticsBackfill(),
-      note: 'snapshots primeiro; depois cancellations em chunks até cancellations_done=true.',
+      note: 'Ordem recomendada por mês: p1 → p2 → p3 → cancellations (chunks).',
     })
   } catch (e) {
     return handleError(e)

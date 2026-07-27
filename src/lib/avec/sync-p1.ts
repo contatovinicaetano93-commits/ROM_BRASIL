@@ -246,7 +246,10 @@ export async function syncP1Kpis(
   let reactivation_count = 0
   let reactivationOk = false
   const id0107 = resolveId('reactivation')
-  if (id0107) {
+  // 0107 = lista enorme “sem retorno” (até ~5k) — lento e irrelevante para snapshot histórico
+  // da Visão analítica (period-analytics não usa reactivation_count).
+  const skipReactivation = Boolean(opts?.anchorDay && opts.anchorDay !== todayIsoLocal())
+  if (id0107 && !skipReactivation) {
     try {
       const reportParams = withRequiredAvecReportParams(id0107, { limit: 250 })
       const result = await fetchAllAvecReport(id0107, reportParams)
