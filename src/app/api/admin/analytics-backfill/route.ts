@@ -6,9 +6,10 @@ import { isAvecConfigured } from '@/lib/avec/client'
 import {
   monthsNeedingAnalyticsBackfill,
   runAnalyticsMonthBackfill,
+  type AnalyticsBackfillStep,
 } from '@/lib/avec/analytics-backfill'
 
-/** P1+P2+P3 + cancelamentos do mês inteiro — pode levar alguns minutos. */
+/** Snapshots P1/P2/P3 cabem bem; cancelamentos vão em chunks de ≤7 dias. */
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
@@ -25,9 +26,25 @@ function parseMonth(value: unknown): string | undefined {
   return v
 }
 
+function parseSteps(value: unknown): AnalyticsBackfillStep[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const steps = value.filter((s): s is AnalyticsBackfillStep => s === 'snapshots' || s === 'cancellations')
+  return steps.length ? steps : undefined
+}
+
+function parseIsoDay(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const v = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined
+  return v
+}
+
 /**
- * POST — preenche Visão analítica de um mês (P1/P2/P3 + cancel/no-show).
- * Body: { month: "2026-04" }  OU  { months: ["2026-01","2026-02"] } (máx. 2 por chamada).
+ * POST — preenche Visão analítica de um mês.
+ * Body:
+ *   { month: "2026-04" }                         → só snapshots (default)
+ *   { month, steps: ["cancellations"], cancelFrom, cancelMaxDays }
+ *   { months: ["2026-01","2026-02"], steps: ["snapshots"] }  (máx. 2)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -60,15 +77,31 @@ export async function POST(req: NextRequest) {
       return err('Máximo 2 meses por chamada (evita timeout Avec/Vercel)', 400)
     }
 
+    const steps = parseSteps(body.steps)
+    const cancelFrom = parseIsoDay(body.cancelFrom)
+    const cancelMaxDaysRaw = body.cancelMaxDays
+    const cancelMaxDays =
+      typeof cancelMaxDaysRaw === 'number' && Number.isFinite(cancelMaxDaysRaw)
+        ? Math.floor(cancelMaxDaysRaw)
+        : typeof cancelMaxDaysRaw === 'string' && cancelMaxDaysRaw.trim()
+          ? Math.floor(Number(cancelMaxDaysRaw))
+          : undefined
+
     const results = []
     for (const month of unique) {
-      results.push(await runAnalyticsMonthBackfill(month))
+      results.push(
+        await runAnalyticsMonthBackfill(month, {
+          steps,
+          cancelFrom,
+          cancelMaxDays,
+        }),
+      )
     }
 
     return ok({
       results,
       suggested_remaining: monthsNeedingAnalyticsBackfill().filter((m) => !unique.includes(m)),
-      note: 'Repita POST com o próximo month até cobrir Jan–mês anterior.',
+      note: 'Default = snapshots. Para cancelamentos, repita com steps=["cancellations"] e cancelFrom=next_cancel_from.',
     })
   } catch (e) {
     return handleError(e)
@@ -86,9 +119,12 @@ export async function GET(req: NextRequest) {
       body: {
         month: 'YYYY-MM (um mês)',
         months: 'string[] (máx. 2)',
+        steps: '["snapshots"] | ["cancellations"] | ambos',
+        cancelFrom: 'YYYY-MM-DD (chunk cancelamentos)',
+        cancelMaxDays: '1–14 (default 7)',
       },
       suggested: monthsNeedingAnalyticsBackfill(),
-      note: 'Preenche P1/P2/P3 no fim do mês + cancelamentos/no-shows do calendário.',
+      note: 'snapshots primeiro; depois cancellations em chunks até cancellations_done=true.',
     })
   } catch (e) {
     return handleError(e)
