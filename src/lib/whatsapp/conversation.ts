@@ -158,7 +158,7 @@ export async function handleWhatsAppMessage(from: string, text: string): Promise
     return { contactId: contact.id, reply: handoffReply, intent, handoff: true }
   }
 
-  if (contact.status === 'novo') {
+  if (contact.status === 'novo' || contact.status === 'importado') {
     await updateContact(contact.id, { status: 'em_atendimento' })
   }
 

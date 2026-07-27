@@ -8,7 +8,7 @@ where status = 'novo'
   and channel = 'avec'
   and (
     source like 'avec_sync_clients%'
-    or source = 'avec_sync_returning_0002'
+    or source like 'avec_sync_returning%'
     or source like 'avec_backfill%'
     or source like 'avec_lake%'
   );

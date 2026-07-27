@@ -90,9 +90,8 @@ export interface ContactRow {
   anonymized_at: string | null
 }
 
-// Fluxo guiado: todo contato novo entra como "novo", sobe pro mesmo registro
-// se o telefone já existir (evita duplicar KPI de canais diferentes falando
-// com a mesma pessoa).
+// Upsert por telefone/avec_id: status default 'novo' só na inserção;
+// no conflito, CASE promove sem rebaixar (importado ≠ novo lead).
 export async function upsertContact(input: UpsertContactInput): Promise<ContactRow> {
   const sql = getSql()
   const phone = input.phone ? normalizePhone(input.phone) ?? input.phone.trim() : null
@@ -124,7 +123,6 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'perdido' then 'perdido'
           when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-          when contacts.status = 'novo' and excluded.status = 'importado' then 'novo'
           when (
             case excluded.status
               when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
@@ -166,7 +164,6 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'perdido' then 'perdido'
         when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-        when contacts.status = 'novo' and excluded.status = 'importado' then 'novo'
         when (
           case excluded.status
             when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2

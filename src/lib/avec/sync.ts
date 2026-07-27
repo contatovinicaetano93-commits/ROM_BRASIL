@@ -569,14 +569,15 @@ async function syncReturningFrom0002(
       // Backfill last_done_at só p/ quem veio hoje (evita reescrever milhares no cron).
       if (att.lastVisitDay === today) {
         try {
-          // Cliente Avec recorrente ≠ lead novo do funil.
+          // Visita hoje: avança no funil (não deixa como dump importado).
+          // Se já for convertido/agendado, o upsert só promove — não rebaixa.
           const contact = await upsertContact({
             avecClientId: att.avecClientId ?? undefined,
             name: att.clientName,
             phone: att.phone,
             channel: 'avec',
             source: 'avec_sync_returning_0002',
-            status: 'importado',
+            status: 'convertido',
           })
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)

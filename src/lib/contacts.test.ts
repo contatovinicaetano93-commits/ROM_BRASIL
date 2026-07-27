@@ -36,6 +36,10 @@ describe('mergeContactStatus', () => {
   it('marca perdido quando explícito', () => {
     expect(mergeContactStatus('convertido', 'perdido')).toBe('perdido')
   })
+  it('promove importado e novo para em_atendimento (WhatsApp)', () => {
+    expect(mergeContactStatus('importado', 'em_atendimento')).toBe('em_atendimento')
+    expect(mergeContactStatus('novo', 'em_atendimento')).toBe('em_atendimento')
+  })
 })
 
 describe('resolveConflictStatus (upsert ON CONFLICT)', () => {
