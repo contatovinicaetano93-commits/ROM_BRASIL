@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
 
     const month = req.nextUrl.searchParams.get('month') ?? undefined
     const compareMonth = req.nextUrl.searchParams.get('compare') ?? undefined
-    if (month && !/^\d{4}-\d{2}$/.test(month)) return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
-    if (compareMonth && !/^\d{4}-\d{2}$/.test(compareMonth))
+    if (month && !/^\d{4}-\d{2}(-\d{2})?$/.test(month))
+      return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
+    if (compareMonth && !/^\d{4}-\d{2}(-\d{2})?$/.test(compareMonth))
       return err('Parâmetro compare inválido (esperado YYYY-MM)', 422)
 
     const kpis = await computeFinanceKpis({ month, compareMonth })

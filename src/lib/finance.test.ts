@@ -181,10 +181,12 @@ describe('finance', () => {
     it('usa payment_mix agregado do helper 0081', async () => {
       mockBucketSql({ revenue: '1000', expenses: '0' })
       mockBucketSql({ revenue: '0', expenses: '0' })
-      getPaymentMixRange.mockResolvedValue([
-        { method: 'Pix', amount: 500, share: 83.3 },
-        { method: 'Cartão', amount: 100, share: 16.7 },
-      ])
+      getPaymentMixRange
+        .mockResolvedValueOnce([
+          { method: 'Pix', amount: 500, share: 83.3 },
+          { method: 'Cartão', amount: 100, share: 16.7 },
+        ])
+        .mockResolvedValueOnce([])
 
       const { computeFinanceKpis } = await import('@/lib/finance')
       const result = await computeFinanceKpis({ month: '2026-07' })
@@ -193,6 +195,35 @@ describe('finance', () => {
         { method: 'Pix', amount: 500, share: 83.3 },
         { method: 'Cartão', amount: 100, share: 16.7 },
       ])
+      expect(result.current.revenue_source).toBe('metrics')
     })
+
+    it('normaliza compare YYYY-MM-DD e usa 0081 se métricas do mês comparado estão vazias', async () => {
+      mockBucketSql({ revenue: '1000', expenses: '0', attended: 10 })
+      mockBucketSql({ revenue: '0', expenses: '0', attended: 0 })
+      getPaymentMixRange
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ method: 'Pix', amount: 2500, share: 100 }])
+
+      const { computeFinanceKpis } = await import('@/lib/finance')
+      const result = await computeFinanceKpis({
+        month: '2026-07-27',
+        compareMonth: '2026-06-10',
+      })
+
+      expect(result.current.month).toBe('2026-07')
+      expect(result.previous.month).toBe('2026-06')
+      expect(result.previous.revenue).toBe(2500)
+      expect(result.previous.revenue_source).toBe('payments_0081')
+    })
+  })
+})
+
+describe('normalizeMonthKey', () => {
+  it('aceita YYYY-MM e corta YYYY-MM-DD', async () => {
+    const { normalizeMonthKey } = await import('@/lib/finance')
+    expect(normalizeMonthKey('2026-06')).toBe('2026-06')
+    expect(normalizeMonthKey('2026-06-10')).toBe('2026-06')
+    expect(normalizeMonthKey('bad')).toBeNull()
   })
 })
