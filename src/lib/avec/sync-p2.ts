@@ -103,16 +103,19 @@ function aggregatePaymentMix(rows: Record<string, unknown>[]): P2PaymentRow[] {
 /**
  * Sync 0081 (formas de pagamento) dia a dia.
  * Fast: só hoje. Full (via syncP2): últimos `daysBack` dias + hoje.
+ * Opcional `range` fixa FROM/TO (ex.: backfill) em vez de ancorar em hoje.
  */
 export async function syncPaymentMixRecent(
   stats: SyncStatsLike,
   syncRunId?: string,
   daysBack = 0,
+  range?: { from: string; to: string },
 ) {
   const id0081 = resolveId('payment_mix') ?? '0081'
   const today = todayIsoLocal()
-  const from = addCalendarDays(today, -Math.max(0, daysBack))
-  const days = listDaysInclusive(from, today)
+  const from = range?.from ?? addCalendarDays(today, -Math.max(0, daysBack))
+  const to = range?.to ?? today
+  const days = listDaysInclusive(from, to)
 
   for (const day of days) {
     const params = {

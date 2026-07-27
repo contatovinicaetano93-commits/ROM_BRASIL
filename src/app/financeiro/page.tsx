@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download, Camera, Paperclip, FileText } from 'lucide-react'
+import { Plus, X, Trash2, Download, Camera, Paperclip, FileText, RefreshCw } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -58,7 +58,7 @@ interface FinanceKpiBucket {
   from: string
   to: string
   revenue: number
-  revenue_source?: 'metrics' | 'payments_0081' | 'empty'
+  revenue_source: 'metrics' | 'payments_0081' | 'empty'
   expenses: number
   attended: number
   ticket_avg: number | null
@@ -319,6 +319,8 @@ export default function FinanceiroPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [fiscalImporting, setFiscalImporting] = useState(false)
   const [fiscalImportMsg, setFiscalImportMsg] = useState<string | null>(null)
+  const [yearBackfillBusy, setYearBackfillBusy] = useState(false)
+  const [yearBackfillMsg, setYearBackfillMsg] = useState<string | null>(null)
   const [dailyOpen, setDailyOpen] = useSectionOpen('financeiro.section.receita-diaria.open', false)
   const [expensesOpen, setExpensesOpen] = useSectionOpen('financeiro.section.despesas.open', false)
 
@@ -409,6 +411,59 @@ export default function FinanceiroPage() {
     }
   }
 
+  /** Puxa 0088+0081 do ano (chunks) para o comparativo deixar de zerar meses antigos. */
+  async function backfillYearMetrics() {
+    if (yearBackfillBusy) return
+    if (
+      !confirm(
+        'Puxar receita e atendidos da Avec desde 1º de janeiro até hoje? Pode levar vários minutos.',
+      )
+    ) {
+      return
+    }
+    setYearBackfillBusy(true)
+    setYearBackfillMsg('Iniciando backfill do ano…')
+    try {
+      let from: string | undefined
+      let chunks = 0
+      let totalDays = 0
+      let sumRevenue = 0
+      for (;;) {
+        const res = await apiFetch('/api/admin/revenue-backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from, maxDays: 31 }),
+        })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        const data = json.data as {
+          from: string
+          to: string
+          next_from: string | null
+          done: boolean
+          days: unknown[]
+          sum_revenue: number
+        }
+        chunks++
+        totalDays += data.days?.length ?? 0
+        sumRevenue += Number(data.sum_revenue ?? 0)
+        setYearBackfillMsg(
+          `Chunk ${chunks}: ${data.from} → ${data.to} (${totalDays} dias, R$ ${Math.round(sumRevenue).toLocaleString('pt-BR')})…`,
+        )
+        if (data.done || !data.next_from) break
+        from = data.next_from
+      }
+      setYearBackfillMsg(
+        `Ano preenchido: ${chunks} chunk(s), ${totalDays} dias, receita ≈ R$ ${Math.round(sumRevenue).toLocaleString('pt-BR')}.`,
+      )
+      await load()
+    } catch (e) {
+      setYearBackfillMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setYearBackfillBusy(false)
+    }
+  }
+
   function categoryName(id: string | null) {
     return categories.find((c) => c.id === id)?.name ?? 'Sem categoria'
   }
@@ -453,8 +508,24 @@ export default function FinanceiroPage() {
           >
             <FileText size={14} /> PDF com gráficos
           </button>
+          <button
+            type="button"
+            onClick={backfillYearMetrics}
+            disabled={yearBackfillBusy}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+            title="Puxa métricas Avec (0088/0081) de jan → hoje para o banco"
+          >
+            <RefreshCw size={14} className={yearBackfillBusy ? 'animate-spin' : undefined} />
+            {yearBackfillBusy ? 'Preenchendo ano…' : 'Preencher ano (Avec)'}
+          </button>
         </div>
       </div>
+
+      {yearBackfillMsg && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground/90">
+          {yearBackfillMsg}
+        </div>
+      )}
 
       {kpis && kpis.previous.revenue_source && kpis.previous.revenue_source !== 'metrics' && (
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
@@ -462,7 +533,7 @@ export default function FinanceiroPage() {
           {kpis.previous.revenue_source === 'payments_0081'
             ? ' — usando fallback das formas de pagamento (0081).'
             : ' — comparativo zerado.'}{' '}
-          O sync Avec só cobre ~7 dias; rode o backfill do mês comparado para preencher Junho (ou o mês escolhido).
+          Use <strong>Preencher ano (Avec)</strong> para gravar jan→hoje no banco (o sync normal só cobre ~7 dias).
         </div>
       )}
 
