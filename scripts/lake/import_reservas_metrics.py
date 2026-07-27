@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""Import AvecLake reservas (+ métricas de comandas) into ROM Neon DBs.
+"""Import AvecLake reservas (+ métricas de comandas) into ROM DBs.
 
+DB URLs (never commit secrets):
+  DATABASE_URL_BRASIL  → Supabase pooler (prefer SESSION :5432; see
+                         /tmp/rom-dbs/supabase-brasil.env + brasil-supabase.env.note)
+  DATABASE_URL_IGUATEMI → Neon Iguatemi (unchanged)
+  DATABASE_URL_ROMSALES → Neon RomSales (unchanged)
+
+Do NOT use dead Neon BR (ep-long-sun-*.neon.tech).
 Credentials via env files in /tmp — never commit secrets.
 """
 from __future__ import annotations
@@ -24,6 +31,28 @@ SALONS = {
 }
 
 ACTIVE_STATUS = ("AGENDADO", "CONFIRMADO", "AGUARDANDO", "EM ATENDIMENTO")
+
+
+def load_db_env() -> None:
+    for path in (
+        "/tmp/rom-dbs/supabase-brasil.env",
+        "/tmp/rom-dbs/env",
+        "/tmp/avec-lake/env",
+    ):
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[len("export ") :]
+                if "=" in line and not line.startswith("#"):
+                    k, v = line.split("=", 1)
+                    os.environ[k] = v.strip().strip("'").strip('"')
+    session = os.environ.get("DATABASE_URL_BRASIL_SUPABASE_SESSION", "").strip()
+    br = os.environ.get("DATABASE_URL_BRASIL", "").strip()
+    if session and ("neon.tech" in br or not br):
+        os.environ["DATABASE_URL_BRASIL"] = session
 
 
 def athena():
@@ -482,16 +511,7 @@ def import_unit(
 
 
 def main():
-    for path in ("/tmp/avec-lake/env", "/tmp/rom-dbs/env"):
-        if os.path.exists(path):
-            with open(path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("export "):
-                        line = line[len("export ") :]
-                    if "=" in line and not line.startswith("#"):
-                        k, v = line.split("=", 1)
-                        os.environ[k] = v.strip().strip("'").strip('"')
+    load_db_env()
 
     only = os.environ.get("ONLY_UNIT")
     results = []

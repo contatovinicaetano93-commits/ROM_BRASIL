@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
-import { neon } from '@neondatabase/serverless'
 import { getRomPanelId, type RomPanelId } from '@/lib/brand'
-import { getSql } from '@/lib/db'
+import { getSql, type Sql } from '@/lib/db'
 import { isSyncLockBusyError, withSyncLock } from '@/lib/sync-lock'
 import { listMigrationsForPanel, type SchemaMigrationDef } from '@/lib/schema-migrations/registry'
 import { readDbSqlFile, splitSqlStatements } from '@/lib/schema-migrations/sql'
@@ -22,17 +21,11 @@ export interface MigrationRunSummary {
   lockBusy?: boolean
 }
 
-type SqlQueryFn = {
-  query: (query: string, params?: unknown[]) => Promise<unknown>
+function getQuerySql(databaseUrl?: string): Sql {
+  return getSql(databaseUrl)
 }
 
-function getQuerySql(databaseUrl?: string): SqlQueryFn {
-  const url = databaseUrl ?? process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL não configurada')
-  return neon(url) as unknown as SqlQueryFn
-}
-
-async function ensureSchemaMigrationsTable(sql: SqlQueryFn): Promise<void> {
+async function ensureSchemaMigrationsTable(sql: Sql): Promise<void> {
   await sql.query(`
     create table if not exists schema_migrations (
       id text primary key,
@@ -41,12 +34,12 @@ async function ensureSchemaMigrationsTable(sql: SqlQueryFn): Promise<void> {
   `)
 }
 
-async function listAppliedIds(sql: SqlQueryFn): Promise<Set<string>> {
+async function listAppliedIds(sql: Sql): Promise<Set<string>> {
   const rows = (await sql.query(`select id from schema_migrations`)) as { id: string }[]
   return new Set((rows ?? []).map((r) => r.id))
 }
 
-async function executeSqlFile(sql: SqlQueryFn, fileName: string, cwd?: string): Promise<number> {
+async function executeSqlFile(sql: Sql, fileName: string, cwd?: string): Promise<number> {
   const body = readDbSqlFile(fileName, cwd)
   const statements = splitSqlStatements(body)
   if (statements.length === 0) {
@@ -80,6 +73,13 @@ async function runPendingUnlocked(
     }
 
     try {
+      // 023 muda o tipo de v_kpi_daily.day (timestamptz → date); CREATE OR REPLACE
+      // não troca tipo — precisa DROP antes (idempotente se a view já for date).
+      if (migration.id === '023_kpi_funnel_real') {
+        await sql.query('drop view if exists v_kpi_daily')
+        await sql.query('drop view if exists v_kpi_status')
+        await sql.query('drop view if exists v_kpi_conversion')
+      }
       const statements = await executeSqlFile(sql, migration.file, cwd)
       await sql.query(`insert into schema_migrations (id) values ($1) on conflict (id) do nothing`, [
         migration.id,

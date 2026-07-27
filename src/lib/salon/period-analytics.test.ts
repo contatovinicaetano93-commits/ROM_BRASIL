@@ -38,9 +38,9 @@ describe('period-analytics', () => {
         { name: 'B', revenue: 50, attended: 0, ticket_avg: 0, occupancy: 0.2 },
       ]),
     ).toBe(0.8)
-    // Overbooking Avec (106,3%) permanece >1; legado em pontos é coerido.
     expect(coerceOccupancyFraction(1.063)).toBeCloseTo(1.063)
     expect(coerceOccupancyFraction(67.79)).toBeCloseTo(0.6779)
+    // Overbooking Avec (ex. 120%) permanece >1 na média ponderada.
     expect(
       averageOccupancy([
         { name: 'A', revenue: 100, attended: 10, ticket_avg: 10, occupancy: 1.2 },

@@ -1,4 +1,4 @@
-/** Agrega contatos CRM por dia e preenche a janela calendário (evita linha “falsa”). */
+/** Agrega contatos CRM por dia e preenche a janela calendário (evita curva falsa). */
 
 import { todayIso } from '@/lib/salon/format'
 
@@ -41,7 +41,6 @@ export function contactKpiWindow(dayLimit = 30, referenceDay = todayIso()) {
   return { from, to, days }
 }
 
-/** Lista YYYY-MM-DD inclusiva de from→to (UTC-calendário; chaves já são dates de salão). */
 export function eachDayInclusive(from: string, to: string): string[] {
   if (from > to) return []
   const out: string[] = []
@@ -56,7 +55,6 @@ export function eachDayInclusive(from: string, to: string): string[] {
 
 /**
  * Soma por dia e preenche dias sem contato com 0 na janela [from, to].
- * Sem fill, gaps + LIMIT em linhas day×canal geram curva enganosa no gráfico.
  */
 export function buildContactsPerDayChart(
   rows: ContactDayRow[],

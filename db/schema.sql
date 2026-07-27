@@ -25,7 +25,7 @@ create table if not exists contacts (
 create index if not exists contacts_channel_idx on contacts (channel);
 create index if not exists contacts_status_idx on contacts (status);
 create index if not exists contacts_created_at_idx on contacts (created_at desc);
-create unique index if not exists contacts_phone_idx on contacts (phone) where phone is not null;
+create unique index if not exists contacts_phone_idx on contacts (phone);
 
 -- Log granular de cada evento (mensagem recebida/enviada, webhook do Avec, etc).
 -- Existe pra tornar o sistema resiliente: nada some, tudo fica rastreável e reprocessável.
@@ -70,7 +70,7 @@ create index if not exists client_services_last_done_idx
   on client_services (contact_id, last_done_at desc nulls last)
   where active = true and last_done_at is not null;
 
-create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id) where avec_client_id is not null;
+create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id);
 
 -- Log de sincronizações com a API de Relatórios Avec.
 create table if not exists avec_sync_runs (
@@ -86,18 +86,26 @@ create index if not exists avec_sync_runs_created_idx on avec_sync_runs (created
 
 -- KPIs agregados por dia e canal — o painel administrativo lê daqui.
 -- count(*) é bigint; o cast ::int garante que o driver retorne número (não string).
--- day = data de calendário America/Sao_Paulo do primeiro contato (não timestamptz).
-create or replace view v_kpi_daily as
+-- DROP + CREATE: CREATE OR REPLACE não troca timestamptz → date em "day".
+drop view if exists v_kpi_daily;
+drop view if exists v_kpi_status;
+drop view if exists v_kpi_conversion;
+
+create view v_kpi_daily as
 select
   (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date as day,
   channel,
   count(*)::int as contacts_count
 from contacts
 where anonymized_at is null
+  and status <> 'importado'
+  and coalesce(source, '') not like 'avec_sync_clients%'
+  and coalesce(source, '') not like 'avec_backfill%'
+  and coalesce(source, '') not like 'avec_lake%'
 group by 1, 2
 order by 1 desc;
 
-create or replace view v_kpi_status as
+create view v_kpi_status as
 select
   status,
   count(*)::int as contacts_count
@@ -105,14 +113,16 @@ from contacts
 where anonymized_at is null
 group by 1;
 
-create or replace view v_kpi_conversion as
+create view v_kpi_conversion as
 select
   coalesce(
     count(*) filter (where status = 'convertido')::float
-      / nullif(count(*), 0)::float,
+      / nullif(count(*) filter (where status <> 'importado'), 0)::float,
     0
   ) as conversion_rate,
-  count(*)::int as total_contacts
+  count(*)::int as total_contacts,
+  count(*) filter (where status <> 'importado')::int as funnel_contacts,
+  count(*) filter (where status = 'importado')::int as imported_contacts
 from contacts
 where anonymized_at is null;
 

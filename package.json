@@ -10,19 +10,22 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "node scripts/run-migrations.mjs",
+    "check:db-driver": "node scripts/check-db-driver.mjs",
+    "check:brasil-db-host": "node scripts/check-brasil-db-host.mjs",
     "verify:deploy": "bash scripts/post-deploy-verification.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "@neondatabase/serverless": "^1.1.0",
     "@sentry/nextjs": "^10.65.0",
     "@vercel/blob": "^2.6.1",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.2",
+    "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -18,7 +18,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Use DOIS projetos Vercel (Brasil e Iguatemi) — nunca um banco compartilhado',
       'ROM_PANEL e NEXT_PUBLIC_ROM_PANEL com o MESMO valor (brasil ou iguatemi)',
-      'DATABASE_URL = Neon dedicado só desta unidade',
+      'DATABASE_URL = Postgres dedicado só desta unidade (Brasil: Supabase pooler; Iguatemi: Neon)',
       'Redeploy após alterar NEXT_PUBLIC_ROM_PANEL (valor vai no build)',
       'Admin → Diagnóstico: confira deployment.display_name e validation.warnings',
     ],

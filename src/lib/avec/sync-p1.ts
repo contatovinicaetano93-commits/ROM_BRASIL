@@ -164,8 +164,8 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   const professionalsOk = professionalsAttempted && !professionalsFailed
 
-  // Mantém o elenco completo no snapshot: a ocupação média da Visão analítica
-  // pondera todos os profissionais com 0126. O painel corta top N na UI.
+  // Elenco completo no snapshot — ocupação média pondera todos com 0126.
+  // O painel / ranking corta top N na UI.
   const professionals = Array.from(byPro.values())
     .sort((a, b) => b.revenue - a.revenue)
     .map((p) => ({
@@ -226,11 +226,19 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   if (id0107) {
     try {
       const reportParams = withRequiredAvecReportParams(id0107, { limit: 250 })
-      const rows = asRows(await fetchAllAvecReport(id0107, reportParams))
+      const result = await fetchAllAvecReport(id0107, reportParams)
+      const rows = asRows(result)
       await snapshotSafe(id0107, reportParams, rows, stats, syncRunId)
       reactivation_count = rows.length
       stats.p1_rows = (stats.p1_rows ?? 0) + rows.length
       reactivationOk = true
+      // 0107 = “sem retorno” (90d). Paginação Avec corta em ~5000 — não é o total real.
+      if (result.truncated || rows.length >= 5000) {
+        stats.warnings = stats.warnings ?? []
+        stats.warnings.push(
+          `P1 0107 truncado: ${rows.length} linhas (teto de paginação) — UI deve mostrar 5000+`,
+        )
+      }
     } catch (e) {
       stats.errors.push(`P1 0107: ${e instanceof Error ? e.message : String(e)}`)
     }

@@ -12,9 +12,9 @@ export async function saveReportSnapshot(
     insert into avec_report_snapshots (report_id, params, row_count, payload, sync_run_id)
     values (
       ${reportId},
-      ${JSON.stringify(params)}::jsonb,
+      ${params},
       ${rows.length},
-      ${JSON.stringify(rows)}::jsonb,
+      ${rows},
       ${syncRunId ?? null}
     )
   `

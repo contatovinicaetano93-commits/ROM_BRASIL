@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Aplica db/migrations.json no Neon (DATABASE_URL).
+ * Aplica db/migrations.json no Postgres (DATABASE_URL).
  * Uso:
  *   DATABASE_URL=... ROM_PANEL=brasil npm run db:migrate
  *   DATABASE_URL=... ROM_PANEL=iguatemi npm run db:migrate
@@ -8,7 +8,14 @@
 import { existsSync, readFileSync } from 'fs'
 import { basename, join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { neon } from '@neondatabase/serverless'
+import { setDefaultResultOrder } from 'dns'
+import postgres from 'postgres'
+
+try {
+  setDefaultResultOrder('ipv4first')
+} catch {
+  // ignore
+}
 
 function assertSafeDbFileName(fileName) {
   const base = basename(fileName)
@@ -60,39 +67,52 @@ if (missing.length > 0) {
   process.exit(1)
 }
 
-const sql = neon(databaseUrl)
+const sql = postgres(databaseUrl, {
+  ssl: 'require',
+  max: 1,
+  prepare: false,
+  connect_timeout: 30,
+})
 
-await sql.query(`
-  create table if not exists schema_migrations (
-    id text primary key,
-    applied_at timestamptz not null default now()
-  )
-`)
-
-const appliedRows = await sql.query(`select id from schema_migrations`)
-const applied = new Set((appliedRows || []).map((r) => r.id))
-
-let appliedCount = 0
-for (const migration of migrations) {
-  if (applied.has(migration.id)) {
-    console.log(`skip  ${migration.id}`)
-    continue
-  }
-  const file = assertSafeDbFileName(migration.file)
-  const body = readFileSync(join(cwd, 'db', file), 'utf8')
-  const statements = splitSqlStatements(body)
-  if (statements.length === 0) {
-    console.error(`Arquivo SQL vazio: ${file}`)
-    process.exit(1)
-  }
-  console.log(`apply ${migration.id} (${statements.length} statements)`)
-  for (const statement of statements) {
-    await sql.query(statement)
-  }
-  await sql.query(`insert into schema_migrations (id) values ($1) on conflict (id) do nothing`, [
-    migration.id,
-  ])
-  appliedCount += 1
+async function query(text, params = []) {
+  return sql.unsafe(text, params)
 }
 
-console.log(`done panel=${panel} applied=${appliedCount} registered=${migrations.length}`)
+try {
+  await query(`
+    create table if not exists schema_migrations (
+      id text primary key,
+      applied_at timestamptz not null default now()
+    )
+  `)
+
+  const appliedRows = await query(`select id from schema_migrations`)
+  const applied = new Set((appliedRows || []).map((r) => r.id))
+
+  let appliedCount = 0
+  for (const migration of migrations) {
+    if (applied.has(migration.id)) {
+      console.log(`skip  ${migration.id}`)
+      continue
+    }
+    const file = assertSafeDbFileName(migration.file)
+    const body = readFileSync(join(cwd, 'db', file), 'utf8')
+    const statements = splitSqlStatements(body)
+    if (statements.length === 0) {
+      console.error(`Arquivo SQL vazio: ${file}`)
+      process.exit(1)
+    }
+    console.log(`apply ${migration.id} (${statements.length} statements)`)
+    for (const statement of statements) {
+      await query(statement)
+    }
+    await query(`insert into schema_migrations (id) values ($1) on conflict (id) do nothing`, [
+      migration.id,
+    ])
+    appliedCount += 1
+  }
+
+  console.log(`done panel=${panel} applied=${appliedCount} registered=${migrations.length}`)
+} finally {
+  await sql.end({ timeout: 5 })
+}

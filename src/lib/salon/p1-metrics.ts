@@ -71,9 +71,9 @@ export async function upsertSalonP1Daily(
     )
     values (
       ${day}::date,
-      ${JSON.stringify(professionals)}::jsonb,
-      ${JSON.stringify(services)}::jsonb,
-      ${JSON.stringify(acquisition)}::jsonb,
+      ${professionals},
+      ${services},
+      ${acquisition},
       ${reactivation_count},
       now()
     )

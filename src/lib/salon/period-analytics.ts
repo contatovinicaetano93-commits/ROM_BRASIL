@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
+import { asJsonArray } from '@/lib/sql-json'
 import {
   getSalonP1DailyNear,
   type P1AcquisitionRow,
@@ -46,7 +47,6 @@ function labelMonthPt(monthKey: string): string {
  */
 export function coerceOccupancyFraction(raw: number): number | null {
   if (!Number.isFinite(raw) || raw < 0) return null
-  // >2 (=200%) é quase sempre ponto percentual não normalizado; ≤2 mantém overbooking.
   return raw > 2 ? raw / 100 : raw
 }
 
@@ -170,9 +170,9 @@ export async function computePeriodAnalytics(opts?: {
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
-  const professionals = p1?.professionals ?? []
-  const allPackages = p2?.packages ?? []
-  // Receita de pacotes = soma do snapshot completo; UI lista só o top 10.
+  const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals)
+  const allPackages = asJsonArray<P2PackageRow>(p2?.packages)
+  // revenue no snapshot 0061 já é faturamento da linha (não preço unitário).
   const packages_revenue =
     Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
 
@@ -182,7 +182,6 @@ export async function computePeriodAnalytics(opts?: {
     from,
     to,
     snapshot_day: p1?.day ?? p2?.day ?? p3?.day ?? null,
-    // Média sobre o elenco completo do snapshot (não só top 8 da UI).
     occupancy_avg: averageOccupancy(professionals),
     cancelled: loss.cancelled,
     no_shows: loss.no_shows,
@@ -191,11 +190,11 @@ export async function computePeriodAnalytics(opts?: {
     packages: allPackages.slice(0, 10),
     packages_sold: Number(p2?.packages_sold ?? 0) || 0,
     packages_revenue,
-    booking_channels: (p2?.booking_channels ?? []).slice(0, 10),
-    acquisition: (p1?.acquisition ?? []).slice(0, 10),
+    booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
+    acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
     return_rate: p3 != null ? Number(p3.return_rate) : null,
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
     top_professionals: professionals.slice(0, 8),
-    top_services: (p1?.services ?? []).slice(0, 8),
+    top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
   }
 }

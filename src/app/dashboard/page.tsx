@@ -24,6 +24,7 @@ import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
 import { buildContactsPerDayChart, contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
+import { displayServiceName, serviceTicketAvg } from '@/lib/salon/service-display'
 import {
   buildPeriodAnalyticsCsv,
   buildPeriodAnalyticsPrintHtml,
@@ -34,7 +35,12 @@ import {
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
-  conversion: { conversion_rate: number; total_contacts: number } | null
+  conversion: {
+    conversion_rate: number
+    total_contacts: number
+    funnel_contacts?: number
+    imported_contacts?: number
+  } | null
   window?: { from: string; to: string; days: number }
 }
 
@@ -154,6 +160,8 @@ export default function DashboardPage() {
     if (!ok) setWarn('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
   }
 
+  const funnelContacts = data?.conversion?.funnel_contacts ?? 0
+  const importedContacts = data?.conversion?.imported_contacts ?? 0
   const totalContacts = data?.conversion?.total_contacts ?? 0
   const conversionRate = data?.conversion?.conversion_rate ?? 0
   const crmWindow = data?.window ?? contactKpiWindow(30)
@@ -180,8 +188,8 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Mês acumulado (cancel./no-show/receita perdida) + snapshots Avec ~30 dias (ocupação, pacotes,
-            novos, retorno). Operação do dia em Hoje · dinheiro em Financeiro · fechamento em Relatórios.
+            Funil CRM real (sem dump Avec) + mês acumulado local + snapshots Avec ~30 dias. Operação do
+            dia em Hoje · dinheiro em Financeiro · fechamento em Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -220,7 +228,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pulso: MTD local + snapshots Avec (rótulos = fonte real do número) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <MiniStat
           icon={<Percent size={15} />}
@@ -274,35 +281,42 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
-              <p className="text-xs text-muted">Contatos totais (CRM · base)</p>
+              <p className="text-xs text-muted">Funil ativo (CRM · sem importado)</p>
               {loading ? (
                 <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
               ) : (
-                <p className="mt-1 text-4xl font-semibold tabular-nums">{totalContacts}</p>
+                <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
               )}
-              <div className="mt-3 flex items-center gap-2 text-sm">
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                 <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
                   <TrendingUp size={13} />
                   {(conversionRate * 100).toFixed(1)}%
                 </span>
-                <span className="text-xs text-muted">conversão na base</span>
+                <span className="text-xs text-muted">conversão no funil</span>
               </div>
+              {!loading && (
+                <p className="mt-2 text-[0.7rem] text-muted">
+                  Base Avec importada: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
+                  {totalContacts.toLocaleString('pt-BR')}
+                </p>
+              )}
             </div>
             <MiniStat
               icon={<Users size={15} />}
-              label="Novos aguardando · CRM base"
+              label="Novos aguardando · funil"
               value={loading ? '—' : String(novos)}
             />
             <MiniStat
               icon={<Layers size={15} />}
-              label="Canais ativos · CRM 30 dias"
+              label="Canais ativos · funil 30d"
               value={loading ? '—' : String(activeChannels)}
             />
           </div>
 
-          <SectionCard title="Contatos por dia (CRM · 30 dias)">
+          <SectionCard title="Contatos por dia (funil · 30 dias)">
             <p className="mb-2 text-xs text-muted">
-              Novos contatos por dia de primeiro contato · {crmWindow.from} → {crmWindow.to}
+              Entradas reais no funil (exclui dump Avec / status importado) · {crmWindow.from} →{' '}
+              {crmWindow.to}
             </p>
             <div className="h-52 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -349,27 +363,28 @@ export default function DashboardPage() {
             )}
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
-                Sem dado ainda — TM usa duração do relatório 0223 (tempo) ou início/fim no 0002.
+                Sem duração na Avec para esta unidade (relatório 0223 campo tempo, ou início/fim no
+                0002). Top serviços mostra faturamento — não inventamos TM a partir disso.
               </p>
             )}
           </SectionCard>
 
-          {!loading && topChannel && (
+          {!loading && topChannel && channelTotal > 0 && (
             <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
               <Sparkles size={17} className="mt-0.5 shrink-0 text-gold" />
               <p className="text-sm leading-relaxed text-foreground/90">
                 <span className="font-semibold text-gold">
                   {CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}
                 </span>{' '}
-                é o canal CRM que mais trouxe contatos nos últimos 30 dias ({topChannel[1]} de{' '}
-                {channelTotal}).
+                lidera entradas no funil nos últimos 30 dias ({topChannel[1]} de {channelTotal}) —
+                dump Avec importado não entra nesta conta.
               </p>
             </div>
           )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             <SectionCard
-              title="Contatos por canal (CRM · 30 dias)"
+              title="Contatos por canal (funil · 30 dias)"
               badge={<CountBadge value={`${channelTotal}`} />}
             >
               <div className="divide-y divide-border">
@@ -380,12 +395,17 @@ export default function DashboardPage() {
                   </div>
                 ))}
                 {channelData.length === 0 && (
-                  <p className="py-6 text-center text-sm text-muted">Nenhum contato registrado ainda.</p>
+                  <p className="py-6 text-center text-sm text-muted">
+                    Nenhuma entrada de funil nos últimos 30 dias.
+                  </p>
                 )}
               </div>
             </SectionCard>
 
-            <SectionCard title="Status dos contatos (CRM · base)" badge={<CountBadge value={`${statusTotal}`} />}>
+            <SectionCard title="Status na base (inventário)" badge={<CountBadge value={`${statusTotal}`} />}>
+              <p className="mb-2 text-xs text-muted">
+                Inclui importado (base Avec 0004) — não é volume de aquisição do mês.
+              </p>
               <div className="flex flex-col gap-2.5">
                 {[...(data?.byStatus ?? [])]
                   .sort(
@@ -411,7 +431,7 @@ export default function DashboardPage() {
 
         <div className="flex flex-col gap-6 lg:col-span-4">
           <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
-            <p className="mb-2 text-xs text-muted">{snapshotHint} · relatório 0056.</p>
+            <p className="mb-2 text-xs text-muted">{snapshotHint} · 0056.</p>
             {(period?.booking_channels.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem canais sincronizados.</p>
             ) : (
@@ -427,7 +447,7 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard title="Como nos conheceram">
-            <p className="mb-2 text-xs text-muted">{snapshotHint} · relatório 0003.</p>
+            <p className="mb-2 text-xs text-muted">{snapshotHint} · 0003.</p>
             {(period?.acquisition.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem dados de aquisição.</p>
             ) : (
@@ -445,7 +465,8 @@ export default function DashboardPage() {
           <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
             <p className="mb-2 text-xs text-muted">
               {snapshotHint} · 0061 · {period?.packages_sold ?? 0} vendidos ·{' '}
-              {period ? formatCurrency(period.packages_revenue) : '—'}
+              {period ? formatCurrency(period.packages_revenue) : '—'} (soma dos totais de
+              linha; valor ≠ preço unitário × qtd)
             </p>
             {(period?.packages.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem pacotes no snapshot.</p>
@@ -455,7 +476,7 @@ export default function DashboardPage() {
                   <li key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="truncate font-medium">{p.name}</span>
                     <span className="shrink-0 tabular-nums text-muted">
-                      {formatCurrency(p.revenue)} · {p.quantity}×
+                      total {formatCurrency(p.revenue)} · {p.quantity}×
                     </span>
                   </li>
                 ))}
@@ -464,19 +485,26 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard title="Top serviços">
-            <p className="mb-2 text-xs text-muted">{snapshotHint} · 0032. Detalhe em Relatórios.</p>
+            <p className="mb-2 text-xs text-muted">
+              {snapshotHint} · 0032 · faturamento real ÷ qtd (ticket médio), não preço de tabela no
+              nome.
+            </p>
             {(period?.top_services.length ?? 0) === 0 ? (
               <p className="text-xs text-muted">Sem ranking sincronizado.</p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {period!.top_services.map((s) => (
-                  <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{s.name}</span>
-                    <span className="shrink-0 tabular-nums text-muted">
-                      {formatCurrency(s.revenue)} · {s.quantity}×
-                    </span>
-                  </li>
-                ))}
+                {period!.top_services.map((s) => {
+                  const ticket = serviceTicketAvg(s.revenue, s.quantity)
+                  return (
+                    <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="truncate font-medium">{displayServiceName(s.name)}</span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {formatCurrency(s.revenue)} · {s.quantity}×
+                        {ticket != null ? ` · ticket ${formatCurrency(ticket)}` : ''}
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </SectionCard>
@@ -551,6 +579,10 @@ export default function DashboardPage() {
                 {performance.compare_day}
               </p>
             )}
+            <p className="mt-2 text-[0.65rem] text-muted">
+              Ocupação vem do Avec 0126 (pode passar de 100% com overbooking). Traço (—) =
+              sem match de nome entre 0021 (faturamento) e 0126.
+            </p>
           </div>
         )}
       </SectionCard>
