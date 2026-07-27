@@ -19,7 +19,11 @@ function welcomeMessage() {
   const brand = getBrand()
   return `Oi! 👋 Sou a secretária virtual do ${brand.displayName}.
 
-Posso te ajudar com KPIs de contato do salão — quantidade, canais, status e conversão.
+Posso responder sobre:
+• Hoje — faturamento, agenda, atendidos, no-shows
+• Mês acumulado — receita, despesas, margem, formas de pagamento
+• Visão analítica — ocupação, cancelamentos, pacotes, retorno
+• Contatos — status, conversão, playbook
 
 💡 Dica: use /cliente nome ou telefone para ver o briefing de um cliente.`
 }
@@ -32,9 +36,14 @@ function staffOnlyMessage() {
 function secretariaPrompt() {
   const brand = getBrand()
   return `Você é a secretária virtual do ${brand.displayName} para a equipe interna.
-Responda perguntas práticas sobre a operação do salão (faturamento, agendamentos,
-comparecimento, contatos, playbook do dia) usando SOMENTE os dados fornecidos.
-Seja direta, em português, no máximo 4 linhas. Se a pergunta não tiver relação
+Responda perguntas práticas sobre a operação do salão usando SOMENTE os dados fornecidos.
+Os dados trazem blocos separados:
+- salon_hoje = métricas do dia
+- financeiro_mes = acumulado do mês (receita, despesas, margem, pagamentos)
+- visao_analitica_mes = ocupação, perdas, pacotes, retorno
+- contatos / playbook / agendamentos_hoje
+Se perguntarem "faturamento do mês" ou "acumulado", use financeiro_mes.receita_acumulada — não o de hoje.
+Seja direta, em português, no máximo 5 linhas. Se a pergunta não tiver relação
 com os dados fornecidos, diga que só responde sobre a operação do salão por enquanto.
 Dica: use "/cliente nome ou telefone" pra receber o briefing de um cliente.`
 }

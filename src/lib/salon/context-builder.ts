@@ -1,11 +1,17 @@
 import { createHash } from 'crypto'
 import type { ContactRow } from '@/lib/contacts'
+import { computeFinanceKpis, type FinanceKpis } from '@/lib/finance'
 import type { EnrichedService, Recommendation } from '@/lib/recommendations'
+import { todayIso } from '@/lib/salon/format'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
+import {
+  computePeriodAnalytics,
+  type PeriodAnalytics,
+} from '@/lib/salon/period-analytics'
 import { listActionItems } from '@/lib/salon/recommendations'
-import { listUpcomingSchedules, pickLastVisit, type LastVisit } from '@/lib/services'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
+import { listUpcomingSchedules, pickLastVisit, type LastVisit } from '@/lib/services'
 
 function fmtService(s: EnrichedService) {
   const parts = [s.name]
@@ -23,7 +29,7 @@ function fmtLastVisit(v: LastVisit | null): string | null {
   if (v.professional_name) parts.push(`com ${v.professional_name}`)
   if (v.last_price != null) {
     parts.push(
-      v.last_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      v.last_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
     )
   }
   return parts.join(' · ')
@@ -46,6 +52,10 @@ export interface ContactContext {
 export interface SalonContext {
   hoje: string
   salon: Awaited<ReturnType<typeof getSalonMetrics>>
+  /** Acumulado financeiro do mês corrente (mesmo núcleo do /financeiro). */
+  financeiro_mes: FinanceKpis
+  /** Visão analítica do mês (ocupação, perdas, pacotes, retorno). */
+  visao_mes: PeriodAnalytics
   kpis_contato: Awaited<ReturnType<typeof fetchContactKpis>>
   playbook_top5: Awaited<ReturnType<typeof listActionItems>>
   agendamentos_proximos: Awaited<ReturnType<typeof listUpcomingSchedules>>
@@ -54,7 +64,7 @@ export interface SalonContext {
 export function buildContactContext(
   contact: ContactRow,
   services: EnrichedService[],
-  recs: Recommendation[]
+  recs: Recommendation[],
 ): ContactContext {
   return {
     cliente: {
@@ -72,17 +82,23 @@ export function buildContactContext(
 }
 
 export async function buildSalonContext(): Promise<SalonContext> {
-  const day = new Date().toISOString().slice(0, 10)
-  const [salon, kpis_contato, playbook_top5, agendamentosRaw] = await Promise.all([
-    getSalonMetrics(day),
-    fetchContactKpis(7),
-    listActionItems(),
-    listUpcomingSchedules(1, 20),
-  ])
+  // Fuso do salão — não usar UTC do toISOString (vira "ontem" à noite no BR).
+  const day = todayIso()
+  const [salon, kpis_contato, playbook_top5, agendamentosRaw, financeiro_mes, visao_mes] =
+    await Promise.all([
+      getSalonMetrics(day),
+      fetchContactKpis(30),
+      listActionItems(),
+      listUpcomingSchedules(1, 20),
+      computeFinanceKpis(),
+      computePeriodAnalytics(),
+    ])
 
   return {
     hoje: day,
     salon,
+    financeiro_mes,
+    visao_mes,
     kpis_contato,
     playbook_top5: playbook_top5.slice(0, 5),
     agendamentos_proximos: [...agendamentosRaw].sort(compareScheduleByTimeThenName).slice(0, 10),
@@ -116,10 +132,13 @@ export function hashContactContext(contact: ContactRow, services: EnrichedServic
   return createHash('sha256').update(payload).digest('hex').slice(0, 24)
 }
 
+/** Payload compacto para a IA do Telegram — hoje + mês das seções principais. */
 export function salonContextForAI(ctx: SalonContext) {
+  const fin = ctx.financeiro_mes.current
+  const period = ctx.visao_mes
   return JSON.stringify({
     data: ctx.hoje,
-    salon: ctx.salon
+    salon_hoje: ctx.salon
       ? {
           faturamento: ctx.salon.revenue,
           agendamentos: ctx.salon.appointments,
@@ -130,9 +149,38 @@ export function salonContextForAI(ctx: SalonContext) {
           retornos: ctx.salon.returning_clients,
         }
       : null,
+    financeiro_mes: {
+      label: fin.label,
+      de: fin.from,
+      ate: fin.to,
+      receita_acumulada: fin.revenue,
+      despesas: fin.expenses,
+      margem_bruta_pct: fin.gross_margin,
+      fluxo: fin.cash_flow,
+      atendidos: fin.attended,
+      ticket_medio: fin.ticket_avg,
+      formas_pagamento: fin.payment_mix.slice(0, 6).map((p) => ({
+        metodo: p.method,
+        valor: p.amount,
+        share_pct: p.share,
+      })),
+    },
+    visao_analitica_mes: {
+      label: period.label,
+      de: period.from,
+      ate: period.to,
+      ocupacao_media: period.occupancy_avg,
+      cancelados: period.cancelled,
+      no_shows: period.no_shows,
+      receita_perdida: period.lost_revenue,
+      pacotes_faturamento: period.packages_revenue,
+      novos_avec_30d: period.new_clients_period,
+      taxa_retorno: period.return_rate,
+    },
     contatos: {
       por_status: ctx.kpis_contato.byStatus,
       conversao: ctx.kpis_contato.conversion,
+      janela_dias: ctx.kpis_contato.window?.days ?? 30,
     },
     playbook: ctx.playbook_top5.map((a) => ({
       cliente: a.contact_name,

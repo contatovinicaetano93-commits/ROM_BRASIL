@@ -3,8 +3,10 @@ import { ok, err } from '@/lib/api-response'
 import { sendTelegramFinanceMessage } from '@/lib/telegram/bot'
 import { verifyTelegramFinanceWebhook, isTelegramFinanceChatAllowed } from '@/lib/webhooks'
 import { computeFinanceKpis } from '@/lib/finance'
+import { getSalonMetrics } from '@/lib/salon/metrics'
+import { todayIso, formatCurrency } from '@/lib/salon/format'
+import { formatFinanceTelegramSummary } from '@/lib/telegram/finance-summary'
 import { computeStockKpis, listAlerts } from '@/lib/stock'
-import { formatCurrency } from '@/lib/salon/format'
 import { getBrand } from '@/lib/brand'
 
 interface TelegramUpdate {
@@ -19,7 +21,7 @@ function welcomeMessage() {
   return `Oi! 👋 Sou o bot financeiro do ${brand.displayName}.
 
 Comandos:
-/financeiro — receita, despesas, margem e formas de pagamento do mês
+/financeiro — receita hoje + acumulado do mês, despesas, margem e formas de pagamento
 /estoque — valor em estoque, alertas de reposição ativos`
 }
 
@@ -28,19 +30,11 @@ function staffOnlyMessage() {
 }
 
 async function financeSummary(): Promise<string> {
-  const kpis = await computeFinanceKpis()
-  const c = kpis.current
-  const lines = [
-    `💰 *Financeiro — ${c.label}*`,
-    `Receita: ${formatCurrency(c.revenue)}`,
-    `Despesas: ${formatCurrency(c.expenses)}`,
-    `Margem bruta: ${c.gross_margin != null ? `${c.gross_margin}%` : '—'}`,
-    `Fluxo: ${formatCurrency(c.cash_flow)}`,
-  ]
-  if (c.revenue === 0) {
-    lines.push('', '_Receita ainda não sincronizada pela Avec esse mês._')
-  }
-  return lines.join('\n')
+  const [kpis, today] = await Promise.all([computeFinanceKpis(), getSalonMetrics(todayIso())])
+  return formatFinanceTelegramSummary({
+    month: kpis.current,
+    todayRevenue: today?.revenue ?? 0,
+  })
 }
 
 async function stockSummary(): Promise<string> {
