@@ -128,16 +128,13 @@ export async function buildSalonContext(): Promise<SalonContext> {
   const visao_mes = settled[5].status === 'fulfilled' ? settled[5].value : null
 
   // Se nada essencial veio, propaga erro (Telegram mostra mensagem genérica).
-  // getSalonMetrics fulfilled com null ainda conta como “hoje disponível vazio”.
-  if (salon == null && financeiro_mes == null && visao_mes == null) {
-    const reason =
-      settled[0].status === 'rejected'
-        ? settled[0].reason
-        : settled[4].status === 'rejected'
-          ? settled[4].reason
-          : settled[5].status === 'rejected'
-            ? settled[5].reason
-            : new Error('Falha ao carregar contexto do salão')
+  // getSalonMetrics fulfilled com null = dia sem linha (ok) — não confundir com falha.
+  if (
+    settled[0].status === 'rejected' &&
+    financeiro_mes == null &&
+    visao_mes == null
+  ) {
+    const reason = settled[0].reason
     throw reason instanceof Error ? reason : new Error(String(reason))
   }
 
