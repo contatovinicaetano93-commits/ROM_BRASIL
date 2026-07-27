@@ -57,12 +57,33 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
     sql`
       select
         coalesce(
-          count(*) filter (where status = 'convertido')::float
-            / nullif(count(*) filter (where status <> 'importado'), 0)::float,
+          count(*) filter (
+            where status = 'convertido'
+              and coalesce(source, '') not like 'avec_sync_clients%'
+              and coalesce(source, '') not like 'avec_sync_returning%'
+              and coalesce(source, '') not like 'avec_backfill%'
+              and coalesce(source, '') not like 'avec_lake%'
+          )::float
+            / nullif(
+              count(*) filter (
+                where status <> 'importado'
+                  and coalesce(source, '') not like 'avec_sync_clients%'
+                  and coalesce(source, '') not like 'avec_sync_returning%'
+                  and coalesce(source, '') not like 'avec_backfill%'
+                  and coalesce(source, '') not like 'avec_lake%'
+              ),
+              0
+            )::float,
           0
         ) as conversion_rate,
         count(*)::int as total_contacts,
-        count(*) filter (where status <> 'importado')::int as funnel_contacts,
+        count(*) filter (
+          where status <> 'importado'
+            and coalesce(source, '') not like 'avec_sync_clients%'
+            and coalesce(source, '') not like 'avec_sync_returning%'
+            and coalesce(source, '') not like 'avec_backfill%'
+            and coalesce(source, '') not like 'avec_lake%'
+        )::int as funnel_contacts,
         count(*) filter (where status = 'importado')::int as imported_contacts
       from contacts
       where anonymized_at is null

@@ -3,8 +3,7 @@
 -- importado ≠ novo lead: base Avec não é aquisição de funil.
 
 update contacts
-set status = 'importado',
-    updated_at = now()
+set status = 'importado'
 where status = 'novo'
   and channel = 'avec'
   and (
