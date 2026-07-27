@@ -198,7 +198,11 @@ export default function AdminPage() {
         })
         const syncJson = await syncRes.json()
         if (syncJson.error) setRefreshMsg(`Token ok, mas sync falhou: ${syncJson.error}`)
-        else {
+        else if (syncJson.data?.skipped) {
+          setRefreshMsg(
+            `Token ok, mas sync adiado: ${syncJson.data.note ?? syncJson.data.reason ?? 'skipped'}.`,
+          )
+        } else {
           setRefreshMsg(`Token ok + sync ${syncJson.data?.status ?? 'ok'}.`)
         }
       } else {
