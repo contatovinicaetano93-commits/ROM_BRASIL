@@ -1,12 +1,14 @@
 -- Restaura status corretos após upserts com default 'novo' que rebaixaram dump/visitas.
 -- importado ≠ novo lead: base Avec (clients/backfill/lake) não é aquisição de funil.
 -- Visitas returning (0002) com status 'novo' eram leads reais de retorno → convertido.
+-- first_contact_at = now() ao entrar no funil KPI (evita byDay no dia do dump).
 
 -- 1) Returning ainda em 'novo' → convertido + source de visita (não dump).
 update contacts
 set
   status = 'convertido',
-  source = 'avec_sync_visit_0002'
+  source = 'avec_sync_visit_0002',
+  first_contact_at = now()
 where status = 'novo'
   and channel = 'avec'
   and source like 'avec_sync_returning%';
@@ -14,7 +16,9 @@ where status = 'novo'
 -- 2) Qualquer returning legado fora de importado (em_atendimento/agendado/convertido/…)
 --    troca source dump → visit para entrar no KPI byDay.
 update contacts
-set source = 'avec_sync_visit_0002'
+set
+  source = 'avec_sync_visit_0002',
+  first_contact_at = now()
 where channel = 'avec'
   and source like 'avec_sync_returning%'
   and status <> 'importado';

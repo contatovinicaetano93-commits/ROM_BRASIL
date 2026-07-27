@@ -81,6 +81,25 @@ export function resolveConflictSource(current: string, incoming: string): string
   return current
 }
 
+/**
+ * Quando o contato entra no funil KPI (sai de importado / deixa de ser dump),
+ * first_contact_at deve refletir o dia da entrada — senão byDay cai no dia do dump.
+ */
+export function shouldResetFirstContactAt(opts: {
+  previousStatus: ContactStatus | string
+  nextStatus: ContactStatus | string
+  previousSource: string
+  nextSource: string
+}): boolean {
+  const leftImportado =
+    opts.previousStatus === 'importado' && opts.nextStatus !== 'importado'
+  const leftDumpSource =
+    isAvecImportSource(opts.previousSource) &&
+    !isAvecImportSource(opts.nextSource) &&
+    opts.nextStatus !== 'importado'
+  return leftImportado || leftDumpSource
+}
+
 /** Fragmento SQL: source não é dump Avec. Alinhar com AVEC_DUMP_SOURCE_PREFIXES. */
 export function sqlNotDumpSource(sql: Sql) {
   return sql`(
@@ -106,6 +125,25 @@ function sqlUpsertConflictSource(sql: Sql) {
       or excluded.source like 'avec_lake%'
     ) then excluded.source
     else contacts.source
+  end`
+}
+
+/** Reinicia first_contact_at ao sair de importado/dump (espelha shouldResetFirstContactAt). */
+function sqlUpsertConflictFirstContact(sql: Sql) {
+  const nextStatus = sqlUpsertConflictStatus(sql)
+  const nextSource = sqlUpsertConflictSource(sql)
+  return sql`case
+    when contacts.status = 'importado' and (${nextStatus}) <> 'importado' then now()
+    when (
+      contacts.source like 'avec_sync_clients%'
+      or contacts.source like 'avec_sync_returning%'
+      or contacts.source like 'avec_backfill%'
+      or contacts.source like 'avec_lake%'
+    )
+      and (${nextSource}) is distinct from contacts.source
+      and (${nextStatus}) <> 'importado'
+    then now()
+    else contacts.first_contact_at
   end`
 }
 
@@ -157,6 +195,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
   const phone = input.phone ? normalizePhone(input.phone) ?? input.phone.trim() : null
   const statusCase = sqlUpsertConflictStatus(sql)
   const sourceCase = sqlUpsertConflictSource(sql)
+  const firstContactCase = sqlUpsertConflictFirstContact(sql)
 
   // Optimized UPSERT: use avec_client_id when available (primary upsert key)
   // Falls back to phone-based lookup only if no avec_client_id
@@ -179,7 +218,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
         source = ${sourceCase},
-        status = ${statusCase}
+        status = ${statusCase},
+        first_contact_at = ${firstContactCase}
       returning *
     `) as ContactRow[]
     return rows[0]
@@ -202,7 +242,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
       source = ${sourceCase},
-      status = ${statusCase}
+      status = ${statusCase},
+      first_contact_at = ${firstContactCase}
     where contacts.phone is not null
     returning *
   `) as ContactRow[]
@@ -293,10 +334,17 @@ export async function updateContact(id: string, patch: UpdateContactInput): Prom
   const phone = patch.phone ? normalizePhone(patch.phone) ?? patch.phone.trim() : undefined
 
   let status: ContactStatus | null = patch.status ?? null
+  let resetFirstContact = false
   if (patch.status) {
     const current = await getContactById(id)
     if (current) {
       status = mergeContactStatus(current.status as ContactStatus, patch.status)
+      resetFirstContact = shouldResetFirstContactAt({
+        previousStatus: current.status,
+        nextStatus: status,
+        previousSource: current.source,
+        nextSource: current.source,
+      })
     }
   }
 
@@ -324,6 +372,10 @@ export async function updateContact(id: string, patch: UpdateContactInput): Prom
       preferred_hairstylist = case
         when ${patch.preferredHairstylist !== undefined} then ${hairstylist}
         else preferred_hairstylist
+      end,
+      first_contact_at = case
+        when ${resetFirstContact} then now()
+        else first_contact_at
       end,
       last_contact_at = now()
     where id = ${id}

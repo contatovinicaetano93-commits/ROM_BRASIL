@@ -5,6 +5,7 @@ import {
   mergeContactStatus,
   resolveConflictSource,
   resolveConflictStatus,
+  shouldResetFirstContactAt,
 } from '@/lib/contacts'
 
 describe('mergeContactStatus', () => {
@@ -94,6 +95,34 @@ describe('isAvecImportSource', () => {
       'avec_sync_visit_0002',
     )
   })
+
+  it('reinicia first_contact_at ao sair de importado ou dump', () => {
+    expect(
+      shouldResetFirstContactAt({
+        previousStatus: 'importado',
+        nextStatus: 'em_atendimento',
+        previousSource: 'avec_sync_clients',
+        nextSource: 'avec_sync_clients',
+      }),
+    ).toBe(true)
+    expect(
+      shouldResetFirstContactAt({
+        previousStatus: 'convertido',
+        nextStatus: 'convertido',
+        previousSource: 'avec_sync_returning_0002',
+        nextSource: 'avec_sync_visit_0002',
+      }),
+    ).toBe(true)
+    expect(
+      shouldResetFirstContactAt({
+        previousStatus: 'convertido',
+        nextStatus: 'convertido',
+        previousSource: 'avec_sync_visit_0002',
+        nextSource: 'avec_sync_visit_0002',
+      }),
+    ).toBe(false)
+  })
+
 
   it('não marca agenda / WhatsApp / atendimento como dump', () => {
     expect(isAvecImportSource('avec_sync_appointments')).toBe(false)
