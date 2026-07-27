@@ -43,10 +43,17 @@ describe('resolveConflictStatus (upsert ON CONFLICT)', () => {
     expect(resolveConflictStatus('importado', 'novo')).toBe('importado')
   })
 
+  it('default novo não rebaixa em_atendimento / agendado / convertido', () => {
+    expect(resolveConflictStatus('em_atendimento', 'novo')).toBe('em_atendimento')
+    expect(resolveConflictStatus('agendado', 'novo')).toBe('agendado')
+    expect(resolveConflictStatus('convertido', 'novo')).toBe('convertido')
+  })
+
   it('dump importado não rebaixa lead novo / convertido', () => {
     expect(resolveConflictStatus('novo', 'importado')).toBe('novo')
     expect(resolveConflictStatus('convertido', 'importado')).toBe('convertido')
     expect(resolveConflictStatus('agendado', 'importado')).toBe('agendado')
+    expect(resolveConflictStatus('em_atendimento', 'importado')).toBe('em_atendimento')
   })
 
   it('importado avança para agendado e convertido', () => {
@@ -56,6 +63,7 @@ describe('resolveConflictStatus (upsert ON CONFLICT)', () => {
 
   it('agendado só sobe para convertido', () => {
     expect(resolveConflictStatus('agendado', 'novo')).toBe('agendado')
+    expect(resolveConflictStatus('agendado', 'em_atendimento')).toBe('agendado')
     expect(resolveConflictStatus('agendado', 'convertido')).toBe('convertido')
   })
 })

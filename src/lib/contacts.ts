@@ -49,26 +49,19 @@ export function mergeContactStatus(current: ContactStatus, incoming: ContactStat
 }
 
 /**
- * Espelha a regra do ON CONFLICT do upsertContact.
+ * Regra do ON CONFLICT do upsertContact (espelhada no SQL abaixo).
  * Dump Avec (`importado`) não rebaixa quem já está no funil; default `novo`
- * nunca rebaixa `importado`.
+ * nunca rebaixa `importado` nem `em_atendimento`+.
  */
 export function resolveConflictStatus(
   current: ContactStatus,
   incoming: ContactStatus,
 ): ContactStatus {
   if (incoming === 'importado' && current !== 'importado') return current
-  if (current === 'importado' && incoming === 'novo') return 'importado'
-  if (current === 'convertido') return 'convertido'
-  if (current === 'perdido') return incoming === 'convertido' ? 'convertido' : 'perdido'
-  if (current === 'agendado') return incoming === 'convertido' ? 'convertido' : 'agendado'
-  if (current === 'importado' || current === 'novo' || current === 'em_atendimento') {
-    return incoming
-  }
-  return current
+  return mergeContactStatus(current, incoming)
 }
 
-/** Origens de dump Avec / lake — não contam como aquisição de funil. */
+/** Origens de dump Avec / lake — não contam como aquisição de funil (gráfico 30d). */
 export function isAvecImportSource(source: string | null | undefined): boolean {
   const s = source ?? ''
   return (
@@ -77,12 +70,6 @@ export function isAvecImportSource(source: string | null | undefined): boolean {
     s.startsWith('avec_backfill') ||
     s.startsWith('avec_lake')
   )
-}
-
-function resolveStatus(current: ContactStatus | string | undefined, incoming?: ContactStatus) {
-  if (!incoming) return null
-  if (!current || !CONTACT_STATUSES.includes(current as ContactStatus)) return incoming
-  return mergeContactStatus(current as ContactStatus, incoming)
 }
 
 export interface ContactRow {
@@ -130,14 +117,25 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         name = coalesce(excluded.name, contacts.name),
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
-        -- importado ≠ novo: dump Avec não vira "Novo lead"; default 'novo' não rebaixa importado.
+        -- Rank espelha mergeContactStatus: não rebaixa; importado≠novo.
         status = case
           when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-          when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
-          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
-          when contacts.status = 'convertido' then 'convertido'
+          when excluded.status = 'perdido' then 'perdido'
           when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'perdido' then 'perdido'
+          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
+          when contacts.status = 'novo' and excluded.status = 'importado' then 'novo'
+          when (
+            case excluded.status
+              when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+              when 'agendado' then 3 when 'convertido' then 4 else 0
+            end
+          ) > (
+            case contacts.status
+              when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+              when 'agendado' then 3 when 'convertido' then 4 else 0
+            end
+          ) then excluded.status
           else contacts.status
         end
       returning *
@@ -161,14 +159,25 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
-      -- importado ≠ novo: dump Avec não vira "Novo lead"; default 'novo' não rebaixa importado.
+      -- Rank espelha mergeContactStatus: não rebaixa; importado≠novo.
       status = case
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-        when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
-        when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
-        when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
-        when contacts.status = 'convertido' then 'convertido'
+        when excluded.status = 'perdido' then 'perdido'
         when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+        when contacts.status = 'perdido' then 'perdido'
+        when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
+        when contacts.status = 'novo' and excluded.status = 'importado' then 'novo'
+        when (
+          case excluded.status
+            when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+            when 'agendado' then 3 when 'convertido' then 4 else 0
+          end
+        ) > (
+          case contacts.status
+            when 'importado' then 1 when 'novo' then 1 when 'em_atendimento' then 2
+            when 'agendado' then 3 when 'convertido' then 4 else 0
+          end
+        ) then excluded.status
         else contacts.status
       end
     where contacts.phone is not null

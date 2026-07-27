@@ -2,17 +2,17 @@ import { getSql } from '@/lib/db'
 import { contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
 
 export interface ContactKpis {
-  /** Entrada real no funil (exclui dump Avec `importado`). */
+  /** Entrada real no funil (exclui dump Avec `importado` / sources de dump). */
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
   conversion: {
-    /** Convertidos ÷ funil ativo (sem importado). */
+    /** Convertidos ÷ funil ativo (status ≠ importado). Inclui quem veio do dump e converteu. */
     conversion_rate: number
     /** Base completa (inclui importado). */
     total_contacts: number
-    /** Só status ≠ importado. */
+    /** Status ≠ importado (estoque do funil, inclusive convertidos de origem Avec). */
     funnel_contacts: number
-    /** Dump 0004 / base Avec. */
+    /** Dump ainda parado em status importado. */
     imported_contacts: number
   } | null
   window: { from: string; to: string; days: number }
@@ -24,9 +24,9 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
   const sql = getSql()
   const window = contactKpiWindow(dayLimit)
 
-  // byDay = entrada real no funil (exclui dump Avec 0004 / status importado).
+  // byDay = aquisição recente (exclui dump Avec por status e source).
   // byStatus = inventário completo da base (transparência).
-  // conversion_rate = convertidos ÷ funil ativo (sem importado).
+  // conversion / funnel_contacts = status ≠ importado (convertido de origem Avec conta).
   const [byDay, byStatus, conversionRows] = await Promise.all([
     sql`
       select
@@ -57,33 +57,12 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
     sql`
       select
         coalesce(
-          count(*) filter (
-            where status = 'convertido'
-              and coalesce(source, '') not like 'avec_sync_clients%'
-              and coalesce(source, '') not like 'avec_sync_returning%'
-              and coalesce(source, '') not like 'avec_backfill%'
-              and coalesce(source, '') not like 'avec_lake%'
-          )::float
-            / nullif(
-              count(*) filter (
-                where status <> 'importado'
-                  and coalesce(source, '') not like 'avec_sync_clients%'
-                  and coalesce(source, '') not like 'avec_sync_returning%'
-                  and coalesce(source, '') not like 'avec_backfill%'
-                  and coalesce(source, '') not like 'avec_lake%'
-              ),
-              0
-            )::float,
+          count(*) filter (where status = 'convertido')::float
+            / nullif(count(*) filter (where status <> 'importado'), 0)::float,
           0
         ) as conversion_rate,
         count(*)::int as total_contacts,
-        count(*) filter (
-          where status <> 'importado'
-            and coalesce(source, '') not like 'avec_sync_clients%'
-            and coalesce(source, '') not like 'avec_sync_returning%'
-            and coalesce(source, '') not like 'avec_backfill%'
-            and coalesce(source, '') not like 'avec_lake%'
-        )::int as funnel_contacts,
+        count(*) filter (where status <> 'importado')::int as funnel_contacts,
         count(*) filter (where status = 'importado')::int as imported_contacts
       from contacts
       where anonymized_at is null
