@@ -190,8 +190,9 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Funil CRM real (sem dump Avec) + mês acumulado local + snapshots Avec ~30 dias. Operação do
-            dia em Hoje · dinheiro em Financeiro · fechamento em Relatórios.
+            Funil CRM (exclui status importado; convertidos de origem Avec contam) + mês acumulado local +
+            snapshots Avec ~30 dias. Operação do dia em Hoje · dinheiro em Financeiro · fechamento em
+            Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

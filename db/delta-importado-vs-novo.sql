@@ -1,19 +1,36 @@
--- Restaura status importado para dump Avec que foi rebaixado a "novo"
--- por upserts sem status (default 'novo') — ex.: returning 0002, WhatsApp match.
--- importado ≠ novo lead: base Avec não é aquisição de funil.
+-- Restaura status corretos após upserts com default 'novo' que rebaixaram dump/visitas.
+-- importado ≠ novo lead: base Avec (clients/backfill/lake) não é aquisição de funil.
+-- Visitas returning (0002) com status 'novo' eram leads reais de retorno → convertido.
 
+-- 1) Returning / visita: quem ainda está 'novo' com source de returning → convertido.
+update contacts
+set
+  status = 'convertido',
+  source = 'avec_sync_visit_0002'
+where status = 'novo'
+  and channel = 'avec'
+  and source like 'avec_sync_returning%';
+
+-- 2) Já convertidos via returning antigo: troca source dump → visit (entra no funil KPI).
+update contacts
+set source = 'avec_sync_visit_0002'
+where channel = 'avec'
+  and source like 'avec_sync_returning%'
+  and status = 'convertido';
+
+-- 3) Dump puro ainda em 'novo' → importado (não inclui returning).
 update contacts
 set status = 'importado'
 where status = 'novo'
   and channel = 'avec'
   and (
     source like 'avec_sync_clients%'
-    or source like 'avec_sync_returning%'
     or source like 'avec_backfill%'
     or source like 'avec_lake%'
   );
 
--- Alinha v_kpi_daily com exclusão de returning (além de clients/backfill/lake).
+-- Alinha v_kpi_daily: exclui dump (clients/returning legado/backfill/lake).
+-- Source novo avec_sync_visit_* não é dump e entra no funil se status ≠ importado.
 drop view if exists v_kpi_daily;
 
 create view v_kpi_daily as

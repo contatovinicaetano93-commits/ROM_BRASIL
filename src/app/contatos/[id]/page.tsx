@@ -94,7 +94,8 @@ interface Profile {
   client_stats: ClientStats
 }
 
-const STATUS_FLOW = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
+// importado é entrada paralela a novo (dump Avec); merge bloqueia importado↔novo.
+const STATUS_FLOW = ['importado', 'novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
 
 const REC_TONE: Record<string, string> = {
   overdue: 'border-danger/40 bg-danger/10',

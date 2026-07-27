@@ -25,8 +25,9 @@ export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 
 /**
  * `importado` e `novo` são entradas paralelas (mesmo rank):
- * - importado = base Avec (0004 / returning / lake) — não é lead de aquisição
+ * - importado = dump Avec (0004 clients / backfill / lake) — não é lead de aquisição
  * - novo = lead real (WhatsApp / manual / Instagram)
+ * Visitas returning usam source avec_sync_visit_* + status convertido (não é dump).
  * Um não “avança” o outro; só em_atendimento+ sobe no funil.
  */
 const STATUS_RANK: Record<ContactStatus, number> = {

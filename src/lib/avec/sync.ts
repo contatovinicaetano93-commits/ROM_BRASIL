@@ -566,13 +566,14 @@ async function syncReturningFrom0002(
       if (att.lastVisitDay === today) {
         try {
           // Visita hoje: avança no funil (não deixa como dump importado).
+          // Source NÃO é dump (avec_sync_returning* é dump) — senão some do KPI byDay.
           // Se já for convertido/agendado, o upsert só promove — não rebaixa.
           const contact = await upsertContact({
             avecClientId: att.avecClientId ?? undefined,
             name: att.clientName,
             phone: att.phone,
             channel: 'avec',
-            source: 'avec_sync_returning_0002',
+            source: 'avec_sync_visit_0002',
             status: 'convertido',
           })
           const serviceName = att.serviceName || 'Atendimento'
