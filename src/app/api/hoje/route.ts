@@ -9,7 +9,7 @@ import {
   countOverdueContacts,
   countOverdueServices,
   slicePlaybookForRole,
-} from '@/lib/salon/playbook
+} from '@/lib/salon/playbook'
 import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
