@@ -3,6 +3,7 @@ import {
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
+  periodRangeEndingOn,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
   type AvecReportFetchResult,
@@ -83,6 +84,13 @@ describe('withRequiredAvecReportParams', () => {
   })
 
   it('0248 default status Faltou (0.6)', () => {
+    expect(withRequiredAvecReportParams('0223', { limit: 250 })).toMatchObject({
+      profissional_id: '',
+    })
+    const tm = withRequiredAvecReportParams('0223', { limit: 250 })
+    expect(tm.inicio).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(tm.fim).toBe(tm.inicio)
+
     expect(withRequiredAvecReportParams('0248', { inicio: '01/07/2026', fim: '24/07/2026' })).toMatchObject({
       status: '0.6',
     })
@@ -131,5 +139,21 @@ describe('pagination truncation', () => {
     process.env.AVEC_SYNC_MAX_PAGES = '9999'
     expect(getAvecSyncMaxPages()).toBe(500)
     process.env = env
+  })
+})
+
+describe('periodRangeEndingOn', () => {
+  it('ancora janela ~30d no fim do mês', () => {
+    expect(periodRangeEndingOn('2026-04-30', 30)).toEqual({
+      inicio: '31/03/2026',
+      fim: '30/04/2026',
+    })
+  })
+
+  it('aceita daysBack 0 (só o dia âncora)', () => {
+    expect(periodRangeEndingOn('2026-01-15', 0)).toEqual({
+      inicio: '15/01/2026',
+      fim: '15/01/2026',
+    })
   })
 })

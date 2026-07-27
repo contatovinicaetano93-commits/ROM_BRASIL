@@ -110,20 +110,31 @@ export function isStockAuthConfigured() {
 }
 
 export function canViewRevenue(role: AuthRole | null | undefined) {
+  // Só admin vê faturamento no Hoje / Visão. Financeiro usa o painel /financeiro.
   return role === 'admin'
+}
+
+/** Segredo HMAC da sessão — NÃO usar a senha do usuário (permite rotação sem misturar com Bearer). */
+export function getSessionSigningSecret() {
+  const dedicated = process.env.ROM_SESSION_SECRET?.trim()
+  if (dedicated) return dedicated
+  // Fallback legado: senha admin (cookies antigos continuam válidos até relogin com secret dedicado).
+  return getAdminPassword()
 }
 
 /** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
 export async function createSessionToken(user: string, role: AuthRole) {
   const account = listAccounts().find((a) => a.role === role && timingSafeEqual(a.user, user))
   if (!account) return ''
+  const secret = getSessionSigningSecret()
+  if (!secret) return ''
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
     'raw',
-    enc.encode(account.password),
+    enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   )
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`rom-session:${role}:${user}`))
   return Array.from(new Uint8Array(sig))
@@ -179,12 +190,10 @@ export async function isAuthorized(req: NextRequest, { allowHeaderTokens = true 
 
   if (!allowHeaderTokens) return false
 
+  // Automação: só CRON_SECRET (nunca a senha de login).
   const auth = req.headers.get('authorization')
-  const cron = process.env.CRON_SECRET
+  const cron = process.env.CRON_SECRET?.trim()
   if (cron && (auth === `Bearer ${cron}` || req.headers.get('x-cron-secret') === cron)) return true
-
-  const legacyToken = getAdminPassword()
-  if (legacyToken && auth === `Bearer ${legacyToken}`) return true
 
   return false
 }

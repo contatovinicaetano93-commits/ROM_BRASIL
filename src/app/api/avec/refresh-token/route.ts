@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import { isAuthorized } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { isAvecLoginConfigured, mintAvecApiToken } from '@/lib/avec/refresh-token'
 import { loadRuntimeAvecApiToken, saveAvecApiToken } from '@/lib/avec/token-store'
 
@@ -14,8 +14,9 @@ export const maxDuration = 60
  */
 async function authorize(req: NextRequest) {
   if (isCronAuthorized(req)) return { cron: true as const }
-  if (await isAuthorized(req)) return { cron: false as const }
-  return null
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return null
+  return { cron: false as const }
 }
 
 async function execute(req: NextRequest) {

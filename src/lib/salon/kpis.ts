@@ -20,12 +20,15 @@ export interface ContactKpis {
 
 export { contactKpiWindow }
 
-export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
+export async function fetchContactKpis(
+  dayLimit = 30,
+  referenceDay?: string,
+): Promise<ContactKpis> {
   const sql = getSql()
-  const window = contactKpiWindow(dayLimit)
+  const window = contactKpiWindow(dayLimit, referenceDay)
 
   // byDay = entrada real no funil (exclui dump Avec 0004 / status importado).
-  // byStatus = inventário completo da base (transparência).
+  // byStatus / conversion = mesma janela de first_contact_at (alinha ao mês ou aos N dias).
   // conversion_rate = convertidos ÷ funil ativo (sem importado).
   const [byDay, byStatus, conversionRows] = await Promise.all([
     sql`
@@ -50,6 +53,10 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
       select status, count(*)::int as contacts_count
       from contacts
       where anonymized_at is null
+        and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+          >= ${window.from}::date
+        and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+          <= ${window.to}::date
       group by 1
       order by 2 desc
     `,
@@ -65,6 +72,10 @@ export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
         count(*) filter (where status = 'importado')::int as imported_contacts
       from contacts
       where anonymized_at is null
+        and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+          >= ${window.from}::date
+        and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+          <= ${window.to}::date
       limit 1
     ` as unknown as Promise<NonNullable<ContactKpis['conversion']>[]>,
   ])

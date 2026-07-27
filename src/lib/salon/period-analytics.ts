@@ -13,26 +13,17 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-function currentMonthKey(referenceDay: string): string {
-  return referenceDay.slice(0, 7)
-}
-
-function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
-}
-
-/** Mês corrente: até hoje; meses fechados: 1º→último dia. */
+/** @deprecated use resolveMonthWindow — mantido para imports existentes. */
 export function monthToDateRange(
   monthKey: string,
   referenceDay = todayIso(),
 ): { from: string; to: string } {
-  const range = monthRange(monthKey)
-  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+  const w = resolveMonthWindow(monthKey, referenceDay)
+  return { from: w.from, to: w.to }
 }
 
 function labelMonthPt(monthKey: string): string {
@@ -159,14 +150,15 @@ export interface PeriodAnalytics {
 export async function computePeriodAnalytics(opts?: {
   month?: string
 }): Promise<PeriodAnalytics> {
-  const month = opts?.month ?? currentMonthKey(todayIso())
-  const { from, to } = monthToDateRange(month)
+  const window = resolveMonthWindow(opts?.month ?? todayIso().slice(0, 7))
+  const { month, from, to } = window
+  const nearOpts = { maxSkewDays: 14 }
   const [totals, loss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
-    getSalonP1DailyNear(to),
-    getSalonP2DailyNear(to),
-    getSalonP3DailyNear(to),
+    getSalonP1DailyNear(to, nearOpts),
+    getSalonP2DailyNear(to, nearOpts),
+    getSalonP3DailyNear(to, nearOpts),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null

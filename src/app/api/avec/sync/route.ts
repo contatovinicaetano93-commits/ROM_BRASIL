@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl, testAvecConnection } from '@/lib/avec/client'
 import { runAvecSync, getLastAvecSync, type AvecSyncMode } from '@/lib/avec/sync'
-import { isAuthorized } from '@/lib/auth'
+import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
@@ -12,10 +12,14 @@ import { isSyncLockBusyError } from '@/lib/sync-lock'
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return true
-  if (await isAuthorized(req)) return true
-  if (!process.env.CRON_SECRET?.trim() && !isProduction()) return true
-  return false
+  if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
+  const admin = await requireAdmin(req)
+  if (admin.ok) return { ok: true as const, cron: false as const }
+  // Dev sem senha: permite status/sync local.
+  if (!isProduction() && !isAuthEnabled()) {
+    return { ok: true as const, cron: false as const }
+  }
+  return { ok: false as const, status: admin.status, message: admin.message }
 }
 
 function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecSyncMode {
@@ -24,8 +28,9 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-const FAST_MIN_GAP_MS = 45_000
-const FULL_MIN_GAP_MS = 120_000
+/** Espaçamento mínimo mesmo se o cron Vercel for reconfigurado à força. */
+const FAST_MIN_GAP_MS = 12 * 60_000
+const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 
 async function executeSync(
   req: NextRequest,
@@ -34,7 +39,6 @@ async function executeSync(
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
 
   if (!isAvecConfigured()) {
-    // Cron/webhook: skip silencioso — evita spam de erro antes do token na terça
     if (opts?.cron) {
       return ok({
         skipped: true,
@@ -79,7 +83,6 @@ async function executeSync(
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
-      // Cron/webhook: skip silencioso — outro sync ainda está no Neon.
       return ok({
         skipped: true,
         reason: 'sync_em_andamento',
@@ -95,9 +98,9 @@ async function executeSync(
 
 export async function POST(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
-    const cron = isCronAuthorized(req)
-    return await executeSync(req, { force: !cron, defaultMode: 'full', cron })
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+    return await executeSync(req, { force: !auth.cron, defaultMode: 'full', cron: auth.cron })
   } catch (e) {
     return handleError(e)
   }
@@ -105,10 +108,10 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
 
-    const cron = isCronAuthorized(req)
-    if (cron) {
+    if (auth.cron) {
       return await executeSync(req, { defaultMode: parseMode(req, 'fast'), cron: true })
     }
 
@@ -120,10 +123,10 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/5 * * * *', mode: 'fast', path: '/api/avec/sync' },
-        full: { schedule: '*/10 * * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
+        fast: { schedule: '*/15 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        full: { schedule: '20 10,22 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         cadence:
-          'fast a cada 5 min + full a cada 10 min (backup) — tempo real via webhook Avec',
+          'fast a cada 15 min · full 2×/dia (UTC 10:20 e 22:20 ≈ 07:20/19:20 BRT) — tempo real via webhook',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

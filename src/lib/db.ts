@@ -34,7 +34,7 @@ function getClient(databaseUrl: string): PostgresSql {
   if (!client) {
     client = postgres(databaseUrl, {
       ssl: 'require',
-      max: 1,
+      max: 3,
       // Transaction/Session pooler: prepared statements quebram no modo transaction.
       prepare: false,
       idle_timeout: 20,

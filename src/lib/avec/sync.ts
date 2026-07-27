@@ -39,9 +39,13 @@ import {
   isHairService,
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
-import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { pruneAvecSyncHistory, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
-import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import {
+  getSalonMetrics,
+  recomputeSalonMetricsFromRom,
+  upsertSalonMetrics,
+} from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
@@ -358,10 +362,22 @@ function listDaysInclusive(fromIso: string, toIso: string): string[] {
   return out
 }
 
+/** Janela de backfill diário: AVEC_REVENUE_DAYS_BACK override; senão fast=1, full=7. */
+function revenueDaysBack(mode: AvecSyncMode): number {
+  const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+  if (raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return mode === 'fast' ? 1 : 7
+}
+
 /**
  * Faturamento dia a dia.
  * Fast: hoje + ontem (corrige atraso do relatório).
  * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
+ * Sempre grava a linha do dia (mesmo receita 0) para Relatórios não marcar gap.
  */
 async function syncRevenue(
   stats: AvecSyncStats,
@@ -379,7 +395,7 @@ async function syncRevenue(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 
@@ -408,14 +424,20 @@ async function syncRevenue(
         }
       }
 
-      if (revenue > 0 || attended > 0) {
-        const attendedInt = Math.round(attended)
-        await upsertSalonMetrics(day, {
-          revenue: Math.round(revenue * 100) / 100,
-          attended: attendedInt || undefined,
-          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
-        })
+      const attendedInt = Math.round(attended)
+      const revenueRounded = Math.round(revenue * 100) / 100
+      // 0 preenche dia faltante; não zera métricas já gravadas se o payload veio vazio/ilegível.
+      if (revenueRounded === 0 && attendedInt === 0) {
+        const existing = await getSalonMetrics(day)
+        if (existing && (Number(existing.revenue) > 0 || Number(existing.attended) > 0)) {
+          continue
+        }
       }
+      await upsertSalonMetrics(day, {
+        revenue: revenueRounded,
+        attended: attendedInt,
+        ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
+      })
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -430,6 +452,22 @@ async function syncCancellations(
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
+  const today = todayIso()
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  await syncCancellationsRange(from, today, stats, syncRunId)
+}
+
+/**
+ * Cancelamentos (0052) dia a dia em [from, to] — usado no sync diário e no backfill analítico.
+ */
+export async function syncCancellationsRange(
+  from: string,
+  to: string,
+  stats: AvecSyncStats,
+  syncRunId?: string,
+  opts?: { zeroEmptyDays?: boolean },
+) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
 
@@ -440,10 +478,7 @@ async function syncCancellations(
     return
   }
 
-  const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
-  const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysInclusive(from, today)
+  const days = listDaysInclusive(from, to)
 
   for (const day of days) {
     const params = {
@@ -470,9 +505,10 @@ async function syncCancellations(
       }
 
       // Só grava no_shows se o 0052 trouxe Falta — senão o 0248 é a fonte.
-      if (cancelled > 0 || no_shows > 0) {
+      // zeroEmptyDays: grava cancelled=0 nos dias sem evento (backfill limpa stale).
+      if (cancelled > 0 || no_shows > 0 || opts?.zeroEmptyDays) {
         await upsertSalonMetrics(day, {
-          cancelled: cancelled > 0 ? cancelled : undefined,
+          cancelled: cancelled > 0 || opts?.zeroEmptyDays ? cancelled : undefined,
           no_shows: no_shows > 0 ? no_shows : undefined,
         })
       }
@@ -494,9 +530,22 @@ async function syncNoShows0248(
   const today = todayIso()
   const daysBack = mode === 'fast' ? 1 : 7
   const from = addCalendarDaysYmd(today, -daysBack)
+  await syncNoShows0248Range(from, today, stats, syncRunId, { zeroTodayIfEmpty: true })
+}
+
+/**
+ * No-shows 0248 no intervalo [from, to].
+ */
+export async function syncNoShows0248Range(
+  from: string,
+  to: string,
+  stats: AvecSyncStats,
+  syncRunId?: string,
+  opts?: { zeroTodayIfEmpty?: boolean; zeroEmptyDays?: boolean },
+) {
   const params = {
     inicio: isoToBr(from),
-    fim: isoToBr(today),
+    fim: isoToBr(to),
     status: '0.6',
     limit: 250,
   }
@@ -520,9 +569,19 @@ async function syncNoShows0248(
       await upsertSalonMetrics(day, { no_shows })
     }
 
-    // Dias sem falta no intervalo: zera só o dia de hoje (evita manter stale do fast).
-    if (!byDay.has(today)) {
-      await upsertSalonMetrics(today, { no_shows: 0 })
+    if (opts?.zeroEmptyDays) {
+      // Backfill: zera no_shows em todo dia do intervalo sem falta (limpa stale).
+      for (const day of listDaysInclusive(from, to)) {
+        if (!byDay.has(day)) {
+          await upsertSalonMetrics(day, { no_shows: 0 })
+        }
+      }
+    } else {
+      // Sync diário: zera só o dia de hoje (evita manter stale do fast).
+      const today = todayIso()
+      if (opts?.zeroTodayIfEmpty && !byDay.has(today) && today >= from && today <= to) {
+        await upsertSalonMetrics(today, { no_shows: 0 })
+      }
     }
   } catch (e) {
     stats.errors.push(`no-show 0248: ${e instanceof Error ? e.message : String(e)}`)
@@ -599,16 +658,24 @@ async function syncReturningFrom0002(
 }
 
 /**
- * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
- * Se todos vierem null, não grava (UI continua "—").
+ * TM cadastrado — 0223 (`tempo`) só do dia (métrica de Hoje).
+ * Fast: poucas páginas. Full: um pouco mais. Snapshot só no full (DB leve).
  */
-async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
+async function syncDurationFrom0223(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
   const today = todayIso()
-  const params = { profissional_id: '', limit: 250 }
+  const params = { ...periodRange(0, 0), profissional_id: '', limit: 250 }
+  // 20×250 = 5k linhas (fast); 40×250 = 10k (full) — suficiente p/ um dia.
+  const maxPages = mode === 'fast' ? 20 : 40
   try {
-    const result = await fetchAllAvecReport('0223', params)
+    const result = await fetchAllAvecReport('0223', params, maxPages)
     warnIfTruncated(stats, '0223', result)
-    await snapshotReport('0223', params, result.rows, stats, syncRunId)
+    if (mode === 'full') {
+      await snapshotReport('0223', params, result.rows, stats, syncRunId)
+    }
 
     let sum = 0
     let count = 0
@@ -622,12 +689,11 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
       sum += minutes
       count++
     }
-    if (count > 0) {
-      await upsertSalonMetrics(today, {
-        service_duration_sum_minutes: sum,
-        service_duration_count: count,
-      })
-    }
+    // Sempre grava (inclui 0) — dia scoped pode vir vazio e não pode manter TM stale.
+    await upsertSalonMetrics(today, {
+      service_duration_sum_minutes: sum,
+      service_duration_count: count,
+    })
   } catch (e) {
     stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -690,7 +756,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         syncAttendances(stats, mode, syncRunId),
       ])
       try {
-        await syncDurationFrom0223(stats, syncRunId)
+        await syncDurationFrom0223(stats, mode, syncRunId)
       } catch (e) {
         stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
@@ -707,7 +773,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
-        ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
+        ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
@@ -725,6 +791,15 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       await syncReturningFrom0002(stats, mode, syncRunId)
     } catch (e) {
       stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
+    if (mode === 'full') {
+      // Limpeza silenciosa — não vira warning (senão full ok marca "partial").
+      try {
+        await pruneAvecSyncHistory()
+      } catch {
+        /* ignore */
+      }
     }
 
     stats.errors = formatAvecErrorList(stats.errors)

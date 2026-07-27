@@ -6,19 +6,19 @@
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "* * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
-      "schedule": "*/10 * * * *"
+      "schedule": "20 10,22 * * *"
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "7,37 * * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
-      "schedule": "*/10 * * * *"
+      "schedule": "40 11 * * *"
     },
     {
       "path": "/api/director-report",
@@ -26,7 +26,7 @@
     },
     {
       "path": "/api/reminders/aftercare",
-      "schedule": "*/10 * * * *"
+      "schedule": "25 */2 * * *"
     }
   ]
 }

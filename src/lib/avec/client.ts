@@ -158,8 +158,16 @@ export function withRequiredAvecReportParams(
       const origin = site === '' || site === '0' || site === '1' ? site : ''
       return { ...params, site: origin, profissional_id: params.profissional_id ?? '' }
     }
-    case '0223':
-      return { ...params, profissional_id: params.profissional_id ?? '' }
+    case '0223': {
+      // Sem janela a Avec devolve histórico enorme (100k+ linhas) e estoura paginação/DB.
+      const today = currentMonthRange().fim
+      return {
+        ...params,
+        profissional_id: params.profissional_id ?? '',
+        inicio: params.inicio ?? today,
+        fim: params.fim ?? today,
+      }
+    }
     case '0248': {
       // Status Agendamento: Faltou = 0.6 (descoberta via validation do endpoint).
       const range = currentMonthRange()
@@ -187,6 +195,19 @@ export function periodRange(daysBack = 0, daysForward = 14) {
   return {
     inicio: fmtBrFromYmd(addCalendarDays(today, -daysBack)),
     fim: fmtBrFromYmd(addCalendarDays(today, daysForward)),
+  }
+}
+
+/**
+ * Janela Avec ~N dias terminando em `anchorYmd` (inclusive), no formato dd/mm/yyyy.
+ * Usado no backfill histórico da Visão analítica (P1/P2/P3 ancorados no fim do mês).
+ */
+export function periodRangeEndingOn(anchorYmd: string, daysBack = 30) {
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd) ? anchorYmd : todayIso()
+  const back = Math.max(0, Math.floor(daysBack))
+  return {
+    inicio: fmtBrFromYmd(addCalendarDays(anchor, -back)),
+    fim: fmtBrFromYmd(anchor),
   }
 }
 

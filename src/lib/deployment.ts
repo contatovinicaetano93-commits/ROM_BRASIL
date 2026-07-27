@@ -52,6 +52,17 @@ export function validateDeploymentEnv(): DeploymentValidation {
     )
   }
 
+  // Este repositório é o deploy Brasil (rom-club). Painel Iguatemi aqui = misconfig.
+  const host = (process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL ?? '').toLowerCase()
+  if ((serverPanel === 'iguatemi' || publicPanel === 'iguatemi') && host.includes('rom-club')) {
+    warnings.push(
+      'ROM_PANEL=iguatemi neste projeto rom-club (Brasil). Use o repositório/projeto Vercel do Iguatemi.',
+    )
+  }
+  if (serverPanel === 'iguatemi' && process.env.VERCEL_ENV === 'production' && host.includes('rom-club')) {
+    warnings.push('CRÍTICO: produção rom-club com painel Iguatemi — risco de misturar unidades.')
+  }
+
   if (!process.env.DATABASE_URL?.trim()) {
     warnings.push(
       'DATABASE_URL ausente — use um banco Postgres dedicado por unidade (Brasil: Supabase; Iguatemi: Neon — nunca compartilhe).',
@@ -60,6 +71,12 @@ export function validateDeploymentEnv(): DeploymentValidation {
 
   if (!process.env.AVEC_API_TOKEN?.trim() && process.env.AVEC_MOCK !== '1' && process.env.AVEC_MOCK !== 'true') {
     warnings.push('AVEC_API_TOKEN ausente — cada unidade precisa do token Avec da própria loja.')
+  }
+
+  if (!process.env.ROM_SESSION_SECRET?.trim() && process.env.VERCEL_ENV === 'production') {
+    warnings.push(
+      'CRÍTICO: ROM_SESSION_SECRET ausente em produção — sessões usam fallback da senha admin; defina um segredo dedicado e peça relogin.',
+    )
   }
 
   return { ok: warnings.length === 0, warnings }

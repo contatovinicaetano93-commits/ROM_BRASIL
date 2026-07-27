@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
 import { computeFinanceKpis } from '@/lib/finance'
+import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,12 +11,16 @@ export async function GET(req: NextRequest) {
 
     const month = req.nextUrl.searchParams.get('month') ?? undefined
     const compareMonth = req.nextUrl.searchParams.get('compare') ?? undefined
-    if (month && !/^\d{4}-\d{2}$/.test(month)) return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
-    if (compareMonth && !/^\d{4}-\d{2}$/.test(compareMonth))
+    if (month && !/^\d{4}-\d{2}(-\d{2})?$/.test(month))
+      return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
+    if (compareMonth && !/^\d{4}-\d{2}(-\d{2})?$/.test(compareMonth))
       return err('Parâmetro compare inválido (esperado YYYY-MM)', 422)
 
-    const kpis = await computeFinanceKpis({ month, compareMonth })
-    return ok(kpis)
+    const [kpis, sync] = await Promise.all([
+      computeFinanceKpis({ month, compareMonth }),
+      loadAvecSyncMeta(),
+    ])
+    return ok({ ...kpis, sync })
   } catch (e) {
     return handleError(e)
   }

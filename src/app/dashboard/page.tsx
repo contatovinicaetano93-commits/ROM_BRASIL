@@ -83,7 +83,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
-  const [period, setPeriod] = useState<PeriodAnalytics | null>(null)
+  const [period, setPeriod] = useState<(PeriodAnalytics & {
+    sync?: { status: string | null; created_at: string | null; stale: boolean; hint: string | null }
+  }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -94,15 +96,19 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         setLoading(true)
-        const kpisRes = await apiFetch('/api/kpis', { cache: 'no-store' })
+        // Evita KPIs do mês anterior com rótulos do mês novo enquanto as requests resolvem.
+        setTm(null)
+        setPerformance(null)
+        setPeriod(null)
+        const kpisRes = await apiFetch(`/api/kpis?month=${month}`, { cache: 'no-store' })
         const kpisJson = await kpisRes.json()
         if (cancelled) return
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
         const [tmRes, perfRes, periodRes] = await Promise.all([
-          apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
-          apiFetch('/api/kpis/performance', { cache: 'no-store' }),
+          apiFetch(`/api/kpis/tempo-medio?month=${month}`, { cache: 'no-store' }),
+          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store' }),
           apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
         ])
         if (cancelled) return
@@ -126,7 +132,13 @@ export default function DashboardPage() {
         try {
           const periodJson = await periodRes.json()
           if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
-          else if (periodJson.data) setPeriod(periodJson.data)
+          else if (periodJson.data) {
+            setPeriod(periodJson.data)
+            const sync = periodJson.data.sync
+            if (sync?.stale) warnings.push('Sync Avec desatualizado (>24h) — números podem estar velhos')
+            else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
+            else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
+          }
         } catch {
           warnings.push('Analytics de período indisponível')
         }
@@ -281,39 +293,39 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
-              <p className="text-xs text-muted">Funil ativo (CRM · sem importado)</p>
+              <p className="text-xs text-muted">Funil ativo (CRM · sem importado · {month})</p>
               {loading ? (
                 <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
               ) : (
                 <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                 <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
                   <TrendingUp size={13} />
                   {(conversionRate * 100).toFixed(1)}%
                 </span>
-                <span className="text-xs text-muted">conversão no funil</span>
-              </div>
+                <span className="text-xs text-muted">conversão no funil · {month}</span>
+              </p>
               {!loading && (
                 <p className="mt-2 text-[0.7rem] text-muted">
-                  Base Avec importada: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
+                  Importados na janela: {importedContacts.toLocaleString('pt-BR')} · total na janela:{' '}
                   {totalContacts.toLocaleString('pt-BR')}
                 </p>
               )}
             </div>
             <MiniStat
               icon={<Users size={15} />}
-              label="Novos aguardando · funil"
+              label={`Novos aguardando · funil · ${month}`}
               value={loading ? '—' : String(novos)}
             />
             <MiniStat
               icon={<Layers size={15} />}
-              label="Canais ativos · funil 30d"
+              label={`Canais ativos · funil · ${month}`}
               value={loading ? '—' : String(activeChannels)}
             />
           </div>
 
-          <SectionCard title="Contatos por dia (funil · 30 dias)">
+          <SectionCard title={`Contatos por dia (funil · ${month})`}>
             <p className="mb-2 text-xs text-muted">
               Entradas reais no funil (exclui dump Avec / status importado) · {crmWindow.from} →{' '}
               {crmWindow.to}
@@ -352,7 +364,10 @@ export default function DashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Tempo Médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
+          <SectionCard
+            title={`Tempo médio cadastrado (TM · ${month})`}
+            badge={<Clock size={15} className="text-muted" />}
+          >
             {tm ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
@@ -361,8 +376,11 @@ export default function DashboardPage() {
             ) : (
               <div className="h-16 animate-pulse rounded-2xl bg-card" />
             )}
+            <p className="mt-3 text-[0.65rem] text-muted">
+              Média do tempo cadastrado no Avec (0223) — não é duração cronometrada da visita.
+            </p>
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
-              <p className="mt-4 text-xs text-muted">
+              <p className="mt-2 text-xs text-muted">
                 Sem duração na Avec para esta unidade (relatório 0223 campo tempo, ou início/fim no
                 0002). Top serviços mostra faturamento — não inventamos TM a partir disso.
               </p>
@@ -376,7 +394,7 @@ export default function DashboardPage() {
                 <span className="font-semibold text-gold">
                   {CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}
                 </span>{' '}
-                lidera entradas no funil nos últimos 30 dias ({topChannel[1]} de {channelTotal}) —
+                lidera entradas no funil em {month} ({topChannel[1]} de {channelTotal}) —
                 dump Avec importado não entra nesta conta.
               </p>
             </div>
@@ -384,7 +402,7 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <SectionCard
-              title="Contatos por canal (funil · 30 dias)"
+              title={`Contatos por canal (funil · ${month})`}
               badge={<CountBadge value={`${channelTotal}`} />}
             >
               <div className="divide-y divide-border">
@@ -396,15 +414,18 @@ export default function DashboardPage() {
                 ))}
                 {channelData.length === 0 && (
                   <p className="py-6 text-center text-sm text-muted">
-                    Nenhuma entrada de funil nos últimos 30 dias.
+                    Nenhuma entrada de funil em {month}.
                   </p>
                 )}
               </div>
             </SectionCard>
 
-            <SectionCard title="Status na base (inventário)" badge={<CountBadge value={`${statusTotal}`} />}>
+            <SectionCard
+              title={`Status no período · ${month}`}
+              badge={<CountBadge value={`${statusTotal}`} />}
+            >
               <p className="mb-2 text-xs text-muted">
-                Inclui importado (base Avec 0004) — não é volume de aquisição do mês.
+                Contatos com 1º contato no mês (inclui importado Avec, se houver entrada na janela).
               </p>
               <div className="flex flex-col gap-2.5">
                 {[...(data?.byStatus ?? [])]
@@ -529,7 +550,7 @@ export default function DashboardPage() {
       </div>
 
       <SectionCard
-        title="Ranking de profissionais (snapshot · 30 dias)"
+        title={`Ranking de profissionais (snapshot · ${month})`}
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (

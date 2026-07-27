@@ -6,6 +6,7 @@ import {
 } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -113,10 +114,22 @@ function previousMonthKey(monthKey: string): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+/** Aceita YYYY-MM ou YYYY-MM-DD (usa só o mês). */
+export function normalizeMonthKey(raw: string | null | undefined): string | null {
+  if (raw == null) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const key = trimmed.slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(key)) return null
+  const month = Number(key.slice(5, 7))
+  if (month < 1 || month > 12) return null
+  return key
+}
+
 function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
+  // Mesma janela MTD da Visão analítica (mês corrente até hoje).
+  const w = resolveMonthWindow(monthKey)
+  return { from: w.from, to: w.to }
 }
 
 function labelMonthPt(monthKey: string): string {
@@ -311,6 +324,13 @@ export interface FinanceKpiBucket {
   from: string
   to: string
   revenue: number
+  /**
+   * Origem da receita do bucket:
+   * - metrics = salon_daily_metrics
+   * - payments_0081 = fallback quando métricas estão zeradas mas 0081 tem valor
+   * - empty = sem métricas nem pagamentos
+   */
+  revenue_source: 'metrics' | 'payments_0081' | 'empty'
   expenses: number
   /** Proxy de comandas finalizadas (métrica attended da Avec/Lake). */
   attended: number
@@ -342,7 +362,7 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
+  const [metricsRevenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
       sumExpenses(from, to),
@@ -353,6 +373,18 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
       sumStockCogs(from, to),
     ])
   const cmv = cmvCoverage.cmv
+  const paymentsTotal =
+    Math.round(payment_mix.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100
+  // Métricas diárias são a fonte de fechamento; se o mês comparado ficou fora da
+  // janela curta do sync (7d), usa 0081 para não zerar o comparativo.
+  let revenue = metricsRevenue
+  let revenue_source: FinanceKpiBucket['revenue_source'] = 'metrics'
+  if (metricsRevenue <= 0 && paymentsTotal > 0) {
+    revenue = paymentsTotal
+    revenue_source = 'payments_0081'
+  } else if (metricsRevenue <= 0) {
+    revenue_source = 'empty'
+  }
   const revenueRounded = Math.round(revenue * 100) / 100
   const expensesRounded = Math.round(expenses * 100) / 100
   const gross_margin =
@@ -367,6 +399,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     from,
     to,
     revenue: revenueRounded,
+    revenue_source,
     expenses: expensesRounded,
     attended,
     ticket_avg,
@@ -388,8 +421,10 @@ export async function computeFinanceKpis(opts?: {
   compareMonth?: string
 }): Promise<FinanceKpis> {
   await ensureFiscalSplitTable().catch(() => undefined)
-  const current = opts?.month ?? currentMonthKey(todayIso())
-  const compare = opts?.compareMonth ?? previousMonthKey(current)
+  const current =
+    normalizeMonthKey(opts?.month) ?? currentMonthKey(todayIso())
+  const compare =
+    normalizeMonthKey(opts?.compareMonth) ?? previousMonthKey(current)
   const [currentBucket, previousBucket] = await Promise.all([
     buildBucket(current),
     buildBucket(compare),

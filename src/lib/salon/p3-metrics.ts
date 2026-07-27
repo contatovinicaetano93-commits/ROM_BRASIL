@@ -13,17 +13,27 @@ export interface SalonP3Daily {
   updated_at: string
 }
 
+let p3TableReady: Promise<void> | null = null
+
 export async function ensureSalonP3Table() {
-  const sql = getSql()
-  await sql`
-    create table if not exists salon_p3_daily (
-      day date primary key,
-      return_rate numeric(6,4) not null default 0,
-      new_clients_period int not null default 0,
-      revenue_curve jsonb not null default '[]',
-      updated_at timestamptz not null default now()
-    )
-  `
+  if (!p3TableReady) {
+    p3TableReady = (async () => {
+      const sql = getSql()
+      await sql`
+        create table if not exists salon_p3_daily (
+          day date primary key,
+          return_rate numeric(6,4) not null default 0,
+          new_clients_period int not null default 0,
+          revenue_curve jsonb not null default '[]',
+          updated_at timestamptz not null default now()
+        )
+      `
+    })().catch((err) => {
+      p3TableReady = null
+      throw err
+    })
+  }
+  await p3TableReady
 }
 
 export async function upsertSalonP3Daily(
@@ -69,7 +79,10 @@ export async function upsertSalonP3Daily(
  * Snapshot P3 mais recente ≤ targetDay.
  * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
  */
-export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
+export async function getSalonP3DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP3Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -84,8 +97,17 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
       order by day desc
       limit 1
     `) as SalonP3Daily[]
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
 }

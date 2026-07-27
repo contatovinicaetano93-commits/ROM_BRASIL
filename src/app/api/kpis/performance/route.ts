@@ -1,6 +1,14 @@
-import { ok, handleError } from '@/lib/api-response'
-import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+import { NextRequest } from 'next/server'
+import { ok, err, handleError } from '@/lib/api-response'
+import { requireAdmin } from '@/lib/auth'
+import {
+  getLatestSalonP1Daily,
+  getSalonP1DailyNear,
+  type P1ProfessionalRow,
+} from '@/lib/salon/p1-metrics'
 import { compareByNamePtBr } from '@/lib/salon/sort'
+import { monthToDateRange } from '@/lib/salon/period-analytics'
+import { asJsonArray } from '@/lib/sql-json'
 
 function addDays(day: string, delta: number): string {
   const d = new Date(`${day}T12:00:00Z`)
@@ -12,19 +20,33 @@ interface ProfessionalWithDelta extends P1ProfessionalRow {
   delta: { revenue: number; attended: number; occupancy: number | null } | null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const latest = await getLatestSalonP1Daily()
+    const auth = await requireAdmin(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
+    const month = req.nextUrl.searchParams.get('month')?.trim()
+    const latest =
+      month && /^\d{4}-\d{2}$/.test(month)
+        ? await getSalonP1DailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
+        : await getLatestSalonP1Daily()
 
     if (!latest) {
-      return ok({ reference_day: null, compare_day: null, professionals: [] })
+      return ok({
+        month: month && /^\d{4}-\d{2}$/.test(month) ? month : null,
+        reference_day: null,
+        compare_day: null,
+        professionals: [],
+      })
     }
 
+    const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
     const compareTarget = addDays(latest.day, -30)
-    const compare = await getSalonP1DailyNear(compareTarget)
-    const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
+    const compare = await getSalonP1DailyNear(compareTarget, { maxSkewDays: 14 })
+    const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
+    const compareByName = new Map(comparePros.map((p) => [p.name, p]))
 
-    const professionals: ProfessionalWithDelta[] = latest.professionals
+    const professionals: ProfessionalWithDelta[] = professionalsRaw
       .map((p) => {
         const prev = compareByName.get(p.name)
         return {
@@ -39,10 +61,10 @@ export async function GET() {
             : null,
         }
       })
-      // Ranking por faturamento (KPI); empate A–Z
       .sort((a, b) => b.revenue - a.revenue || compareByNamePtBr(a.name, b.name))
 
     return ok({
+      month: month && /^\d{4}-\d{2}$/.test(month) ? month : null,
       reference_day: latest.day,
       compare_day: compare && compare.day !== latest.day ? compare.day : null,
       professionals,

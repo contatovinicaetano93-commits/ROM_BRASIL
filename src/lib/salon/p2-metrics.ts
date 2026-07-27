@@ -40,7 +40,7 @@ export async function getPaymentMixRange(from: string, to: string): Promise<P2Pa
 
   const totals = new Map<string, number>()
   for (const row of rows) {
-    for (const p of row.payment_mix ?? []) {
+    for (const p of asJsonArray<P2PaymentRow>(row.payment_mix)) {
       totals.set(p.method, (totals.get(p.method) ?? 0) + Number(p.amount))
     }
   }
@@ -59,7 +59,10 @@ export async function getPaymentMixRange(from: string, to: string): Promise<P2Pa
  * Snapshot P2 mais recente ≤ targetDay.
  * booking_channels / packages são janelas rolantes (~30d) no sync full — não deltas diários.
  */
-export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Daily | null> {
+export async function getSalonP2DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP2Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -78,27 +81,46 @@ export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Dai
       order by day desc
       limit 1
     `) as SalonP2Daily[]
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
 }
 
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+let p2TableReady: Promise<void> | null = null
+
 export async function ensureSalonP2Table() {
-  const sql = getSql()
-  await sql`
-    create table if not exists salon_p2_daily (
-      day date primary key,
-      booking_channels jsonb not null default '[]',
-      packages jsonb not null default '[]',
-      packages_sold int not null default 0,
-      ratings_avg numeric(4,2) not null default 0,
-      ratings_count int not null default 0,
-      payment_mix jsonb not null default '[]',
-      birthday_count int not null default 0,
-      updated_at timestamptz not null default now()
-    )
-  `
+  if (!p2TableReady) {
+    p2TableReady = (async () => {
+      const sql = getSql()
+      await sql`
+        create table if not exists salon_p2_daily (
+          day date primary key,
+          booking_channels jsonb not null default '[]',
+          packages jsonb not null default '[]',
+          packages_sold int not null default 0,
+          ratings_avg numeric(4,2) not null default 0,
+          ratings_count int not null default 0,
+          payment_mix jsonb not null default '[]',
+          birthday_count int not null default 0,
+          updated_at timestamptz not null default now()
+        )
+      `
+    })().catch((err) => {
+      p2TableReady = null
+      throw err
+    })
+  }
+  await p2TableReady
 }
 
 function jsonArrLen(v: unknown): number {
