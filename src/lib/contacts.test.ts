@@ -77,6 +77,7 @@ describe('isAvecImportSource', () => {
   it('reconhece dump 0004, returning e lake', () => {
     expect(isAvecImportSource('avec_sync_clients')).toBe(true)
     expect(isAvecImportSource('avec_sync_returning_0002')).toBe(true)
+    expect(isAvecImportSource('avec_sync_visit_0002')).toBe(false)
     expect(isAvecImportSource('avec_backfill_0004')).toBe(true)
     expect(isAvecImportSource('avec_lake_clients')).toBe(true)
   })
