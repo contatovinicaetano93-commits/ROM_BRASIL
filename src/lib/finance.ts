@@ -6,6 +6,7 @@ import {
 } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -126,9 +127,9 @@ export function normalizeMonthKey(raw: string | null | undefined): string | null
 }
 
 function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
+  // Mesma janela MTD da Visão analítica (mês corrente até hoje).
+  const w = resolveMonthWindow(monthKey)
+  return { from: w.from, to: w.to }
 }
 
 function labelMonthPt(monthKey: string): string {

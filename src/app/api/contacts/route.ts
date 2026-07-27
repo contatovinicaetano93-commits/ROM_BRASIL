@@ -26,6 +26,9 @@ const schema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const { searchParams } = new URL(req.url)
     const pendingOnly = searchParams.get('pending') === 'true'
     const sort = searchParams.get('sort') ?? 'urgency'

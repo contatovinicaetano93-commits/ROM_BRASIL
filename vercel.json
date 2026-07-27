@@ -4,9 +4,9 @@
       "path": "/api/avec/refresh-token",
       "schedule": "0 */6 * * *"
     },
-    {
+      {
       "path": "/api/avec/sync",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",

@@ -7,6 +7,7 @@ import {
   isAuthEnabled,
   validateCredentials,
 } from '@/lib/auth'
+import { isProduction } from '@/lib/env'
 import { LoginRequestSchema } from '@/lib/schemas'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
   res.cookies.set(AUTH_COOKIE, await createSessionToken(hit.user, hit.role), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction(),
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   })

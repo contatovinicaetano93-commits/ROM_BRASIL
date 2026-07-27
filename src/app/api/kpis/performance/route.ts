@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
-import { ok, handleError } from '@/lib/api-response'
+import { ok, err, handleError } from '@/lib/api-response'
+import { requireAdmin } from '@/lib/auth'
 import {
   getLatestSalonP1Daily,
   getSalonP1DailyNear,
@@ -19,14 +20,11 @@ interface ProfessionalWithDelta extends P1ProfessionalRow {
   delta: { revenue: number; attended: number; occupancy: number | null } | null
 }
 
-/**
- * Ranking P1 (0021+0126).
- * Sem `month`: snapshot mais recente.
- * Com `month=YYYY-MM`: snapshot do fim do mês (ou o mais próximo ≤ fim do mês).
- * Delta = vs snapshot ~30 dias antes.
- */
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const month = req.nextUrl.searchParams.get('month')?.trim()
     const latest =
       month && /^\d{4}-\d{2}$/.test(month)
@@ -63,7 +61,6 @@ export async function GET(req: NextRequest) {
             : null,
         }
       })
-      // Ranking por faturamento (KPI); empate A–Z
       .sort((a, b) => b.revenue - a.revenue || compareByNamePtBr(a.name, b.name))
 
     return ok({

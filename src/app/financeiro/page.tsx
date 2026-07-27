@@ -527,13 +527,27 @@ export default function FinanceiroPage() {
         </div>
       )}
 
-      {kpis && kpis.previous.revenue_source && kpis.previous.revenue_source !== 'metrics' && (
+      {kpis &&
+        ((kpis.previous.revenue_source && kpis.previous.revenue_source !== 'metrics') ||
+          (kpis.current.revenue_source && kpis.current.revenue_source !== 'metrics')) && (
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
-          <strong>{kpis.previous.label}</strong> sem receita nas métricas diárias
-          {kpis.previous.revenue_source === 'payments_0081'
-            ? ' — usando fallback das formas de pagamento (0081).'
-            : ' — comparativo zerado.'}{' '}
-          Use <strong>Preencher ano (Avec)</strong> para gravar jan→hoje no banco (o sync normal só cobre ~7 dias).
+          {kpis.current.revenue_source && kpis.current.revenue_source !== 'metrics' && (
+            <p className="mb-1">
+              <strong>{kpis.current.label}</strong>
+              {kpis.current.revenue_source === 'payments_0081'
+                ? ' — receita via fallback 0081 (formas de pagamento), não métricas diárias.'
+                : ' — sem receita nas métricas diárias.'}
+            </p>
+          )}
+          {kpis.previous.revenue_source && kpis.previous.revenue_source !== 'metrics' && (
+            <p>
+              <strong>{kpis.previous.label}</strong> sem receita nas métricas diárias
+              {kpis.previous.revenue_source === 'payments_0081'
+                ? ' — usando fallback das formas de pagamento (0081).'
+                : ' — comparativo zerado.'}{' '}
+              Use <strong>Preencher ano (Avec)</strong> para gravar jan→hoje no banco.
+            </p>
+          )}
         </div>
       )}
 

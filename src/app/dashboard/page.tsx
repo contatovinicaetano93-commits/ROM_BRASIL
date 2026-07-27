@@ -83,7 +83,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
-  const [period, setPeriod] = useState<PeriodAnalytics | null>(null)
+  const [period, setPeriod] = useState<(PeriodAnalytics & {
+    sync?: { status: string | null; created_at: string | null; stale: boolean; hint: string | null }
+  }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -126,7 +128,13 @@ export default function DashboardPage() {
         try {
           const periodJson = await periodRes.json()
           if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
-          else if (periodJson.data) setPeriod(periodJson.data)
+          else if (periodJson.data) {
+            setPeriod(periodJson.data)
+            const sync = periodJson.data.sync
+            if (sync?.stale) warnings.push('Sync Avec desatualizado (>24h) — números podem estar velhos')
+            else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
+            else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
+          }
         } catch {
           warnings.push('Analytics de período indisponível')
         }
@@ -352,7 +360,10 @@ export default function DashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title={`Tempo Médio de atendimento (TM · ${month})`} badge={<Clock size={15} className="text-muted" />}>
+          <SectionCard
+            title={`Tempo médio cadastrado (TM · ${month})`}
+            badge={<Clock size={15} className="text-muted" />}
+          >
             {tm ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
@@ -361,8 +372,11 @@ export default function DashboardPage() {
             ) : (
               <div className="h-16 animate-pulse rounded-2xl bg-card" />
             )}
+            <p className="mt-3 text-[0.65rem] text-muted">
+              Média do tempo cadastrado no Avec (0223) — não é duração cronometrada da visita.
+            </p>
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
-              <p className="mt-4 text-xs text-muted">
+              <p className="mt-2 text-xs text-muted">
                 Sem duração na Avec para esta unidade (relatório 0223 campo tempo, ou início/fim no
                 0002). Top serviços mostra faturamento — não inventamos TM a partir disso.
               </p>
