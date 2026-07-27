@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { salonContextForAI, type SalonContext } from '@/lib/salon/context-builder'
+import {
+  clipMonthEndToToday,
+  fractionToPctPoints,
+  salonContextForAI,
+  type SalonContext,
+} from '@/lib/salon/context-builder'
 import { EMPTY_CMV_COVERAGE } from '@/lib/finance'
 import { contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
 
+describe('fractionToPctPoints', () => {
+  it('converte fração 0–1 em pontos percentuais', () => {
+    expect(fractionToPctPoints(0.8)).toBe(80)
+    expect(fractionToPctPoints(0.456)).toBe(45.6)
+    expect(fractionToPctPoints(null)).toBeNull()
+  })
+})
+
+describe('clipMonthEndToToday', () => {
+  it('clipa fim do mês calendário ao dia corrente', () => {
+    expect(clipMonthEndToToday('2026-07-31', '2026-07-27')).toBe('2026-07-27')
+    expect(clipMonthEndToToday('2026-06-30', '2026-07-27')).toBe('2026-06-30')
+  })
+})
+
 describe('salonContextForAI', () => {
-  it('separa faturamento de hoje do acumulado do mês', () => {
+  it('separa faturamento de hoje do acumulado do mês e normaliza %', () => {
     const ctx = {
       hoje: '2026-07-27',
       salon: {
@@ -95,14 +115,59 @@ describe('salonContextForAI', () => {
 
     const parsed = JSON.parse(salonContextForAI(ctx)) as {
       salon_hoje: { faturamento: number }
-      financeiro_mes: { receita_acumulada: number; label: string }
-      visao_analitica_mes: { ocupacao_media: number; receita_perdida: number }
+      financeiro_mes: { receita_acumulada: number; label: string; ate: string }
+      visao_analitica_mes: {
+        ocupacao_media_pct: number
+        taxa_retorno_pct: number
+        receita_perdida: number
+      }
     }
 
     expect(parsed.salon_hoje.faturamento).toBe(150)
     expect(parsed.financeiro_mes.receita_acumulada).toBe(2873783)
     expect(parsed.financeiro_mes.label).toBe('Jul/2026')
-    expect(parsed.visao_analitica_mes.ocupacao_media).toBe(0.8)
+    expect(parsed.financeiro_mes.ate).toBe('2026-07-27')
+    expect(parsed.visao_analitica_mes.ocupacao_media_pct).toBe(80)
+    expect(parsed.visao_analitica_mes.taxa_retorno_pct).toBe(40)
     expect(parsed.visao_analitica_mes.receita_perdida).toBe(15000)
+  })
+
+  it('emite null nos blocos que falharam (não inventa zero)', () => {
+    const ctx = {
+      hoje: '2026-07-27',
+      salon: {
+        day: '2026-07-27',
+        revenue: 150,
+        appointments: 3,
+        attended: 2,
+        no_shows: 0,
+        cancelled: 0,
+        new_clients: 1,
+        returning_clients: 1,
+        ticket_avg: 75,
+        service_duration_sum_minutes: 0,
+        service_duration_count: 0,
+        updated_at: '2026-07-27T12:00:00Z',
+      },
+      financeiro_mes: null,
+      visao_mes: null,
+      kpis_contato: {
+        byDay: [],
+        byStatus: [],
+        conversion: null,
+        window: contactKpiWindow(30),
+      },
+      playbook_top5: [],
+      agendamentos_proximos: [],
+    } as unknown as SalonContext
+
+    const parsed = JSON.parse(salonContextForAI(ctx)) as {
+      salon_hoje: { faturamento: number } | null
+      financeiro_mes: unknown
+      visao_analitica_mes: unknown
+    }
+    expect(parsed.salon_hoje?.faturamento).toBe(150)
+    expect(parsed.financeiro_mes).toBeNull()
+    expect(parsed.visao_analitica_mes).toBeNull()
   })
 })

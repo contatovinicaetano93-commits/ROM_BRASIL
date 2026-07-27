@@ -54,11 +54,11 @@ describe('formatFinanceTelegramSummary', () => {
     expect(text).toContain('Pix')
   })
 
-  it('avisa quando mês ainda está zerado', () => {
+  it('mostra — quando receita de hoje não veio', () => {
     const text = formatFinanceTelegramSummary({
-      month: bucket({ revenue: 0, payment_mix: [] }),
-      todayRevenue: 0,
+      month: bucket(),
+      todayRevenue: null,
     })
-    expect(text).toContain('ainda não sincronizada')
+    expect(text).toContain('Receita hoje: —')
   })
 })

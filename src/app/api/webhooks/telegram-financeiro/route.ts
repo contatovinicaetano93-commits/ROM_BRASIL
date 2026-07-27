@@ -9,6 +9,8 @@ import { formatFinanceTelegramSummary } from '@/lib/telegram/finance-summary'
 import { computeStockKpis, listAlerts } from '@/lib/stock'
 import { getBrand } from '@/lib/brand'
 
+export const maxDuration = 30
+
 interface TelegramUpdate {
   message?: {
     chat: { id: number }
@@ -30,10 +32,12 @@ function staffOnlyMessage() {
 }
 
 async function financeSummary(): Promise<string> {
-  const [kpis, today] = await Promise.all([computeFinanceKpis(), getSalonMetrics(todayIso())])
+  const kpis = await computeFinanceKpis()
+  // Não derruba o mês se a métrica de hoje falhar.
+  const today = await getSalonMetrics(todayIso()).catch(() => null)
   return formatFinanceTelegramSummary({
     month: kpis.current,
-    todayRevenue: today?.revenue ?? 0,
+    todayRevenue: today?.revenue ?? null,
   })
 }
 

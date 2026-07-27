@@ -13,6 +13,17 @@ import { listActionItems } from '@/lib/salon/recommendations'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { listUpcomingSchedules, pickLastVisit, type LastVisit } from '@/lib/services'
 
+/** Fração 0–1 → pontos percentuais (ex.: 0.8 → 80). */
+export function fractionToPctPoints(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return Math.round(value * 1000) / 10
+}
+
+/** Clipa fim do bucket financeiro (mês calendário) ao dia de referência (MTD). */
+export function clipMonthEndToToday(monthTo: string, today: string): string {
+  return monthTo > today ? today : monthTo
+}
+
 function fmtService(s: EnrichedService) {
   const parts = [s.name]
   if (s.product) parts.push(`(${s.product})`)
@@ -52,10 +63,16 @@ export interface ContactContext {
 export interface SalonContext {
   hoje: string
   salon: Awaited<ReturnType<typeof getSalonMetrics>>
-  /** Acumulado financeiro do mês corrente (mesmo núcleo do /financeiro). */
-  financeiro_mes: FinanceKpis
-  /** Visão analítica do mês (ocupação, perdas, pacotes, retorno). */
-  visao_mes: PeriodAnalytics
+  /**
+   * Acumulado financeiro do mês corrente (mesmo núcleo do /financeiro).
+   * `null` se a carga falhou — não inventar zeros para a IA.
+   */
+  financeiro_mes: FinanceKpis | null
+  /**
+   * Visão analítica do mês (ocupação, perdas, pacotes, retorno).
+   * `null` se a carga falhou.
+   */
+  visao_mes: PeriodAnalytics | null
   kpis_contato: Awaited<ReturnType<typeof fetchContactKpis>>
   playbook_top5: Awaited<ReturnType<typeof listActionItems>>
   agendamentos_proximos: Awaited<ReturnType<typeof listUpcomingSchedules>>
@@ -84,15 +101,44 @@ export function buildContactContext(
 export async function buildSalonContext(): Promise<SalonContext> {
   // Fuso do salão — não usar UTC do toISOString (vira "ontem" à noite no BR).
   const day = todayIso()
-  const [salon, kpis_contato, playbook_top5, agendamentosRaw, financeiro_mes, visao_mes] =
-    await Promise.all([
-      getSalonMetrics(day),
-      fetchContactKpis(30),
-      listActionItems(),
-      listUpcomingSchedules(1, 20),
-      computeFinanceKpis(),
-      computePeriodAnalytics(),
-    ])
+  const settled = await Promise.allSettled([
+    getSalonMetrics(day),
+    fetchContactKpis(30),
+    listActionItems(),
+    listUpcomingSchedules(1, 20),
+    computeFinanceKpis(),
+    computePeriodAnalytics(),
+  ])
+
+  const salon = settled[0].status === 'fulfilled' ? settled[0].value : null
+  const kpis_contato =
+    settled[1].status === 'fulfilled'
+      ? settled[1].value
+      : {
+          byDay: [],
+          byStatus: [],
+          conversion: null,
+          window: { from: day, to: day, days: 30 },
+        }
+  const playbook_top5 = settled[2].status === 'fulfilled' ? settled[2].value : []
+  const agendamentosRaw = settled[3].status === 'fulfilled' ? settled[3].value : []
+  const financeiro_mes =
+    settled[4].status === 'fulfilled' ? settled[4].value : null
+  const visao_mes = settled[5].status === 'fulfilled' ? settled[5].value : null
+
+  // Se nada essencial veio, propaga erro (Telegram mostra mensagem genérica).
+  // getSalonMetrics fulfilled com null ainda conta como “hoje disponível vazio”.
+  if (salon == null && financeiro_mes == null && visao_mes == null) {
+    const reason =
+      settled[0].status === 'rejected'
+        ? settled[0].reason
+        : settled[4].status === 'rejected'
+          ? settled[4].reason
+          : settled[5].status === 'rejected'
+            ? settled[5].reason
+            : new Error('Falha ao carregar contexto do salão')
+    throw reason instanceof Error ? reason : new Error(String(reason))
+  }
 
   return {
     hoje: day,
@@ -134,10 +180,17 @@ export function hashContactContext(contact: ContactRow, services: EnrichedServic
 
 /** Payload compacto para a IA do Telegram — hoje + mês das seções principais. */
 export function salonContextForAI(ctx: SalonContext) {
-  const fin = ctx.financeiro_mes.current
+  const fin = ctx.financeiro_mes?.current ?? null
   const period = ctx.visao_mes
+  // Financeiro usa mês calendário no bucket; clipa "até" ao dia de hoje p/ não
+  // sugerir fechamento futuro. Visão analítica já vem MTD.
+  const financeTo = fin ? clipMonthEndToToday(fin.to, ctx.hoje) : null
   return JSON.stringify({
     data: ctx.hoje,
+    unidades: {
+      // Todos os *_pct abaixo estão em pontos percentuais (0–100), não fração.
+      percentual: 'pontos_0_a_100',
+    },
     salon_hoje: ctx.salon
       ? {
           faturamento: ctx.salon.revenue,
@@ -149,34 +202,38 @@ export function salonContextForAI(ctx: SalonContext) {
           retornos: ctx.salon.returning_clients,
         }
       : null,
-    financeiro_mes: {
-      label: fin.label,
-      de: fin.from,
-      ate: fin.to,
-      receita_acumulada: fin.revenue,
-      despesas: fin.expenses,
-      margem_bruta_pct: fin.gross_margin,
-      fluxo: fin.cash_flow,
-      atendidos: fin.attended,
-      ticket_medio: fin.ticket_avg,
-      formas_pagamento: fin.payment_mix.slice(0, 6).map((p) => ({
-        metodo: p.method,
-        valor: p.amount,
-        share_pct: p.share,
-      })),
-    },
-    visao_analitica_mes: {
-      label: period.label,
-      de: period.from,
-      ate: period.to,
-      ocupacao_media: period.occupancy_avg,
-      cancelados: period.cancelled,
-      no_shows: period.no_shows,
-      receita_perdida: period.lost_revenue,
-      pacotes_faturamento: period.packages_revenue,
-      novos_avec_30d: period.new_clients_period,
-      taxa_retorno: period.return_rate,
-    },
+    financeiro_mes: fin
+      ? {
+          label: fin.label,
+          de: fin.from,
+          ate: financeTo,
+          receita_acumulada: fin.revenue,
+          despesas: fin.expenses,
+          margem_bruta_pct: fin.gross_margin,
+          fluxo: fin.cash_flow,
+          atendidos: fin.attended,
+          ticket_medio: fin.ticket_avg,
+          formas_pagamento: fin.payment_mix.slice(0, 6).map((p) => ({
+            metodo: p.method,
+            valor: p.amount,
+            share_pct: p.share,
+          })),
+        }
+      : null,
+    visao_analitica_mes: period
+      ? {
+          label: period.label,
+          de: period.from,
+          ate: period.to,
+          ocupacao_media_pct: fractionToPctPoints(period.occupancy_avg),
+          cancelados: period.cancelled,
+          no_shows: period.no_shows,
+          receita_perdida: period.lost_revenue,
+          pacotes_faturamento: period.packages_revenue,
+          novos_avec_30d: period.new_clients_period,
+          taxa_retorno_pct: fractionToPctPoints(period.return_rate),
+        }
+      : null,
     contatos: {
       por_status: ctx.kpis_contato.byStatus,
       conversao: ctx.kpis_contato.conversion,
@@ -187,7 +244,8 @@ export function salonContextForAI(ctx: SalonContext) {
       acao: a.recommendations[0]?.title,
       urgencia: a.urgency_score,
     })),
-    agendamentos_hoje: ctx.agendamentos_proximos.map((s) => ({
+    // Próximas 24h a partir de agora (não o calendário "hoje" fechado).
+    agendamentos_proximos: ctx.agendamentos_proximos.map((s) => ({
       cliente: s.contact_name,
       servico: s.name,
       horario: s.scheduled_at,

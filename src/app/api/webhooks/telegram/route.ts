@@ -15,6 +15,9 @@ import { normalizeSearchText } from '@/lib/search'
 import { verifyTelegramWebhook } from '@/lib/webhooks'
 import { getBrand } from '@/lib/brand'
 
+/** Contexto + IA — precisa de margem além do default 10s. */
+export const maxDuration = 60
+
 function welcomeMessage() {
   const brand = getBrand()
   return `Oi! 👋 Sou a secretária virtual do ${brand.displayName}.
@@ -39,10 +42,12 @@ function secretariaPrompt() {
 Responda perguntas práticas sobre a operação do salão usando SOMENTE os dados fornecidos.
 Os dados trazem blocos separados:
 - salon_hoje = métricas do dia
-- financeiro_mes = acumulado do mês (receita, despesas, margem, pagamentos)
+- financeiro_mes = acumulado do mês até "ate" (receita, despesas, margem, pagamentos)
 - visao_analitica_mes = ocupação, perdas, pacotes, retorno
-- contatos / playbook / agendamentos_hoje
+- contatos / playbook / agendamentos_proximos (próximas 24h)
+Todos os campos *_pct estão em pontos percentuais (0–100), não fração.
 Se perguntarem "faturamento do mês" ou "acumulado", use financeiro_mes.receita_acumulada — não o de hoje.
+Se financeiro_mes, visao_analitica_mes ou salon_hoje for null, diga que aquele bloco está indisponível — nunca invente números.
 Seja direta, em português, no máximo 5 linhas. Se a pergunta não tiver relação
 com os dados fornecidos, diga que só responde sobre a operação do salão por enquanto.
 Dica: use "/cliente nome ou telefone" pra receber o briefing de um cliente.`

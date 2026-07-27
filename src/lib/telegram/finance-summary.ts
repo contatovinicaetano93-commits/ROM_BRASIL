@@ -9,7 +9,7 @@ export function formatFinanceTelegramSummary(opts: {
   const { month, todayRevenue } = opts
   const lines = [
     `💰 *Financeiro — ${month.label}*`,
-    `Receita hoje: ${formatCurrency(todayRevenue ?? 0)}`,
+    `Receita hoje: ${todayRevenue == null ? '—' : formatCurrency(todayRevenue)}`,
     `Receita mês (acumulado): ${formatCurrency(month.revenue)}`,
     `Despesas: ${formatCurrency(month.expenses)}`,
     `Margem bruta: ${month.gross_margin != null ? `${month.gross_margin}%` : '—'}`,
