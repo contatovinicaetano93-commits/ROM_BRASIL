@@ -308,7 +308,8 @@ export default function DashboardPage() {
             />
             <MiniStat
               icon={<Layers size={15} />}
-              label="Canais ativos · funil 30d"
+              label={`Canais ativos · funil · ${month}`}
+
               value={loading ? '—' : String(activeChannels)}
             />
           </div>

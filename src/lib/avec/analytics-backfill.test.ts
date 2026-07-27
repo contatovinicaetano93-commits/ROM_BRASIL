@@ -21,4 +21,21 @@ describe('monthsNeedingAnalyticsBackfill', () => {
       }),
     ).toEqual(['2026-01', '2026-02', '2026-03'])
   })
+
+  it('em janeiro lista o ano anterior até dezembro', () => {
+    expect(monthsNeedingAnalyticsBackfill({ referenceDay: '2026-01-15' })).toEqual([
+      '2025-01',
+      '2025-02',
+      '2025-03',
+      '2025-04',
+      '2025-05',
+      '2025-06',
+      '2025-07',
+      '2025-08',
+      '2025-09',
+      '2025-10',
+      '2025-11',
+      '2025-12',
+    ])
+  })
 })

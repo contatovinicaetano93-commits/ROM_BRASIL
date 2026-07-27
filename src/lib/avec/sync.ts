@@ -466,6 +466,7 @@ export async function syncCancellationsRange(
   to: string,
   stats: AvecSyncStats,
   syncRunId?: string,
+  opts?: { zeroEmptyDays?: boolean },
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
@@ -504,9 +505,10 @@ export async function syncCancellationsRange(
       }
 
       // Só grava no_shows se o 0052 trouxe Falta — senão o 0248 é a fonte.
-      if (cancelled > 0 || no_shows > 0) {
+      // zeroEmptyDays: grava cancelled=0 nos dias sem evento (backfill limpa stale).
+      if (cancelled > 0 || no_shows > 0 || opts?.zeroEmptyDays) {
         await upsertSalonMetrics(day, {
-          cancelled: cancelled > 0 ? cancelled : undefined,
+          cancelled: cancelled > 0 || opts?.zeroEmptyDays ? cancelled : undefined,
           no_shows: no_shows > 0 ? no_shows : undefined,
         })
       }
@@ -539,7 +541,7 @@ export async function syncNoShows0248Range(
   to: string,
   stats: AvecSyncStats,
   syncRunId?: string,
-  opts?: { zeroTodayIfEmpty?: boolean },
+  opts?: { zeroTodayIfEmpty?: boolean; zeroEmptyDays?: boolean },
 ) {
   const params = {
     inicio: isoToBr(from),
@@ -567,10 +569,19 @@ export async function syncNoShows0248Range(
       await upsertSalonMetrics(day, { no_shows })
     }
 
-    // Dias sem falta no intervalo: zera só o dia de hoje (evita manter stale do fast).
-    const today = todayIso()
-    if (opts?.zeroTodayIfEmpty && !byDay.has(today) && today >= from && today <= to) {
-      await upsertSalonMetrics(today, { no_shows: 0 })
+    if (opts?.zeroEmptyDays) {
+      // Backfill: zera no_shows em todo dia do intervalo sem falta (limpa stale).
+      for (const day of listDaysInclusive(from, to)) {
+        if (!byDay.has(day)) {
+          await upsertSalonMetrics(day, { no_shows: 0 })
+        }
+      }
+    } else {
+      // Sync diário: zera só o dia de hoje (evita manter stale do fast).
+      const today = todayIso()
+      if (opts?.zeroTodayIfEmpty && !byDay.has(today) && today >= from && today <= to) {
+        await upsertSalonMetrics(today, { no_shows: 0 })
+      }
     }
   } catch (e) {
     stats.errors.push(`no-show 0248: ${e instanceof Error ? e.message : String(e)}`)

@@ -66,7 +66,6 @@ export function monthsNeedingAnalyticsBackfill(opts?: {
   referenceDay?: string
 }): string[] {
   const ref = opts?.referenceDay ?? todayIso()
-  const year = opts?.year ?? Number(ref.slice(0, 4))
   const through =
     opts?.throughMonth && parseMonthKey(opts.throughMonth)
       ? opts.throughMonth
@@ -75,12 +74,14 @@ export function monthsNeedingAnalyticsBackfill(opts?: {
           const prev = m === 1 ? { y: y! - 1, m: 12 } : { y: y!, m: m! - 1 }
           return `${prev.y}-${String(prev.m).padStart(2, '0')}`
         })()
+  // Ano do `through` (não do referência): em janeiro, through é Dez do ano anterior.
+  const year = opts?.year ?? Number(through.slice(0, 4))
 
   const out: string[] = []
   for (let m = 1; m <= 12; m++) {
     const key = `${year}-${String(m).padStart(2, '0')}`
     if (key > through) break
-    if (key.startsWith(String(year))) out.push(key)
+    out.push(key)
   }
   return out
 }
@@ -103,8 +104,8 @@ export async function runAnalyticsMonthBackfill(month: string): Promise<Analytic
   await syncP1Kpis(stats, undefined, opts)
   await syncP2Kpis(stats, undefined, opts)
   await syncP3Kpis(stats, undefined, opts)
-  await syncCancellationsRange(from, to, stats)
-  await syncNoShows0248Range(from, to, stats)
+  await syncCancellationsRange(from, to, stats, undefined, { zeroEmptyDays: true })
+  await syncNoShows0248Range(from, to, stats, undefined, { zeroEmptyDays: true })
 
   return {
     month: monthKey,
