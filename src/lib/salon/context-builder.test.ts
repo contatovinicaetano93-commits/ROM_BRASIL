@@ -117,19 +117,25 @@ describe('salonContextForAI', () => {
       salon_hoje: { faturamento: number }
       financeiro_mes: { receita_acumulada: number; label: string; ate: string }
       visao_analitica_mes: {
-        ocupacao_media_pct: number
-        taxa_retorno_pct: number
-        receita_perdida: number
+        mtd: { receita_perdida: number }
+        avec_snapshot_30d: {
+          ocupacao_media_pct: number
+          taxa_retorno_pct: number
+          novos_clientes: number
+        }
       }
+      contatos: { conversao: { conversion_rate_pct: number } | null }
     }
 
     expect(parsed.salon_hoje.faturamento).toBe(150)
     expect(parsed.financeiro_mes.receita_acumulada).toBe(2873783)
     expect(parsed.financeiro_mes.label).toBe('Jul/2026')
     expect(parsed.financeiro_mes.ate).toBe('2026-07-27')
-    expect(parsed.visao_analitica_mes.ocupacao_media_pct).toBe(80)
-    expect(parsed.visao_analitica_mes.taxa_retorno_pct).toBe(40)
-    expect(parsed.visao_analitica_mes.receita_perdida).toBe(15000)
+    expect(parsed.visao_analitica_mes.mtd.receita_perdida).toBe(15000)
+    expect(parsed.visao_analitica_mes.avec_snapshot_30d.ocupacao_media_pct).toBe(80)
+    expect(parsed.visao_analitica_mes.avec_snapshot_30d.taxa_retorno_pct).toBe(40)
+    expect(parsed.visao_analitica_mes.avec_snapshot_30d.novos_clientes).toBe(20)
+    expect(parsed.contatos.conversao?.conversion_rate_pct).toBe(50)
   })
 
   it('emite null nos blocos que falharam (não inventa zero)', () => {

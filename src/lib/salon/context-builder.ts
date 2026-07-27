@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import type { ContactRow } from '@/lib/contacts'
 import { computeFinanceKpis, type FinanceKpis } from '@/lib/finance'
 import type { EnrichedService, Recommendation } from '@/lib/recommendations'
+import { contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
 import { todayIso } from '@/lib/salon/format'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
@@ -118,7 +119,7 @@ export async function buildSalonContext(): Promise<SalonContext> {
           byDay: [],
           byStatus: [],
           conversion: null,
-          window: { from: day, to: day, days: 30 },
+          window: contactKpiWindow(30, day),
         }
   const playbook_top5 = settled[2].status === 'fulfilled' ? settled[2].value : []
   const agendamentosRaw = settled[3].status === 'fulfilled' ? settled[3].value : []
@@ -220,23 +221,39 @@ export function salonContextForAI(ctx: SalonContext) {
           })),
         }
       : null,
+    // Mesma separação do dashboard: MTD local vs snapshot Avec ~30d.
     visao_analitica_mes: period
       ? {
           label: period.label,
-          de: period.from,
-          ate: period.to,
-          ocupacao_media_pct: fractionToPctPoints(period.occupancy_avg),
-          cancelados: period.cancelled,
-          no_shows: period.no_shows,
-          receita_perdida: period.lost_revenue,
-          pacotes_faturamento: period.packages_revenue,
-          novos_avec_30d: period.new_clients_period,
-          taxa_retorno_pct: fractionToPctPoints(period.return_rate),
+          mtd: {
+            de: period.from,
+            ate: period.to,
+            cancelados: period.cancelled,
+            no_shows: period.no_shows,
+            receita_perdida: period.lost_revenue,
+          },
+          avec_snapshot_30d: {
+            dia_snapshot: period.snapshot_day,
+            ocupacao_media_pct: fractionToPctPoints(period.occupancy_avg),
+            pacotes_faturamento: period.packages_revenue,
+            novos_clientes: period.new_clients_period,
+            taxa_retorno_pct: fractionToPctPoints(period.return_rate),
+          },
         }
       : null,
     contatos: {
       por_status: ctx.kpis_contato.byStatus,
-      conversao: ctx.kpis_contato.conversion,
+      conversao: ctx.kpis_contato.conversion
+        ? {
+            total_contacts: ctx.kpis_contato.conversion.total_contacts,
+            funnel_contacts: ctx.kpis_contato.conversion.funnel_contacts,
+            imported_contacts: ctx.kpis_contato.conversion.imported_contacts,
+            // Pontos 0–100 (não fração).
+            conversion_rate_pct: fractionToPctPoints(
+              ctx.kpis_contato.conversion.conversion_rate,
+            ),
+          }
+        : null,
       janela_dias: ctx.kpis_contato.window?.days ?? 30,
     },
     playbook: ctx.playbook_top5.map((a) => ({
