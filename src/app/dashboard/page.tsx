@@ -102,7 +102,7 @@ export default function DashboardPage() {
 
         const [tmRes, perfRes, periodRes] = await Promise.all([
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
-          apiFetch('/api/kpis/performance', { cache: 'no-store' }),
+          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store' }),
           apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
         ])
         if (cancelled) return
@@ -530,7 +530,7 @@ export default function DashboardPage() {
       </div>
 
       <SectionCard
-        title="Ranking de profissionais (snapshot · 30 dias)"
+        title={`Ranking de profissionais (snapshot · ${month})`}
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (
