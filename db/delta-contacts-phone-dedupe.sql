@@ -1,14 +1,15 @@
--- Deduplica contacts por telefone (dígitos) e libera órfãos avec sem phone
+-- Deduplica contacts por telefone (dígitos canônicos BR) e libera órfãos avec sem phone
 -- quando já existe contato com o mesmo avec_client_id (não deve existir) ou
 -- quando o índice único já impede duplicata exata.
 --
--- Estratégia: por grupo de dígitos, mantém o contato mais completo/recente;
--- reaponta FKs; zera chaves do doador; delete.
+-- Estratégia: por grupo de dígitos canônicos (mesma regra de normalizePhone),
+-- mantém o contato mais completo/recente; reaponta FKs; zera chaves do doador; delete.
+-- Depois normaliza phones para E.164 (+55 para nacionais 10–11 dígitos).
 
 -- 1) Duplicatas exatas de phone (defensivo — índice único deveria impedir)
 --    (no-op se não houver)
 
--- 2) Duplicatas por dígitos (formatos mistos legados)
+-- 2) Duplicatas por dígitos canônicos (formatos mistos legados: 11… vs 5511…)
 do $$
 declare
   r record;
@@ -19,7 +20,11 @@ declare
 begin
   for r in
     select
-      regexp_replace(phone, '\D', '', 'g') as digits,
+      case
+        when length(regexp_replace(phone, '\D', '', 'g')) in (10, 11)
+          then '55' || regexp_replace(phone, '\D', '', 'g')
+        else regexp_replace(phone, '\D', '', 'g')
+      end as digits,
       (array_agg(
         id
         order by
@@ -73,15 +78,35 @@ begin
       delete from contacts where id = donor;
     end loop;
 
-    -- Normaliza phone do survivor para E.164 (+dígitos) se ainda não estiver
+    -- Normaliza phone do survivor para E.164 app (+55 em nacionais 10–11 dígitos)
     update contacts
-    set phone = '+' || regexp_replace(phone, '\D', '', 'g')
+    set phone = '+' || case
+      when length(regexp_replace(phone, '\D', '', 'g')) in (10, 11)
+        then '55' || regexp_replace(phone, '\D', '', 'g')
+      else regexp_replace(phone, '\D', '', 'g')
+    end
     where id = survivor
-      and phone is not null
-      and phone !~ '^\+[0-9]+$';
+      and phone is not null;
   end loop;
 end $$;
 
--- 3) Garante índices únicos (idempotente)
+-- 3) Normaliza phones restantes (sem duplicata) para o mesmo E.164 do app
+update contacts
+set phone = '+' || case
+  when length(regexp_replace(phone, '\D', '', 'g')) in (10, 11)
+    then '55' || regexp_replace(phone, '\D', '', 'g')
+  else regexp_replace(phone, '\D', '', 'g')
+end
+where phone is not null
+  and length(regexp_replace(phone, '\D', '', 'g')) >= 10
+  and phone is distinct from (
+    '+' || case
+      when length(regexp_replace(phone, '\D', '', 'g')) in (10, 11)
+        then '55' || regexp_replace(phone, '\D', '', 'g')
+      else regexp_replace(phone, '\D', '', 'g')
+    end
+  );
+
+-- 4) Garante índices únicos (idempotente)
 create unique index if not exists contacts_phone_idx on contacts (phone);
 create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id);

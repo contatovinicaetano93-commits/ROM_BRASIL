@@ -127,6 +127,46 @@ async function absorbContact(sql: Sql, survivorId: string, donorId: string): Pro
     set contact_id = ${survivorId}::uuid
     where contact_id = ${donorId}::uuid
   `
+
+  // Preserva funil/dados do doador antes do delete (ex.: convertido não some no merge).
+  // avec_client_id fica pro claimAvecOnto/updateContactRow após liberar o unique do doador.
+  const pair = (await sql`
+    select id, status, name, email, notes, preferred_manicurist, preferred_hairstylist,
+           last_contact_at
+    from contacts
+    where id = ${survivorId}::uuid or id = ${donorId}::uuid
+  `) as Pick<
+    ContactRow,
+    | 'id'
+    | 'status'
+    | 'name'
+    | 'email'
+    | 'notes'
+    | 'preferred_manicurist'
+    | 'preferred_hairstylist'
+    | 'last_contact_at'
+  >[]
+  const survivor = pair.find((r) => r.id === survivorId)
+  const donor = pair.find((r) => r.id === donorId)
+  if (survivor && donor) {
+    const status = mergeContactStatus(
+      survivor.status as ContactStatus,
+      donor.status as ContactStatus,
+    )
+    await sql`
+      update contacts
+      set
+        status = ${status},
+        name = coalesce(name, ${donor.name}),
+        email = coalesce(email, ${donor.email}),
+        notes = coalesce(notes, ${donor.notes}),
+        preferred_manicurist = coalesce(preferred_manicurist, ${donor.preferred_manicurist}),
+        preferred_hairstylist = coalesce(preferred_hairstylist, ${donor.preferred_hairstylist}),
+        last_contact_at = greatest(last_contact_at, ${donor.last_contact_at}::timestamptz)
+      where id = ${survivorId}::uuid
+    `
+  }
+
   // Libera unique indexes antes do delete (CASCADE cobre o resto).
   await sql`
     update contacts

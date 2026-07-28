@@ -223,7 +223,9 @@ function createBatchContactUpserter() {
     if (!key) return upsertContact(input)
 
     const prev = chains.get(key)
-    const next = (prev ?? Promise.resolve()).then(() => upsertContact(input))
+    // then(fn, fn): após rejeição a cadeia continua (mesmo padrão de withUpsertKey).
+    const run = () => upsertContact(input)
+    const next = (prev ?? Promise.resolve()).then(run, run)
     chains.set(key, next)
     return next
   }
