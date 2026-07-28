@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, fmtAvecDate } from '@/lib/avec/client'
+import { fetchAllAvecReport, fmtAvecDate, getAvecSyncMaxPages } from '@/lib/avec/client'
 import {
   normalize0011ReactivationRow,
   normalizeP1ProfessionalRevenueRow,
@@ -98,12 +98,39 @@ function emptyMonthRow(month: MonthKey): MonthRevenueRow {
   }
 }
 
+/** Budget interativo: caber no abort 90s do browser + deixar margem de rede. */
+export const DIRECTOR_UI_BUDGET_MS = 70_000
+/** 20 × 250 = 5k linhas/trimestre — suficiente p/ taxa + lista; CSV completo usa budget completo. */
+export const DIRECTOR_UI_MAX_PAGES = 20
+
+export type DirectorFetchBudget = {
+  deadlineAt: number | null
+  maxPages: number
+}
+
+export function directorUiBudget(now = Date.now()): DirectorFetchBudget {
+  return {
+    deadlineAt: now + DIRECTOR_UI_BUDGET_MS,
+    maxPages: DIRECTOR_UI_MAX_PAGES,
+  }
+}
+
+export function directorFullBudget(): DirectorFetchBudget {
+  return { deadlineAt: null, maxPages: getAvecSyncMaxPages() }
+}
+
 async function fetch0021Month(
   month: MonthKey,
+  budget: DirectorFetchBudget = directorFullBudget(),
 ): Promise<Map<string, { revenue: number; attended: number; ticketAvg: number }>> {
   const id = resolveMapperId('professionals_revenue') ?? '0021'
   const { inicio, fim } = monthRangeBr(month)
-  const { rows } = await fetchAllAvecReport(id, { inicio, fim, limit: 250 })
+  const { rows } = await fetchAllAvecReport(
+    id,
+    { inicio, fim, limit: 250 },
+    budget.maxPages,
+    { deadlineAt: budget.deadlineAt },
+  )
   const byName = new Map<string, { revenue: number; attended: number; ticketAvg: number }>()
 
   for (const row of rows) {
@@ -178,13 +205,23 @@ type QuarterAgg = {
   clientsReturnedHint: number
 }
 
-async function fetch0011Quarter(quarter: QuarterKey): Promise<{
+async function fetch0011Quarter(
+  quarter: QuarterKey,
+  budget: DirectorFetchBudget,
+): Promise<{
   byPro: Map<string, QuarterAgg>
   salonRates: number[]
+  truncated: boolean
 }> {
   const id = resolveMapperId('director_return') ?? '0011'
   const { inicio, fim } = quarterRangeBr(quarter)
-  const { rows } = await fetchAllAvecReport(id, { inicio, fim, limit: 250 })
+  const result = await fetchAllAvecReport(
+    id,
+    { inicio, fim, limit: 250 },
+    budget.maxPages,
+    { deadlineAt: budget.deadlineAt },
+  )
+  const rows = result.rows
 
   const byPro = new Map<string, QuarterAgg>()
   const salonRates: number[] = []
@@ -231,12 +268,19 @@ async function fetch0011Quarter(quarter: QuarterKey): Promise<{
     byPro.set(proName, agg)
   }
 
-  // Fallback: 0007 no mesmo período (taxa salão) se 0011 não trouxe taxa
-  if (salonRates.length === 0) {
+  // Fallback 0007 só se ainda houver tempo no budget (UI não pode gastar +30–90s aqui).
+  const timeLeft =
+    budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
+  if (salonRates.length === 0 && timeLeft > 12_000) {
     const id0007 = resolveMapperId('return_rate')
     if (id0007) {
       try {
-        const { rows: r7 } = await fetchAllAvecReport(id0007, { inicio, fim, limit: 250 })
+        const { rows: r7 } = await fetchAllAvecReport(
+          id0007,
+          { inicio, fim, limit: 250 },
+          Math.min(4, budget.maxPages),
+          { deadlineAt: budget.deadlineAt },
+        )
         for (const row of r7) {
           const rate = normalizeP3ReturnRateRow(row)
           if (rate != null) salonRates.push(rate)
@@ -247,7 +291,7 @@ async function fetch0011Quarter(quarter: QuarterKey): Promise<{
     }
   }
 
-  return { byPro, salonRates }
+  return { byPro, salonRates, truncated: result.truncated }
 }
 
 function avg(nums: number[]): number | null {
@@ -306,10 +350,16 @@ export async function fetchLiveDirectorBlocks(
   compareQuarter0021: QuarterKey | null,
   selectedQuarter: QuarterKey,
   compareQuarter: QuarterKey,
-  opts?: { includeReturn?: boolean; includeRevenue?: boolean },
+  opts?: {
+    includeReturn?: boolean
+    includeRevenue?: boolean
+    /** Budget Avec — UI passa directorUiBudget(); cron/CSV usam full. */
+    budget?: DirectorFetchBudget
+  },
 ): Promise<LiveDirectorBlocks> {
   const includeReturn = opts?.includeReturn !== false
   const includeRevenue = opts?.includeRevenue !== false
+  const budget = opts?.budget ?? directorFullBudget()
   const warnings: string[] = []
   const monthsNeeded = new Set<MonthKey>()
   if (includeRevenue) {
@@ -339,27 +389,53 @@ export async function fetchLiveDirectorBlocks(
     Map<string, { revenue: number; attended: number; ticketAvg: number }>
   >()
 
-  for (const m of monthsNeeded) {
-    try {
-      monthMaps.set(m, await fetch0021Month(m))
-    } catch (e) {
-      warnings.push(`0021 ${m}: ${e instanceof Error ? e.message : String(e)}`)
-      monthMaps.set(m, new Map())
-    }
+  // Meses em paralelo (antes era 1 a 1 — 0021 no UI estourava o abort).
+  if (monthsNeeded.size > 0) {
+    const monthList = [...monthsNeeded]
+    const settled = await Promise.allSettled(
+      monthList.map((m) => fetch0021Month(m, budget)),
+    )
+    settled.forEach((r, i) => {
+      const m = monthList[i]!
+      if (r.status === 'fulfilled') monthMaps.set(m, r.value)
+      else {
+        warnings.push(`0021 ${m}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+        monthMaps.set(m, new Map())
+      }
+    })
   }
 
-  let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>> = { byPro: new Map(), salonRates: [] }
-  let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = { byPro: new Map(), salonRates: [] }
+  let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
+    byPro: new Map(),
+    salonRates: [],
+    truncated: false,
+  }
+  let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
+    byPro: new Map(),
+    salonRates: [],
+    truncated: false,
+  }
   if (includeReturn) {
-    try {
-      selectedQ = await fetch0011Quarter(selectedQuarter)
-    } catch (e) {
-      warnings.push(`0011 ${selectedQuarter}: ${e instanceof Error ? e.message : String(e)}`)
+    // Dois trimestres em paralelo — antes era sequencial (×2 wall time → >90s).
+    const [selRes, cmpRes] = await Promise.allSettled([
+      fetch0011Quarter(selectedQuarter, budget),
+      fetch0011Quarter(compareQuarter, budget),
+    ])
+    if (selRes.status === 'fulfilled') {
+      selectedQ = selRes.value
+      if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
+    } else {
+      warnings.push(
+        `0011 ${selectedQuarter}: ${selRes.reason instanceof Error ? selRes.reason.message : String(selRes.reason)}`,
+      )
     }
-    try {
-      compareQ = await fetch0011Quarter(compareQuarter)
-    } catch (e) {
-      warnings.push(`0011 ${compareQuarter}: ${e instanceof Error ? e.message : String(e)}`)
+    if (cmpRes.status === 'fulfilled') {
+      compareQ = cmpRes.value
+      if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
+    } else {
+      warnings.push(
+        `0011 ${compareQuarter}: ${cmpRes.reason instanceof Error ? cmpRes.reason.message : String(cmpRes.reason)}`,
+      )
     }
   }
 
@@ -471,6 +547,9 @@ export async function fetchLiveDirectorBlocks(
     }
   }
 
+  // UI mostra no máx. 3 listas; 1 pro filtrado = lista completa (até cap).
+  const reactivationCap = professionals.length === 1 ? 200 : 40
+
   let return_blocks: ProfessionalReturnBlock[] | null = null
   if (includeReturn) {
     try {
@@ -494,6 +573,7 @@ export async function fetchLiveDirectorBlocks(
         const reactivation = (selAgg?.clients ?? [])
           .slice()
           .sort((a, b) => b.days_since - a.days_since)
+          .slice(0, reactivationCap)
 
         return {
           professional,

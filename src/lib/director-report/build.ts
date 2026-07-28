@@ -1,5 +1,9 @@
 import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
-import { fetchLiveDirectorBlocks } from './avec-live'
+import {
+  directorFullBudget,
+  directorUiBudget,
+  fetchLiveDirectorBlocks,
+} from './avec-live'
 import {
   buildMockReturnBlocks,
   buildMockRevenueBlocks,
@@ -33,6 +37,10 @@ export interface BuildDirectorReportOptions {
   forceMock?: boolean
   /** Se definido, só monta a etapa pedida (0011 ou 0021) — acelera a UI. */
   stage?: '0011' | '0021' | 'all'
+  /**
+   * true = budget Avec curto (UI JSON). false/omit = full (cron, CSV, e-mail).
+   */
+  interactive?: boolean
 }
 
 function comparisonMonthSet(
@@ -88,7 +96,11 @@ export async function buildDirectorReport(
         compareQuarter0021,
         selectedQuarter,
         compareQuarter,
-        { includeReturn: need0011, includeRevenue: need0021 },
+        {
+          includeReturn: need0011,
+          includeRevenue: need0021,
+          budget: opts.interactive ? directorUiBudget() : directorFullBudget(),
+        },
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
       // jogar fora o dado real da outra que funcionou.
