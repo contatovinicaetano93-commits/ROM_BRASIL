@@ -51,6 +51,23 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   `) as ContactRow[]
 }
 
+/** Carrega serviços só dos contatos pedidos — evita scan full de client_services. */
+async function loadServicesByContactIds(ids: string[]): Promise<Map<string, ClientService[]>> {
+  const byContact = new Map<string, ClientService[]>()
+  if (ids.length === 0) return byContact
+  const sql = getSql()
+  const services = (await sql`
+    select * from client_services
+    where active = true and contact_id in ${sql(ids)}
+  `) as ClientService[]
+  for (const s of services) {
+    const list = byContact.get(s.contact_id) ?? []
+    list.push(s)
+    byContact.set(s.contact_id, list)
+  }
+  return byContact
+}
+
 function parseStatus(raw: string | null | undefined): ContactStatus | null {
   if (!raw || raw === 'all') return null
   return (CONTACT_STATUSES as readonly string[]).includes(raw) ? (raw as ContactStatus) : null
@@ -75,6 +92,59 @@ async function orderContactsByUrgency(
 }
 
 /**
+ * Contatos com sinal de urgência (atraso / vencendo / agendado em 7d),
+ * ranqueados no SQL — sem carregar a tabela inteira de serviços.
+ */
+async function rankUrgentContactIds(limit: number): Promise<string[]> {
+  const sql = getSql()
+  const rows = (await sql`
+    with svc as (
+      select
+        contact_id,
+        scheduled_at,
+        case
+          when cadence_days is null then null
+          else coalesce(last_done_at, created_at) + (cadence_days * interval '1 day')
+        end as next_due
+      from client_services
+      where active = true
+    ),
+    per_contact as (
+      select
+        contact_id,
+        count(*) filter (where next_due is not null and next_due < now())::int as overdue,
+        coalesce(
+          max(
+            case
+              when next_due is not null and next_due < now()
+                then ceil(extract(epoch from (now() - next_due)) / 86400.0)
+            end
+          ),
+          0
+        )::int as max_overdue_days,
+        count(*) filter (
+          where next_due is not null
+            and next_due >= now()
+            and next_due <= now() + interval '7 days'
+        )::int as due_soon,
+        count(*) filter (
+          where scheduled_at is not null
+            and scheduled_at >= now()
+            and scheduled_at <= now() + interval '7 days'
+        )::int as scheduled_soon
+      from svc
+      group by contact_id
+    )
+    select contact_id
+    from per_contact
+    where overdue + due_soon + scheduled_soon > 0
+    order by max_overdue_days desc, overdue desc, due_soon desc, scheduled_soon desc
+    limit ${limit}
+  `) as { contact_id: string }[]
+  return rows.map((r) => r.contact_id)
+}
+
+/**
  * Lista contatos com resumo de urgência.
  * Sem busca: prioriza quem tem atraso/ação pendente (não corta overdue
  * só porque o contato é antigo e caiu fora do top-N por created_at).
@@ -82,11 +152,11 @@ async function orderContactsByUrgency(
  * Com status: lista o funil real (ex.: Novo lead / Importado), não só o top urgente.
  */
 export async function listContactsWithSummary(
-  limitOrOpts: number | ListContactsWithSummaryOpts = 2000,
+  limitOrOpts: number | ListContactsWithSummaryOpts = 100,
 ): Promise<ContactListItem[]> {
   const opts: ListContactsWithSummaryOpts =
     typeof limitOrOpts === 'number' ? { limit: limitOrOpts } : limitOrOpts
-  const limit = Math.min(Math.max(1, opts.limit ?? 2000), 2000)
+  const limit = Math.min(Math.max(1, opts.limit ?? 100), 2000)
   const rawQuery = (opts.query ?? '').trim()
   const q = rawQuery.toLowerCase()
   const qDigits = rawQuery.replace(/\D/g, '')
@@ -94,17 +164,6 @@ export async function listContactsWithSummary(
   const status = parseStatus(opts.status)
 
   const sql = getSql()
-
-  const services = (await sql`
-    select * from client_services where active = true
-  `) as ClientService[]
-
-  const byContact = new Map<string, ClientService[]>()
-  for (const s of services) {
-    const list = byContact.get(s.contact_id) ?? []
-    list.push(s)
-    byContact.set(s.contact_id, list)
-  }
 
   // Status do funil (Novo lead / Importado / …): busca na base inteira, não no top urgente.
   if (status && !(q || qDigits.length >= 3)) {
@@ -114,6 +173,7 @@ export async function listContactsWithSummary(
       order by created_at desc
       limit ${Math.min(limit * (pendingOnly ? 4 : 1), 2000)}
     `) as ContactRow[]
+    const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
     let items = withUrgency(contacts, byContact)
     if (pendingOnly) items = items.filter((c) => c.pending_actions > 0)
     items.sort(compareByOverdueThenName)
@@ -121,25 +181,9 @@ export async function listContactsWithSummary(
   }
 
   if (pendingOnly && !(q || qDigits.length >= 3)) {
-    // Filtra pendentes sobre TODA a base de serviços (não só top-N recentes).
-    const pendingRanked = Array.from(byContact.keys())
-      .map((id) => {
-        const u = urgencyForServices(byContact.get(id) ?? [])
-        return { id, u }
-      })
-      .filter((x) => x.u.pending_actions > 0)
-      .sort((a, b) =>
-        compareByOverdueThenName(
-          { max_overdue_days: a.u.max_overdue_days, name: null },
-          { max_overdue_days: b.u.max_overdue_days, name: null },
-        ),
-      )
-      .slice(0, limit)
-
-    const ordered = await orderContactsByUrgency(
-      pendingRanked.map((x) => x.id),
-      byContact,
-    )
+    const pendingIds = await rankUrgentContactIds(limit)
+    const byContact = await loadServicesByContactIds(pendingIds)
+    const ordered = await orderContactsByUrgency(pendingIds, byContact)
     return withUrgency(ordered, byContact)
   }
 
@@ -160,26 +204,14 @@ export async function listContactsWithSummary(
       order by created_at desc
       limit ${limit}
     `) as ContactRow[]
+    const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
     const withU = withUrgency(contacts, byContact)
     return pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
   }
 
-  // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.
-  const urgentRanked = Array.from(byContact.keys())
-    .map((id) => {
-      const u = urgencyForServices(byContact.get(id) ?? [])
-      return { id, u }
-    })
-    .filter((x) => x.u.urgency_score > 0)
-    .sort((a, b) =>
-      compareByOverdueThenName(
-        { max_overdue_days: a.u.max_overdue_days, name: null },
-        { max_overdue_days: b.u.max_overdue_days, name: null },
-      ),
-    )
-    .slice(0, limit)
-
-  const urgentIds = urgentRanked.map((x) => x.id)
+  // Contatos com urgência > 0 — ranking no SQL, serviços só dos IDs retornados.
+  const urgentIds = await rankUrgentContactIds(limit)
+  const byContact = await loadServicesByContactIds(urgentIds)
   const orderedUrgent = await orderContactsByUrgency(urgentIds, byContact)
 
   if (orderedUrgent.length >= limit) {
@@ -198,6 +230,9 @@ export async function listContactsWithSummary(
           order by created_at desc
           limit ${remaining}
         `) as ContactRow[])
+
+  const recentByContact = await loadServicesByContactIds(recent.map((c) => c.id))
+  for (const [id, list] of recentByContact) byContact.set(id, list)
 
   return withUrgency([...orderedUrgent, ...recent], byContact)
 }

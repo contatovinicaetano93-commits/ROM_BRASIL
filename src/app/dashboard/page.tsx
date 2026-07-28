@@ -107,67 +107,37 @@ export default function DashboardPage() {
         setTm(null)
         setPerformance(null)
         setPeriod(null)
-        const kpisRes = await apiFetch(`/api/kpis?month=${month}`, { cache: 'no-store' })
-        const kpisJson = await kpisRes.json()
+        // Um lambda: evita waterfall de 4 rotas × pooler max:1.
+        const dashRes = await apiFetch(`/api/kpis/dashboard?month=${month}`, {
+          cache: 'no-store',
+        })
+        const dashJson = await dashRes.json()
         if (cancelled) return
-        if (kpisJson.error) setError(kpisJson.error)
-        else {
-          setData(kpisJson.data)
-          setError(null)
+        if (dashJson.error) {
+          setError(dashJson.error)
+          setWarn(null)
+          return
         }
 
-        // Sequencial (não Promise.all): cada rota abre conexão no pooler —
-        // 4 lambdas em paralelo estouravam EMAXCONNSESSION (Visão em branco).
+        const bundle = dashJson.data ?? {}
+        setData(bundle.kpis ?? null)
+        setTm(bundle.tm ?? null)
+        setPerformance(bundle.performance ?? null)
+        setPeriod(bundle.period ?? null)
+        setError(null)
+
         const warnings: string[] = []
-
-        try {
-          const tmRes = await apiFetch(`/api/kpis/tempo-medio?month=${month}`, {
-            cache: 'no-store',
-          })
-          if (cancelled) return
-          const tmJson = await tmRes.json()
-          if (tmJson.data) setTm(tmJson.data)
-          else if (tmJson.error) warnings.push(`TM: ${tmJson.error}`)
-        } catch {
-          // opcional
-        }
-
-        try {
-          const perfRes = await apiFetch(`/api/kpis/performance?month=${month}`, {
-            cache: 'no-store',
-          })
-          if (cancelled) return
-          const perfJson = await perfRes.json()
-          if (perfJson.data) setPerformance(perfJson.data)
-          else if (perfJson.error) warnings.push(`Ranking: ${perfJson.error}`)
-        } catch {
-          // opcional
-        }
-
-        try {
-          const periodRes = await apiFetch(`/api/kpis/periodo?month=${month}`, {
-            cache: 'no-store',
-          })
-          if (cancelled) return
-          const periodJson = await periodRes.json()
-          if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
-          else if (periodJson.data) {
-            setPeriod(periodJson.data)
-            const sync = periodJson.data.sync
-            if (sync?.stale) {
-              warnings.push(
-                sync.never_synced
-                  ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
-                  : sync.fast_stale
-                    ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
-                    : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
-              )
-            } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
-            else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
-          }
-        } catch {
-          warnings.push('Analytics de período indisponível')
-        }
+        const sync = bundle.period?.sync
+        if (sync?.stale) {
+          warnings.push(
+            sync.never_synced
+              ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
+              : sync.fast_stale
+                ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
+                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
+          )
+        } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
+        else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
 
         if (warnings.length) setWarn(warnings.join(' · '))
         else setWarn(null)

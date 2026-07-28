@@ -259,7 +259,8 @@ export default function EstoquePage() {
 
   useEffect(() => {
     load()
-    const interval = setInterval(load, 60_000)
+    // Poll leve: full reload a cada 5 min (antes 60s saturava pooler + lambdas).
+    const interval = setInterval(load, 5 * 60_000)
     return () => clearInterval(interval)
   }, [load])
 
