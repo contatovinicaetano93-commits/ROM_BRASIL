@@ -45,6 +45,7 @@ export interface StockSyncStats {
   errors: string[]
   warnings: string[]
   running?: boolean
+  aborted?: boolean
 }
 
 export interface StockSyncRun {
@@ -56,6 +57,11 @@ export interface StockSyncRun {
   created_at: string
 }
 
+/** Fast estoque no cron Vercel (~300s): páginas curtas + orçamento de parede. */
+const STOCK_FAST_MAX_PAGES = 6
+const STOCK_FAST_PAGE_LIMIT = 100
+const STOCK_FAST_BUDGET_MS = 220_000
+
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
   return def?.id ?? null
@@ -63,12 +69,13 @@ function reportId(mapper: string): string | null {
 
 async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncRun> {
   const sql = getSql()
+  // Abort limpo de runs mortos (timeout/kill do cron) — status/error claros.
   await sql`
     update avec_sync_runs
     set
       status = 'error',
       error = coalesce(error, 'Sync estoque interrompido (timeout/kill)'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false,"aborted":true}'::jsonb
     where kind = ${kind}
       and coalesce(stats->>'running', 'false') = 'true'
   `
@@ -134,25 +141,44 @@ async function snapshotSafe(
   }
 }
 
-async function syncPositions(stats: StockSyncStats, syncRunId: string) {
+class StockBudgetExceededError extends Error {
+  constructor(step: string) {
+    super(`Sync estoque abortado por orçamento de tempo em ${step} (evita timeout/kill)`)
+    this.name = 'StockBudgetExceededError'
+  }
+}
+
+function assertBudget(deadlineAt: number | null, step: string) {
+  if (deadlineAt != null && Date.now() >= deadlineAt) {
+    throw new StockBudgetExceededError(step)
+  }
+}
+
+async function syncPositions(
+  stats: StockSyncStats,
+  syncRunId: string,
+  opts: { maxPages: number; pageLimit: number; deadlineAt: number | null },
+) {
   const id = reportId('stock_position')
   if (!id) return
+  assertBudget(opts.deadlineAt, '0149')
   const params = {
     inicio: fmtAvecDate(new Date()),
     marca: '',
     linha: '',
     local: '',
     categoria: '',
-    limit: 250,
+    limit: opts.pageLimit,
     site: avecSiteParam(),
   }
   try {
-    const result = await fetchAllAvecReport(id, params)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     let parsedCount = 0
     for (const row of result.rows) {
+      assertBudget(opts.deadlineAt, '0149-apply')
       const pos = normalizeStockPositionRow(row)
       if (!pos) continue
       parsedCount++
@@ -167,22 +193,29 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
       )
     }
   } catch (e) {
+    if (e instanceof StockBudgetExceededError) throw e
     stats.errors.push(`0149 (posição): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
-async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
+async function syncAlerts(
+  stats: StockSyncStats,
+  syncRunId: string,
+  opts: { maxPages: number; pageLimit: number; deadlineAt: number | null },
+) {
   const id = reportId('stock_alert')
   if (!id) return
-  const params = { limit: 250 }
+  assertBudget(opts.deadlineAt, '0046')
+  const params = { limit: opts.pageLimit }
   try {
-    const result = await fetchAllAvecReport(id, params)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     const seenAvecProductIds: string[] = []
     let active = 0
     for (const row of result.rows) {
+      assertBudget(opts.deadlineAt, '0046-apply')
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
       const applied = await applyStockAlert(alert)
@@ -197,6 +230,7 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
   } catch (e) {
+    if (e instanceof StockBudgetExceededError) throw e
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
@@ -299,10 +333,16 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
+  const deadlineAt = mode === 'fast' ? Date.now() + STOCK_FAST_BUDGET_MS : null
+  const pageOpts = {
+    maxPages: mode === 'fast' ? STOCK_FAST_MAX_PAGES : 40,
+    pageLimit: mode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
+    deadlineAt,
+  }
 
   try {
-    await syncPositions(stats, run.id)
-    await syncAlerts(stats, run.id)
+    await syncPositions(stats, run.id, pageOpts)
+    await syncAlerts(stats, run.id, pageOpts)
 
     if (mode === 'full') {
       await syncMovements(stats, run.id)
@@ -333,6 +373,14 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     return await finishRun(run.id, status, stats, topError)
   } catch (e) {
+    if (e instanceof StockBudgetExceededError) {
+      stats.aborted = true
+      stats.errors.push(e.message)
+      stats.errors = formatAvecErrorList(stats.errors)
+      const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
+      const status: StockSyncRun['status'] = hadAnyData ? 'partial' : 'error'
+      return await finishRun(run.id, status, stats, e.message)
+    }
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
