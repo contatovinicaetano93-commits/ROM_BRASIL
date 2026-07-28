@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    // TM (Sprint 1) — null enquanto a Avec não mandar início/fim reais do atendimento.
+    // TM cadastrado — média do 0223 (campo tempo); null se ainda não sincronizou.
     const tmTodayMinutes =
       salonBase.service_duration_count > 0
         ? Math.round((salonBase.service_duration_sum_minutes / salonBase.service_duration_count) * 10) / 10

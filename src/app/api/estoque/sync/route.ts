@@ -31,7 +31,7 @@ async function execute(req: NextRequest, cron: boolean) {
   if (cron && !force) {
     const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
     const minGap = mode === 'full' ? STOCK_FULL_MIN_GAP_MS : STOCK_FAST_MIN_GAP_MS
-    const last = await getLastStockSync(kind).catch(() => null)
+    const last = await getLastStockSync(kind, { finishedOnly: true }).catch(() => null)
     if (last?.created_at) {
       const age = Date.now() - new Date(last.created_at).getTime()
       if (age >= 0 && age < minGap) {

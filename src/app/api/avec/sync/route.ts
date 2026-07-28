@@ -31,10 +31,12 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
 /** Espaçamento mínimo mesmo se o cron Vercel for reconfigurado à força. */
 const FAST_MIN_GAP_MS = 12 * 60_000
 const FULL_MIN_GAP_MS = 5 * 60 * 60_000
+/** Webhook: gap curto — não flooda, mas atualiza caixa após evento. */
+const WEBHOOK_FAST_MIN_GAP_MS = 90_000
 
 async function executeSync(
   req: NextRequest,
-  opts?: { force?: boolean; defaultMode?: AvecSyncMode; cron?: boolean },
+  opts?: { force?: boolean; defaultMode?: AvecSyncMode; cron?: boolean; webhook?: boolean },
 ) {
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
 
@@ -50,34 +52,43 @@ async function executeSync(
     return err('Avec não configurado (AVEC_API_TOKEN)', 503)
   }
 
-  const minGap = mode === 'full' ? FULL_MIN_GAP_MS : FAST_MIN_GAP_MS
+  // Webhook nunca roda full (P1–P3/catálogo) — só o cron 2×/dia.
+  const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
+
+  const minGap =
+    opts?.webhook && effectiveMode === 'fast'
+      ? WEBHOOK_FAST_MIN_GAP_MS
+      : effectiveMode === 'full'
+        ? FULL_MIN_GAP_MS
+        : FAST_MIN_GAP_MS
 
   if (!opts?.force) {
-    const last = await getLastAvecSync(mode)
+    // Ignora runs órfãos (killed mid-flight com stats.running=true).
+    const last = await getLastAvecSync(effectiveMode, { finishedOnly: true })
     if (last?.created_at) {
       const age = Date.now() - new Date(last.created_at).getTime()
       if (age >= 0 && age < minGap) {
         return ok({
           skipped: true,
           reason: 'sync_recente',
-          mode,
+          mode: effectiveMode,
           last,
-          schedule: mode === 'fast' ? 'intraday' : 'full',
-          note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
+          schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
+          note: `Último sync ${effectiveMode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
         })
       }
     }
   }
 
   try {
-    const run = await runAvecSync(mode)
+    const run = await runAvecSync(effectiveMode)
     return ok({
       ...run,
       skipped: false,
-      mode,
-      schedule: mode === 'fast' ? 'intraday' : 'full',
+      mode: effectiveMode,
+      schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
       note:
-        mode === 'fast'
+        effectiveMode === 'fast'
           ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
           : 'Sync full — catálogo + P1/P2/P3',
     })
@@ -86,7 +97,7 @@ async function executeSync(
       return ok({
         skipped: true,
         reason: 'sync_em_andamento',
-        mode,
+        mode: effectiveMode,
         holder: e.holder,
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
@@ -100,7 +111,13 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await authorize(req)
     if (!auth.ok) return err(auth.message, auth.status)
-    return await executeSync(req, { force: !auth.cron, defaultMode: 'full', cron: auth.cron })
+    const webhook = req.headers.get('x-rom-sync-reason') === 'webhook'
+    return await executeSync(req, {
+      force: !auth.cron,
+      defaultMode: 'full',
+      cron: auth.cron,
+      webhook,
+    })
   } catch (e) {
     return handleError(e)
   }
@@ -126,7 +143,7 @@ export async function GET(req: NextRequest) {
         fast: { schedule: '*/15 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: { schedule: '20 10,22 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         cadence:
-          'fast a cada 15 min · full 2×/dia (UTC 10:20 e 22:20 ≈ 07:20/19:20 BRT) — tempo real via webhook',
+          'fast a cada 15 min · full 2×/dia (UTC 10:20 e 22:20 ≈ 07:20/19:20 BRT) — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

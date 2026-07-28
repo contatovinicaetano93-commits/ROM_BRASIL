@@ -72,6 +72,8 @@ export interface AvecSyncStats {
   p1_rows?: number
   p2_rows?: number
   p3_rows?: number
+  /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
+  running?: boolean
 }
 
 export interface AvecSyncRun {
@@ -96,9 +98,20 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
 /** Abre run no início — snapshots recebem sync_run_id correto. */
 async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
   const sql = getSql()
+  // Runs mortos por timeout/kill não devem bloquear o min-gap.
+  await sql`
+    update avec_sync_runs
+    set
+      status = 'error',
+      error = coalesce(error, 'Sync interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+    where kind = ${kind}
+      and coalesce(stats->>'running', 'false') = 'true'
+  `
+  const starting: AvecSyncStats = { ...stats, running: true }
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${stats})
+    values (${kind}, 'partial', ${starting})
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
@@ -111,26 +124,51 @@ async function finishAvecSyncRun(
   error?: string,
 ): Promise<AvecSyncRun> {
   const sql = getSql()
+  const finished: AvecSyncStats = { ...stats, running: false }
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${stats}, error = ${error ?? null}
+    set status = ${status}, stats = ${finished}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
 }
 
-export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
+export async function getLastAvecSync(
+  kind?: string,
+  opts?: { finishedOnly?: boolean },
+): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  const finishedOnly = opts?.finishedOnly === true
   if (kind) {
-    const rows = (await sql`
-      select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
-    `) as AvecSyncRun[]
+    const rows = finishedOnly
+      ? ((await sql`
+          select * from avec_sync_runs
+          where kind = ${kind}
+            and coalesce(stats->>'running', 'false') <> 'true'
+          order by created_at desc
+          limit 1
+        `) as AvecSyncRun[])
+      : ((await sql`
+          select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+        `) as AvecSyncRun[])
     return rows[0] ?? null
   }
-  const rows = (await sql`
-    select * from avec_sync_runs order by created_at desc limit 1
-  `) as AvecSyncRun[]
+  // Sem kind: só Avec (nunca stock_*), para Hoje/Admin não mentirem o status.
+  const rows = finishedOnly
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
   return rows[0] ?? null
 }
 
@@ -282,8 +320,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
-  let durationSumMinutes = 0
-  let durationCount = 0
 
   for (const row of result.rows) {
     try {
@@ -294,11 +330,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         if (toSalonDateIso(att.attendedAt) !== today) continue
       }
 
-      // TM (Sprint 1) — só soma se a Avec mandou início+fim reais e o atendimento foi hoje.
-      if (att.durationMinutes != null && att.attendedAt && toSalonDateIso(att.attendedAt) === today) {
-        durationSumMinutes += att.durationMinutes
-        durationCount++
-      }
+      // TM cadastrado vem só do 0223 (`syncDurationFrom0223`) — não usar início/fim 0002.
 
       const contact = await upsertContact({
         avecClientId: att.avecClientId ?? undefined,
@@ -331,13 +363,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     } catch (e) {
       stats.errors.push(`atendimento: ${e instanceof Error ? e.message : String(e)}`)
     }
-  }
-
-  if (durationCount > 0) {
-    await upsertSalonMetrics(today, {
-      service_duration_sum_minutes: durationSumMinutes,
-      service_duration_count: durationCount,
-    })
   }
 }
 
@@ -786,11 +811,13 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       }
     }
     await recomputeSalonMetricsFromRom()
-    // Depois do recompute ROM — fonte Avec 0002 (MTD) para recorrentes do dia.
-    try {
-      await syncReturningFrom0002(stats, mode, syncRunId)
-    } catch (e) {
-      stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+    // Recorrentes 0002 (MTD/90d) só no full — no fast evita puxar o mês inteiro a cada 15 min.
+    if (mode === 'full') {
+      try {
+        await syncReturningFrom0002(stats, mode, syncRunId)
+      } catch (e) {
+        stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+      }
     }
 
     if (mode === 'full') {

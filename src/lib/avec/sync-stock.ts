@@ -23,7 +23,7 @@ import {
   normalizeStockPurchaseRow,
 } from '@/lib/avec/normalize'
 import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib/avec/registry'
-import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { saveReportSnapshot, pruneAvecSyncHistory } from '@/lib/avec/snapshots'
 import {
   upsertStockProductFromPosition,
   applyStockAlert,
@@ -44,6 +44,7 @@ export interface StockSyncStats {
   snapshots_saved: number
   errors: string[]
   warnings: string[]
+  running?: boolean
 }
 
 export interface StockSyncRun {
@@ -62,9 +63,19 @@ function reportId(mapper: string): string | null {
 
 async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncRun> {
   const sql = getSql()
+  await sql`
+    update avec_sync_runs
+    set
+      status = 'error',
+      error = coalesce(error, 'Sync estoque interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+    where kind = ${kind}
+      and coalesce(stats->>'running', 'false') = 'true'
+  `
+  const starting = { ...stats, running: true as const }
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${stats})
+    values (${kind}, 'partial', ${starting})
     returning *
   `) as StockSyncRun[]
   return rows[0]!
@@ -77,20 +88,33 @@ async function finishRun(
   error?: string
 ): Promise<StockSyncRun> {
   const sql = getSql()
+  const finished = { ...stats, running: false as const }
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${stats}, error = ${error ?? null}
+    set status = ${status}, stats = ${finished}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as StockSyncRun[]
   return rows[0]!
 }
 
-export async function getLastStockSync(kind: 'stock_fast' | 'stock_full'): Promise<StockSyncRun | null> {
+export async function getLastStockSync(
+  kind: 'stock_fast' | 'stock_full',
+  opts?: { finishedOnly?: boolean },
+): Promise<StockSyncRun | null> {
   const sql = getSql()
-  const rows = (await sql`
-    select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
-  `) as StockSyncRun[]
+  const finishedOnly = opts?.finishedOnly === true
+  const rows = finishedOnly
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit 1
+      `) as StockSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+      `) as StockSyncRun[])
   return rows[0] ?? null
 }
 
@@ -284,6 +308,11 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
       await syncMovements(stats, run.id)
       await syncPurchaseOrigin(stats, run.id)
       await syncValuation(stats, run.id)
+      try {
+        await pruneAvecSyncHistory()
+      } catch {
+        /* ignore */
+      }
     }
 
     stats.errors = formatAvecErrorList(stats.errors)

@@ -45,7 +45,8 @@ ou investigar depois.
    para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
-   Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec`. Backup: `CRON_SECRET` (cron fast 5 min + full 10 min).
+   Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec` (só sync fast).
+   Backup: `CRON_SECRET` (cron fast 15 min + full 2×/dia).
 5. **WhatsApp Cloud API oficial** — no Meta Developer:
    `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
    `WHATSAPP_APP_SECRET`. Webhook → `/api/webhooks/whatsapp` (campo `messages`).
