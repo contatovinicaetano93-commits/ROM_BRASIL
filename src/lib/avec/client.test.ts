@@ -3,6 +3,7 @@ import {
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
+  isAvecFetchAbortError,
   periodRangeEndingOn,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
@@ -155,5 +156,20 @@ describe('periodRangeEndingOn', () => {
       inicio: '15/01/2026',
       fim: '15/01/2026',
     })
+  })
+})
+
+describe('isAvecFetchAbortError', () => {
+  it('reconhece TimeoutError / AbortError e mensagens de timeout', () => {
+    expect(isAvecFetchAbortError(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe(
+      true,
+    )
+    expect(isAvecFetchAbortError(Object.assign(new Error('x'), { name: 'AbortError' }))).toBe(
+      true,
+    )
+    expect(isAvecFetchAbortError(new Error('The operation was aborted due to timeout'))).toBe(
+      true,
+    )
+    expect(isAvecFetchAbortError(new Error('Avec 0149 HTTP 500'))).toBe(false)
   })
 })

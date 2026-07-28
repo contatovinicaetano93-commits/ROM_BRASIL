@@ -209,20 +209,79 @@ export async function getProduct(id: string): Promise<StockProduct | null> {
 }
 
 /** Upsert vindo do relatório 0149 (Posição de Estoque) — fast sync. */
+export type StockDimCache = {
+  category: Map<string, string | null>
+  brand: Map<string, string | null>
+  location: Map<string, string | null>
+}
+
+export function createStockDimCache(): StockDimCache {
+  return {
+    category: new Map(),
+    brand: new Map(),
+    location: new Map(),
+  }
+}
+
+async function resolveCategoryCached(
+  name: string | null,
+  cache?: StockDimCache,
+): Promise<string | null> {
+  const key = name?.trim().toLowerCase() ?? ''
+  if (!key) return null
+  if (cache?.category.has(key)) return cache.category.get(key) ?? null
+  const id = await upsertCategoryByName(name)
+  cache?.category.set(key, id)
+  return id
+}
+
+async function resolveBrandCached(
+  name: string | null,
+  cache?: StockDimCache,
+): Promise<string | null> {
+  const key = name?.trim().toLowerCase() ?? ''
+  if (!key) return null
+  if (cache?.brand.has(key)) return cache.brand.get(key) ?? null
+  const id = await upsertBrandByName(name)
+  cache?.brand.set(key, id)
+  return id
+}
+
+async function resolveLocationCached(
+  avecLocalEstoqueId: string | null,
+  cache?: StockDimCache,
+): Promise<string | null> {
+  const key = avecLocalEstoqueId?.trim() ?? ''
+  if (!key) return null
+  if (cache?.location.has(key)) return cache.location.get(key) ?? null
+  const id = await upsertLocationByAvecId(avecLocalEstoqueId)
+  cache?.location.set(key, id)
+  return id
+}
+
 export async function upsertStockProductFromPosition(
-  pos: NormalizedStockPosition
+  pos: NormalizedStockPosition,
+  opts?: {
+    /** Cache de dimensões no batch 0149 — evita N selects iguais por SKU. */
+    dimCache?: StockDimCache
+    /** Sync 0149 não usa previousQty — pula o SELECT prévio. */
+    skipPreviousQty?: boolean
+  },
 ): Promise<{ productId: string; previousQty: number | null }> {
   const sql = getSql()
   const [categoryId, brandId, locationId] = await Promise.all([
-    upsertCategoryByName(pos.categoryName),
-    upsertBrandByName(pos.brandName),
-    upsertLocationByAvecId(pos.locationId),
+    resolveCategoryCached(pos.categoryName, opts?.dimCache),
+    resolveBrandCached(pos.brandName, opts?.dimCache),
+    resolveLocationCached(pos.locationId, opts?.dimCache),
   ])
 
-  const before = (await sql`
-    select current_qty::float as current_qty from stock_products where avec_product_id = ${pos.avecProductId} limit 1
-  `) as { current_qty: number }[]
-  const previousQty = before[0]?.current_qty ?? null
+  let previousQty: number | null = null
+  if (!opts?.skipPreviousQty) {
+    const before = (await sql`
+      select current_qty::float as current_qty from stock_products where avec_product_id = ${pos.avecProductId} limit 1
+    `) as { current_qty: number }[]
+    previousQty = before[0]?.current_qty ?? null
+  }
 
   const rows = (await sql`
     insert into stock_products (
