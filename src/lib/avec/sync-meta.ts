@@ -34,8 +34,15 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   const fastStale = fastAgeHours != null && fastAgeHours > 1
   const stale = fullStale || fastStale
 
-  const syncStatus = full?.status ?? fast?.status ?? null
-  const created_at = full?.created_at ?? fast?.created_at ?? null
+  // Prefer the more recent finished run so a failed/partial fast is not hidden by an older full ok.
+  const latest =
+    full && fast
+      ? new Date(fast.created_at).getTime() >= new Date(full.created_at).getTime()
+        ? fast
+        : full
+      : (full ?? fast)
+  const syncStatus = latest?.status ?? null
+  const created_at = latest?.created_at ?? null
 
   return {
     status: syncStatus,
