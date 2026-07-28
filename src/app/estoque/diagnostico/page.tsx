@@ -54,13 +54,14 @@ export default function EstoqueDiagnosticoPage() {
     setLoading(true)
     setError(null)
     try {
-      const [healthRes, statusRes] = await Promise.all([
-        apiFetch('/api/health', { cache: 'no-store' }),
-        apiFetch('/api/estoque/sync/status', { cache: 'no-store' }),
-      ])
-      const [healthJson, statusJson] = await Promise.all([healthRes.json(), statusRes.json()])
+      const healthRes = await apiFetch('/api/health', { cache: 'no-store' })
+      const healthJson = await healthRes.json()
       if (healthJson.error) throw new Error(healthJson.error)
       setHealth(healthJson.data)
+
+      const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store' })
+      const statusJson = await statusRes.json()
+      if (statusJson.error) throw new Error(statusJson.error)
       if (statusJson.data?.plan) setPlan(statusJson.data.plan)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

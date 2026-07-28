@@ -17,11 +17,10 @@ export async function GET(req: NextRequest) {
     }
 
     const format = req.nextUrl.searchParams.get('format')
-    const materialize = req.nextUrl.searchParams.get('materialize') !== '0'
-    const [overview, sync] = await Promise.all([
-      computeMonthOverview({ month, materialize }),
-      loadAvecSyncMeta(),
-    ])
+    // Default: só leitura ao vivo. Materializar só com ?materialize=1 (botão Atualizar).
+    const materialize = req.nextUrl.searchParams.get('materialize') === '1'
+    const overview = await computeMonthOverview({ month, materialize })
+    const sync = await loadAvecSyncMeta()
 
     if (format === 'csv') {
       const csv = buildMonthOverviewCsv(overview)

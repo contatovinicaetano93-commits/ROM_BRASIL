@@ -852,18 +852,23 @@ function InsightCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-4 ${
+      className={`min-w-0 overflow-hidden rounded-2xl border p-4 ${
         emphasize ? 'border-gold/30 bg-gradient-to-b from-gold/10 to-card' : 'border-border bg-card'
       }`}
     >
-      <div className="mb-2 flex items-center gap-1.5 text-muted">
+      <div className="mb-2 flex min-w-0 items-center gap-1.5 text-muted">
         {icon}
-        <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
+        <span className="truncate text-[0.65rem] uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-2xl font-semibold tabular-nums leading-tight">{value}</p>
+      <p
+        className="max-w-full break-words font-semibold tabular-nums leading-tight [overflow-wrap:anywhere] text-[clamp(0.95rem,2.6vw,1.5rem)]"
+        title={value}
+      >
+        {value}
+      </p>
       {compare ? (
         <p
-          className={`mt-1.5 text-[0.7rem] leading-snug ${
+          className={`mt-1.5 break-words text-[0.7rem] leading-snug [overflow-wrap:anywhere] ${
             compare.muted
               ? 'text-muted'
               : compare.positive

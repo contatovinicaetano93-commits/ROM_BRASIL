@@ -568,6 +568,20 @@ export default function FinanceiroPage() {
         </div>
       )}
 
+      {kpis && kpis.current.from && kpis.previous.to && (
+        <p className="text-xs text-muted">
+          Comparativo MoM: <strong className="text-foreground/80">{kpis.current.label}</strong>
+          {' ('}
+          {kpis.current.from.slice(8, 10)}–{kpis.current.to.slice(8, 10)}
+          {') vs '}
+          <strong className="text-foreground/80">{kpis.previous.label}</strong>
+          {' ('}
+          {kpis.previous.from.slice(8, 10)}–{kpis.previous.to.slice(8, 10)}
+          {')'}
+          . No mês corrente o anterior é cortado no mesmo dia (janela comparável).
+        </p>
+      )}
+
       {error && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
           Não foi possível carregar ({error}). Confirme se o banco está configurado.

@@ -53,7 +53,7 @@ export default function ContatosPage() {
   async function load(searchQ = debouncedQuery, status = statusFilter) {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ sort: 'urgency' })
+      const params = new URLSearchParams({ sort: 'urgency', limit: '2000' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)
@@ -99,7 +99,9 @@ export default function ContatosPage() {
         <p className="mt-0.5 text-xs text-muted">
           {loading
             ? 'Todos os canais, em um só lugar'
-            : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`}
+            : contacts.length >= 2000 && !debouncedQuery
+              ? `${filtered.length} de ${contacts.length} (lista limitada a 2000 — refine a busca)`
+              : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`}
         </p>
         </div>
         <div className="shrink-0 lg:w-72">

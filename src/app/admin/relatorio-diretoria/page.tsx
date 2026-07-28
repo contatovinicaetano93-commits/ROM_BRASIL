@@ -294,6 +294,7 @@ export default function RelatorioDiretoriaPage() {
           quarter,
           compare,
           professional_id: proId0011 || undefined,
+          mock: forceDemo || undefined,
         }),
       })
       const json = await res.json()
@@ -316,6 +317,7 @@ export default function RelatorioDiretoriaPage() {
           compare_0021: compareQuarter0021,
           compare_months: compareMonths,
           professional_id: proId0021 || undefined,
+          mock: forceDemo || undefined,
         }),
       })
       const json = await res.json()

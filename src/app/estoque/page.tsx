@@ -222,30 +222,31 @@ export default function EstoquePage() {
     setLoading(true)
     setError(null)
     try {
-      const [kpisRes, alertsRes, movRes, prodRes, statusRes, catRes, brandRes] = await Promise.all([
-        apiFetch('/api/estoque/kpis', { cache: 'no-store' }),
-        apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' }),
-        apiFetch('/api/estoque/movimentos', { cache: 'no-store' }),
-        apiFetch('/api/estoque/produtos', { cache: 'no-store' }),
-        apiFetch('/api/estoque/sync/status', { cache: 'no-store' }),
-        apiFetch('/api/estoque/categorias', { cache: 'no-store' }),
-        apiFetch('/api/estoque/marcas', { cache: 'no-store' }),
-      ])
-      const [kpisJson, alertsJson, movJson, prodJson, statusJson, catJson, brandJson] =
-        await Promise.all([
-          kpisRes.json(),
-          alertsRes.json(),
-          movRes.json(),
-          prodRes.json(),
-          statusRes.json(),
-          catRes.json(),
-          brandRes.json(),
-        ])
+      // Lotes pequenos: 7 Promise.all no pooler (max:1) deixavam Estoque lento / falho.
+      const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store' })
+      const alertsRes = await apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' })
+      const [kpisJson, alertsJson] = await Promise.all([kpisRes.json(), alertsRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
       setKpis(kpisJson.data)
       setAlerts(alertsJson.data ?? [])
+
+      const movRes = await apiFetch('/api/estoque/movimentos', { cache: 'no-store' })
+      const prodRes = await apiFetch('/api/estoque/produtos', { cache: 'no-store' })
+      const [movJson, prodJson] = await Promise.all([movRes.json(), prodRes.json()])
+      if (movJson.error) throw new Error(movJson.error)
+      if (prodJson.error) throw new Error(prodJson.error)
       setMovements(movJson.data ?? [])
       setProducts(prodJson.data ?? [])
+
+      const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store' })
+      const catRes = await apiFetch('/api/estoque/categorias', { cache: 'no-store' })
+      const brandRes = await apiFetch('/api/estoque/marcas', { cache: 'no-store' })
+      const [statusJson, catJson, brandJson] = await Promise.all([
+        statusRes.json(),
+        catRes.json(),
+        brandRes.json(),
+      ])
+      if (statusJson.error) throw new Error(statusJson.error)
       setSyncStatus(statusJson.data ?? null)
       setCategories(catJson.data ?? [])
       setBrands(brandJson.data ?? [])
@@ -297,17 +298,32 @@ export default function EstoquePage() {
   const purchaseEntries = useMemo(() => listPurchaseEntries(movements, 15), [movements])
 
   async function acknowledge(id: string) {
-    await apiFetch(`/api/estoque/alertas/${id}`, { method: 'PATCH' })
-    load()
+    try {
+      const res = await apiFetch(`/api/estoque/alertas/${id}`, { method: 'PATCH' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        throw new Error(json.error ?? 'Falha ao reconhecer alerta')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   async function triggerSync() {
     setSyncing(true)
+    setError(null)
     try {
-      await apiFetch('/api/estoque/sync?mode=full', { method: 'POST' })
+      const res = await apiFetch('/api/estoque/sync?mode=full', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        throw new Error(json.error ?? 'Falha no sync de estoque')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setSyncing(false)
-      load()
     }
   }
 

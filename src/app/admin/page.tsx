@@ -110,29 +110,31 @@ export default function AdminPage() {
     setState('loading')
     setError(null)
     try {
-      const [k, c, s, a, h] = await Promise.all([
-        apiFetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/contacts?sort=urgency', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/health', { cache: 'no-store' }).then((r) => r.json()),
-      ])
-
+      // Sequencial (não Promise.all): 5 lambdas em paralelo estouravam o pooler
+      // e o Diagnóstico ficava minutos em loading / falhava com EMAXCONNSESSION.
       const errs: string[] = []
+
+      const k = await apiFetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json())
       if (k.error) errs.push(`KPIs: ${k.error}`)
       else setKpis(k.data)
 
-      if (c.error) errs.push(`Contatos: ${c.error}`)
-      else setContacts(c.data ?? [])
+      const h = await apiFetch('/api/health', { cache: 'no-store' }).then((r) => r.json())
+      if (h.error) errs.push(`Health: ${h.error}`)
+      else setHealth(h.data)
 
-      if (s.error) errs.push(`Agendamentos: ${s.error}`)
-      else setSchedule(s.data ?? [])
-
+      const a = await apiFetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json())
       if (a.error) errs.push(`Avec: ${a.error}`)
       else setAvec(a.data)
 
-      if (h.error) errs.push(`Health: ${h.error}`)
-      else setHealth(h.data)
+      const c = await apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store' }).then(
+        (r) => r.json(),
+      )
+      if (c.error) errs.push(`Contatos: ${c.error}`)
+      else setContacts(c.data ?? [])
+
+      const s = await apiFetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json())
+      if (s.error) errs.push(`Agendamentos: ${s.error}`)
+      else setSchedule(s.data ?? [])
 
       if (errs.length) {
         setError(errs.join(' · '))
