@@ -241,6 +241,19 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** Timeout/abort de página Avec — não vale retry (só queima o orçamento do cron). */
+export function isAvecFetchAbortError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as Error & { name?: string; message?: string }
+  const name = err.name ?? ''
+  const msg = err.message ?? String(e)
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    /aborted|timeout|TimeoutError|AbortError/i.test(msg)
+  )
+}
+
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
@@ -308,8 +321,10 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     {
       maxAttempts: 3,
       initialDelayMs: 1000,
-      // 4xx é erro de request (token/params) — repetir não resolve. Só vale retry em falha de rede ou 5xx.
+      // 4xx é erro de request (token/params) — repetir não resolve.
+      // Timeout/abort também não: 3×30s queima stock_fast / sync antes do deadline.
       shouldRetry: (e) => {
+        if (isAvecFetchAbortError(e)) return false
         const status = (e as Error & { status?: number }).status
         return status === undefined || status >= 500
       },
@@ -374,7 +389,17 @@ export async function fetchAllAvecReport(
       truncated = true
       break
     }
-    const payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    let payload: unknown
+    try {
+      payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    } catch (e) {
+      // Com deadline: abort limpo — devolve o que já veio em vez de matar o sync.
+      if (deadlineAt != null && isAvecFetchAbortError(e)) {
+        truncated = true
+        break
+      }
+      throw e
+    }
     const rows = extractRows(payload)
     pagesFetched = page
     if (rows.length === 0) break

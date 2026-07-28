@@ -8,6 +8,7 @@ import {
   fetchAllAvecReport,
   formatTruncationWarning,
   fmtAvecDate,
+  isAvecFetchAbortError,
   periodRange,
   type AvecReportParams,
 } from '@/lib/avec/client'
@@ -26,6 +27,7 @@ import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib
 import { saveReportSnapshot, pruneAvecSyncHistory } from '@/lib/avec/snapshots'
 import {
   upsertStockProductFromPosition,
+  createStockDimCache,
   applyStockAlert,
   resolveStaleStockAlerts,
   applyStockMovement,
@@ -61,7 +63,8 @@ export interface StockSyncRun {
 /** Fast estoque no cron Vercel (~300s): páginas curtas + orçamento de parede. */
 const STOCK_FAST_MAX_PAGES = 2
 const STOCK_FAST_PAGE_LIMIT = 100
-const STOCK_FAST_BUDGET_MS = 240_000
+/** 200s: margem vs maxDuration 300s (upsert DB + 0046). */
+const STOCK_FAST_BUDGET_MS = 200_000
 
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
@@ -182,10 +185,24 @@ async function syncPositions(
       stats.warnings.push('0149: orçamento esgotado durante fetch (abort limpo)')
       return
     }
+    if (
+      opts.expectTruncation &&
+      result.truncated &&
+      result.rows.length > 0 &&
+      opts.deadlineAt != null &&
+      Date.now() >= opts.deadlineAt
+    ) {
+      // Truncamento por deadline no fetch — não é erro; segue com o batch parcial.
+      stats.aborted = true
+      stats.warnings.push(
+        `0149: fetch parcial (${result.pagesFetched} pág., ${result.rows.length} linhas) — abort limpo`,
+      )
+    }
     if (!opts.skipSnapshot) {
       await snapshotSafe(id, params, result.rows, stats, syncRunId)
     }
 
+    const dimCache = createStockDimCache()
     let parsedCount = 0
     for (const row of result.rows) {
       if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
@@ -198,7 +215,10 @@ async function syncPositions(
       const pos = normalizeStockPositionRow(row)
       if (!pos) continue
       parsedCount++
-      await upsertStockProductFromPosition(pos)
+      await upsertStockProductFromPosition(pos, {
+        dimCache,
+        skipPreviousQty: true,
+      })
       stats.positions_synced++
     }
     if (result.rows.length > 5 && parsedCount < result.rows.length * 0.5) {
@@ -207,6 +227,13 @@ async function syncPositions(
       )
     }
   } catch (e) {
+    if (isAvecFetchAbortError(e)) {
+      stats.aborted = true
+      stats.warnings.push(
+        `0149: timeout/abort limpo — ${e instanceof Error ? e.message : String(e)}`,
+      )
+      return
+    }
     stats.errors.push(`0149 (posição): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
@@ -263,6 +290,13 @@ async function syncAlerts(
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
   } catch (e) {
+    if (isAvecFetchAbortError(e)) {
+      stats.aborted = true
+      stats.warnings.push(
+        `0046: timeout/abort limpo — ${e instanceof Error ? e.message : String(e)}`,
+      )
+      return
+    }
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
@@ -404,13 +438,16 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
     const abortMsg = stats.aborted
-      ? (stats.warnings.find((w) => /orçamento|abort/i.test(w)) ??
+      ? (stats.warnings.find((w) => /orçamento|abort|timeout/i.test(w)) ??
         'Sync estoque abortado por orçamento de tempo (evita timeout/kill)')
       : null
+    // Abort limpo com dados parciais: partial + warning, sem error (Cérebro/Diagnóstico).
     const topError =
       status === 'error'
         ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
-        : (authErr ?? abortMsg ?? undefined)
+        : (authErr ??
+          (stats.aborted && !hadAnyData ? abortMsg : undefined) ??
+          undefined)
 
     return await finishRun(run.id, status, stats, topError)
   } catch (e) {
