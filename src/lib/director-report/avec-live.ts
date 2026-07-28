@@ -306,25 +306,31 @@ export async function fetchLiveDirectorBlocks(
   compareQuarter0021: QuarterKey | null,
   selectedQuarter: QuarterKey,
   compareQuarter: QuarterKey,
+  opts?: { includeReturn?: boolean; includeRevenue?: boolean },
 ): Promise<LiveDirectorBlocks> {
+  const includeReturn = opts?.includeReturn !== false
+  const includeRevenue = opts?.includeRevenue !== false
   const warnings: string[] = []
-  const monthsNeeded = new Set<MonthKey>([selectedMonth])
-  if (compareQuarter0021) {
-    for (const m of monthsInComparableQuarter(
-      selectedQuarter0021,
-      selectedMonth,
-      selectedQuarter0021,
-      compareQuarter0021
-    )) {
-      monthsNeeded.add(m)
-    }
-    for (const m of monthsInComparableQuarter(
-      compareQuarter0021,
-      selectedMonth,
-      selectedQuarter0021,
-      compareQuarter0021
-    )) {
-      monthsNeeded.add(m)
+  const monthsNeeded = new Set<MonthKey>()
+  if (includeRevenue) {
+    monthsNeeded.add(selectedMonth)
+    if (compareQuarter0021) {
+      for (const m of monthsInComparableQuarter(
+        selectedQuarter0021,
+        selectedMonth,
+        selectedQuarter0021,
+        compareQuarter0021
+      )) {
+        monthsNeeded.add(m)
+      }
+      for (const m of monthsInComparableQuarter(
+        compareQuarter0021,
+        selectedMonth,
+        selectedQuarter0021,
+        compareQuarter0021
+      )) {
+        monthsNeeded.add(m)
+      }
     }
   }
 
@@ -342,19 +348,19 @@ export async function fetchLiveDirectorBlocks(
     }
   }
 
-  let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>>
-  let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>>
-  try {
-    selectedQ = await fetch0011Quarter(selectedQuarter)
-  } catch (e) {
-    warnings.push(`0011 ${selectedQuarter}: ${e instanceof Error ? e.message : String(e)}`)
-    selectedQ = { byPro: new Map(), salonRates: [] }
-  }
-  try {
-    compareQ = await fetch0011Quarter(compareQuarter)
-  } catch (e) {
-    warnings.push(`0011 ${compareQuarter}: ${e instanceof Error ? e.message : String(e)}`)
-    compareQ = { byPro: new Map(), salonRates: [] }
+  let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>> = { byPro: new Map(), salonRates: [] }
+  let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = { byPro: new Map(), salonRates: [] }
+  if (includeReturn) {
+    try {
+      selectedQ = await fetch0011Quarter(selectedQuarter)
+    } catch (e) {
+      warnings.push(`0011 ${selectedQuarter}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    try {
+      compareQ = await fetch0011Quarter(compareQuarter)
+    } catch (e) {
+      warnings.push(`0011 ${compareQuarter}: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   const salonSel = avg(selectedQ.salonRates)
@@ -394,12 +400,12 @@ export async function fetchLiveDirectorBlocks(
     return out
   }
 
-  const selByPro = indexByPro(selectedQ.byPro)
-  const cmpByPro = indexByPro(compareQ.byPro)
+  const selByPro = includeReturn ? indexByPro(selectedQ.byPro) : new Map<string, QuarterAgg>()
+  const cmpByPro = includeReturn ? indexByPro(compareQ.byPro) : new Map<string, QuarterAgg>()
 
   // Se 0011 veio sem coluna profissional, atribui lista inteira a cada pro filtrado
   // só quando há um único profissional — senão fica no bloco com lista vazia + taxa salão.
-  if (selByPro.size === 0 && selectedQ.byPro.size > 0) {
+  if (includeReturn && selByPro.size === 0 && selectedQ.byPro.size > 0) {
     const allClients: ReactivationClient[] = []
     const rates: number[] = []
     for (const agg of selectedQ.byPro.values()) {
@@ -417,85 +423,89 @@ export async function fetchLiveDirectorBlocks(
   }
 
   let revenue_blocks: ProfessionalRevenueBlock[] | null = null
-  try {
-    revenue_blocks = professionals.map((professional) => {
-      const months: MonthRevenueRow[] = []
-      for (const m of monthsNeeded) {
-        const map = monthMaps.get(m)!
-        let hit: { revenue: number; attended: number; ticketAvg: number } | undefined
-        for (const [avecName, stats] of map) {
-          const matched = matchDirectorProfessional(avecName, [professional])
-          if (matched) {
-            hit = stats
-            break
-          }
-        }
-        // Também tenta match contra lista completa (nome Avec → este pro)
-        if (!hit) {
+  if (includeRevenue) {
+    try {
+      revenue_blocks = professionals.map((professional) => {
+        const months: MonthRevenueRow[] = []
+        for (const m of monthsNeeded) {
+          const map = monthMaps.get(m)!
+          let hit: { revenue: number; attended: number; ticketAvg: number } | undefined
           for (const [avecName, stats] of map) {
-            if (matchDirectorProfessional(avecName, professionals)?.id === professional.id) {
+            const matched = matchDirectorProfessional(avecName, [professional])
+            if (matched) {
               hit = stats
               break
             }
           }
-        }
-        months.push(
-          hit
-            ? {
-                month: m,
-                label: labelMonth(m),
-                revenue: Math.round(hit.revenue),
-                ticket_avg: Math.round(hit.ticketAvg),
-                attended: hit.attended,
+          // Também tenta match contra lista completa (nome Avec → este pro)
+          if (!hit) {
+            for (const [avecName, stats] of map) {
+              if (matchDirectorProfessional(avecName, professionals)?.id === professional.id) {
+                hit = stats
+                break
               }
-            : emptyMonthRow(m),
-        )
-      }
-      months.sort((a, b) => a.month.localeCompare(b.month))
-      return {
-        professional,
-        months,
-        quarters: aggregateQuarterRevenue(months),
-        selected_month: selectedMonth,
-      }
-    })
-  } catch (e) {
-    warnings.push(`0021 falhou ao montar blocos: ${e instanceof Error ? e.message : String(e)}`)
+            }
+          }
+          months.push(
+            hit
+              ? {
+                  month: m,
+                  label: labelMonth(m),
+                  revenue: Math.round(hit.revenue),
+                  ticket_avg: Math.round(hit.ticketAvg),
+                  attended: hit.attended,
+                }
+              : emptyMonthRow(m),
+          )
+        }
+        months.sort((a, b) => a.month.localeCompare(b.month))
+        return {
+          professional,
+          months,
+          quarters: aggregateQuarterRevenue(months),
+          selected_month: selectedMonth,
+        }
+      })
+    } catch (e) {
+      warnings.push(`0021 falhou ao montar blocos: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   let return_blocks: ProfessionalReturnBlock[] | null = null
-  try {
-    return_blocks = professionals.map((professional) => {
-      const selAgg = selByPro.get(professional.id)
-      const cmpAgg = cmpByPro.get(professional.id)
+  if (includeReturn) {
+    try {
+      return_blocks = professionals.map((professional) => {
+        const selAgg = selByPro.get(professional.id)
+        const cmpAgg = cmpByPro.get(professional.id)
 
-      const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, salonCmp, null)
-      const selRow = buildQuarterRow(selectedQuarter, selAgg, salonSel, cmpRow.return_rate)
+        const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, salonCmp, null)
+        const selRow = buildQuarterRow(selectedQuarter, selAgg, salonSel, cmpRow.return_rate)
 
-      // Se não há lista por pro mas há taxa salão, ainda mostra a taxa
-      if (!selAgg && salonSel != null && selRow.clients_total === 0) {
-        selRow.return_rate = Math.round(salonSel * 1000) / 1000
-      }
-      if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
-        cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
-        selRow.delta_vs_prev =
-          Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
-      }
+        // Se não há lista por pro mas há taxa salão, ainda mostra a taxa
+        if (!selAgg && salonSel != null && selRow.clients_total === 0) {
+          selRow.return_rate = Math.round(salonSel * 1000) / 1000
+        }
+        if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
+          cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
+          selRow.delta_vs_prev =
+            Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
+        }
 
-      const reactivation = (selAgg?.clients ?? [])
-        .slice()
-        .sort((a, b) => b.days_since - a.days_since)
+        const reactivation = (selAgg?.clients ?? [])
+          .slice()
+          .sort((a, b) => b.days_since - a.days_since)
 
-      return {
-        professional,
-        quarters: [cmpRow, selRow],
-        selected_quarter: selectedQuarter,
-        compare_quarter: compareQuarter,
-        reactivation,
-      }
-    })
-  } catch (e) {
-    warnings.push(`0011 falhou ao montar blocos: ${e instanceof Error ? e.message : String(e)}`)
+        return {
+          professional,
+          quarters: [cmpRow, selRow],
+          selected_quarter: selectedQuarter,
+          compare_quarter: compareQuarter,
+          reactivation,
+        }
+      })
+    } catch (e) {
+      warnings.push(`0011 falhou ao montar blocos: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   const hasAnyRevenue =
@@ -505,14 +515,21 @@ export async function fetchLiveDirectorBlocks(
     (return_blocks.some((b) => b.reactivation.length > 0) ||
       return_blocks.some((b) => b.quarters.some((q) => q.return_rate > 0 || q.clients_total > 0)))
 
-  if (revenue_blocks == null && return_blocks == null) {
+  if (includeRevenue && includeReturn && revenue_blocks == null && return_blocks == null) {
     throw new Error(
       `Avec 0011/0021 sem dados utilizáveis${warnings.length ? ` (${warnings.join('; ')})` : ''}`,
     )
   }
 
-  if (!hasAnyRevenue) warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
-  if (!hasAnyReturn) warnings.push('0011 sem lista/taxa casada aos profissionais do portfólio')
+  // Sem sinal útil → null para o caller manter mock (evita tabela de 0% vazia).
+  if (includeRevenue && !hasAnyRevenue) {
+    warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
+    revenue_blocks = null
+  }
+  if (includeReturn && !hasAnyReturn) {
+    warnings.push('0011 sem lista/taxa casada aos profissionais do portfólio')
+    return_blocks = null
+  }
 
   return { return_blocks, revenue_blocks, warnings }
 }

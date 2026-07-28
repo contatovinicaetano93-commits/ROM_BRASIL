@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { listDirectorProfessionals } from './professionals'
+import {
+  listDirectorProfessionals,
+  listDirectorReportProfessionals,
+} from './professionals'
 
 const ORIGINAL_PANEL = process.env.ROM_PANEL
 
@@ -32,5 +35,17 @@ describe('listDirectorProfessionals — roster por unidade', () => {
     const brasilIds = new Set(listDirectorProfessionals(false).map((p) => p.id))
     const overlap = [...brasilIds].filter((id) => iguatemiIds.has(id))
     expect(overlap).toEqual([])
+  })
+})
+
+describe('listDirectorReportProfessionals — só piso', () => {
+  it('brasil: só cabelo/maquiagem (sem adm/baru/marketing)', () => {
+    process.env.ROM_PANEL = 'brasil'
+    const floor = listDirectorReportProfessionals()
+    const all = listDirectorProfessionals()
+    expect(floor.length).toBeGreaterThan(50)
+    expect(floor.length).toBeLessThan(all.length)
+    expect(floor.every((p) => p.role === 'hairstylist' || p.role === 'makeup')).toBe(true)
+    expect(floor.some((p) => /almoxarifado|baru|marketing/i.test(p.name))).toBe(false)
   })
 })

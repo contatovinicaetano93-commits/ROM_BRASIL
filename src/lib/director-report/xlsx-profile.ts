@@ -4,7 +4,7 @@ import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
 import { fetchProfessionalProfileMonths } from './avec-live'
 import { buildMockRevenueBlocks, defaultSelectedMonth } from './mock'
 import { aggregateQuarterRevenue, labelQuarter, monthsInQuarter, quarterOfMonth } from './period'
-import { listDirectorProfessionals } from './professionals'
+import { listDirectorReportProfessionals } from './professionals'
 import type { MonthRevenueRow, QuarterKey } from './types'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -44,7 +44,7 @@ export async function buildProfessionalProfileWorkbook(
   professionalId: string,
   opts: { forceMock?: boolean } = {}
 ): Promise<ProfessionalProfileResult> {
-  const professionals = listDirectorProfessionals(true)
+  const professionals = listDirectorReportProfessionals(true)
   const professional = professionals.find((p) => p.id === professionalId)
   if (!professional) {
     throw new Error('Profissional não encontrado')

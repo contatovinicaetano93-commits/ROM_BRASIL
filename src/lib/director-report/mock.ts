@@ -193,7 +193,12 @@ function buildSyntheticReactivation(pro: DirectorProfessional): ReactivationClie
 }
 
 function buildReactivation(pro: DirectorProfessional): ReactivationClient[] {
-  if (pro.name === 'Dani Mariniello' || pro.id === 'pro-dani-mariniello') {
+  if (
+    pro.name === 'Dani Mariniello' ||
+    pro.name === 'Daniela Mariniello' ||
+    pro.id === 'pro-dani-mariniello' ||
+    pro.id === 'pro-brasil-daniela-mariniello'
+  ) {
     return buildDaniReactivation()
   }
   return buildSyntheticReactivation(pro)
@@ -207,7 +212,10 @@ export function buildMockReturnBlocks(
   return professionals.map((professional) => {
     const quarters = buildQuartersForPro(professional)
     // Dani: taxa alinhada ao volume real da lista 0011
-    if (professional.name === 'Dani Mariniello') {
+    if (
+      professional.name === 'Dani Mariniello' ||
+      professional.name === 'Daniela Mariniello'
+    ) {
       const n = daniFixture.clients.length
       const q1 = quarters.find((q) => q.quarter === '2026-Q1')
       if (q1) {
