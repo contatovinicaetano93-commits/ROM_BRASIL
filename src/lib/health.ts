@@ -54,13 +54,39 @@ export async function getHealthStatus() {
   const brand = getBrand()
   const deployment = getDeploymentContext()
   const validation = validateDeploymentEnv()
-  const [lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
-    getLastAvecSync('fast'),
-    getLastAvecSync('full'),
-    probeKpiLayers(),
-    getLastStockSync('stock_fast'),
-    getLastStockSync('stock_full'),
-  ])
+
+  // Sequencial: Promise.all de 5 leituras no pooler (max:1) competia com outras
+  // lambdas e o /api/health estourava → HTML de timeout → SyntaxError no Safari.
+  let lastFast = null
+  let lastFull = null
+  let kpiLayers: Record<string, number | null> = { p1: null, p2: null, p3: null }
+  let stockLastFast = null
+  let stockLastFull = null
+  try {
+    lastFast = await getLastAvecSync('fast')
+  } catch (e) {
+    logger.warn('health last_fast failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  try {
+    lastFull = await getLastAvecSync('full')
+  } catch (e) {
+    logger.warn('health last_full failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  try {
+    kpiLayers = await probeKpiLayers()
+  } catch (e) {
+    logger.warn('health kpi layers failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  try {
+    stockLastFast = await getLastStockSync('stock_fast')
+  } catch (e) {
+    logger.warn('health stock_fast failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  try {
+    stockLastFull = await getLastStockSync('stock_full')
+  } catch (e) {
+    logger.warn('health stock_full failed', { error: e instanceof Error ? e.message : String(e) })
+  }
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
