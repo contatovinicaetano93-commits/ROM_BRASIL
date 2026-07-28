@@ -51,6 +51,8 @@ describe('period-analytics', () => {
     sqlMock
       .mockResolvedValueOnce([{ revenue: 10000, attended: 50 }])
       .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+      .mockResolvedValueOnce([{ revenue: 9000, attended: 45 }])
+      .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
     getSalonP1DailyNear.mockResolvedValue({
       day: '2026-07-31',
       professionals: [
@@ -93,5 +95,8 @@ describe('period-analytics', () => {
     expect(result.snapshot_missing).toBe(false)
     expect(result.month_revenue).toBeTypeOf('number')
     expect(result.month_attended).toBeTypeOf('number')
+    expect(result.previous).not.toBeNull()
+    expect(result.previous?.month).toBe('2026-06')
+    expect(result.mtd).toBeTypeOf('boolean')
   })
 })

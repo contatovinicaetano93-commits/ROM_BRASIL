@@ -120,6 +120,18 @@ async function sumAttendanceLoss(
   }
 }
 
+export interface PeriodMonthTotals {
+  month: string
+  label: string
+  from: string
+  to: string
+  revenue: number
+  attended: number
+  cancelled: number
+  no_shows: number
+  lost_revenue: number
+}
+
 export interface PeriodAnalytics {
   month: string
   label: string
@@ -146,6 +158,32 @@ export interface PeriodAnalytics {
   /** Totais do mês em salon_daily_metrics (receita/atendidos). */
   month_revenue: number
   month_attended: number
+  /** true se a janela atual é MTD (mês corrente). */
+  mtd: boolean
+  /** Mês anterior alinhado (MTD→mesmo dia; mês fechado→mês cheio). */
+  previous: PeriodMonthTotals | null
+}
+
+function previousMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const dt = new Date(Date.UTC(y!, m! - 2, 1))
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/** Janela do mês anterior comparável: se atual é MTD, corta o anterior no mesmo dia. */
+function resolvePreviousComparableWindow(
+  current: ReturnType<typeof resolveMonthWindow>,
+): { month: string; from: string; to: string; label: string } {
+  const month = previousMonthKey(current.month)
+  const full = resolveMonthWindow(month, current.to)
+  if (!current.mtd) {
+    return { month, from: full.from, to: full.to, label: labelMonthPt(month) }
+  }
+  const dayNum = Number(current.to.slice(8, 10))
+  const lastDay = Number(full.to.slice(8, 10))
+  const clamped = Math.min(dayNum, lastDay)
+  const to = `${month}-${String(clamped).padStart(2, '0')}`
+  return { month, from: full.from, to, label: labelMonthPt(month) }
 }
 
 /**
@@ -157,21 +195,29 @@ export async function computePeriodAnalytics(opts?: {
 }): Promise<PeriodAnalytics> {
   const window = resolveMonthWindow(opts?.month ?? todayIso().slice(0, 7))
   const { month, from, to } = window
+  const prevWindow = resolvePreviousComparableWindow(window)
   const nearOpts = { maxSkewDays: 14 }
-  const [totals, loss, p1, p2, p3] = await Promise.all([
+  const [totals, loss, p1, p2, p3, prevTotals, prevLoss] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
     getSalonP1DailyNear(to, nearOpts),
     getSalonP2DailyNear(to, nearOpts),
     getSalonP3DailyNear(to, nearOpts),
+    sumRevenueAndAttended(prevWindow.from, prevWindow.to),
+    sumAttendanceLoss(prevWindow.from, prevWindow.to),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
+  const prevTicket =
+    prevTotals.attended > 0
+      ? Math.round((prevTotals.revenue / prevTotals.attended) * 100) / 100
+      : null
   const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals)
   const allPackages = asJsonArray<P2PackageRow>(p2?.packages)
   // revenue no snapshot 0061 já é faturamento da linha (não preço unitário).
   const packages_revenue =
     Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+  const lost_revenue = estimateLostRevenue(loss.cancelled, loss.no_shows, ticket_avg)
 
   return {
     month,
@@ -184,7 +230,7 @@ export async function computePeriodAnalytics(opts?: {
     cancelled: loss.cancelled,
     no_shows: loss.no_shows,
     ticket_avg,
-    lost_revenue: estimateLostRevenue(loss.cancelled, loss.no_shows, ticket_avg),
+    lost_revenue,
     packages: allPackages.slice(0, 10),
     packages_sold: Number(p2?.packages_sold ?? 0) || 0,
     packages_revenue,
@@ -196,5 +242,17 @@ export async function computePeriodAnalytics(opts?: {
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
     month_revenue: totals.revenue,
     month_attended: totals.attended,
+    mtd: window.mtd,
+    previous: {
+      month: prevWindow.month,
+      label: prevWindow.label,
+      from: prevWindow.from,
+      to: prevWindow.to,
+      revenue: prevTotals.revenue,
+      attended: prevTotals.attended,
+      cancelled: prevLoss.cancelled,
+      no_shows: prevLoss.no_shows,
+      lost_revenue: estimateLostRevenue(prevLoss.cancelled, prevLoss.no_shows, prevTicket),
+    },
   }
 }

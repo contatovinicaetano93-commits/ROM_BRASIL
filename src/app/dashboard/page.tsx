@@ -270,7 +270,39 @@ export default function DashboardPage() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <MiniStat
+        <InsightCard
+          icon={<TrendingUp size={15} />}
+          label={`Receita · mês acum. · ${period?.label ?? '—'}`}
+          value={
+            loading || !period
+              ? '—'
+              : period.month_revenue > 0
+                ? formatCurrency(period.month_revenue)
+                : 'sem receita'
+          }
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedCurrency(period.month_revenue - period.previous.revenue)} vs ${period.previous.label}`,
+                  positive: period.month_revenue - period.previous.revenue >= 0,
+                }
+              : null
+          }
+        />
+        <InsightCard
+          icon={<Users size={15} />}
+          label="Atendidos · mês acum."
+          value={loading || !period ? '—' : String(period.month_attended)}
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedNumber(period.month_attended - period.previous.attended)} vs ${period.previous.label}`,
+                  positive: period.month_attended - period.previous.attended >= 0,
+                }
+              : null
+          }
+        />
+        <InsightCard
           icon={<Percent size={15} />}
           label={`Ocupação · Avec 30d · ${period?.label ?? '—'}`}
           value={dashValue(
@@ -280,7 +312,7 @@ export default function DashboardPage() {
             period?.snapshot_missing ? 'sem snapshot' : 'sem ocupação',
           )}
         />
-        <MiniStat
+        <InsightCard
           icon={<AlertTriangle size={15} />}
           label="Receita perdida · mês acum."
           value={
@@ -290,8 +322,17 @@ export default function DashboardPage() {
                 ? 'sem atendidos'
                 : formatCurrency(period.lost_revenue)
           }
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedCurrency(period.lost_revenue - period.previous.lost_revenue)} vs ${period.previous.label}`,
+                  // Menos receita perdida = melhor
+                  positive: period.lost_revenue - period.previous.lost_revenue <= 0,
+                }
+              : null
+          }
         />
-        <MiniStat
+        <InsightCard
           icon={<Users size={15} />}
           label="Cancel. + no-show · mês acum."
           value={
@@ -299,8 +340,51 @@ export default function DashboardPage() {
               ? '—'
               : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
           }
+          compare={
+            !loading && period?.previous
+              ? (() => {
+                  const cur = (period.cancelled ?? 0) + (period.no_shows ?? 0)
+                  const prev = period.previous.cancelled + period.previous.no_shows
+                  return {
+                    text: `${fmtSignedNumber(cur - prev)} vs ${period.previous.label}`,
+                    positive: cur - prev <= 0,
+                  }
+                })()
+              : null
+          }
         />
-        <MiniStat
+        <InsightCard
+          icon={<TrendingUp size={15} />}
+          label={period?.previous ? `Vs ${period.previous.label}` : 'Vs mês anterior'}
+          value={
+            loading || !period?.previous
+              ? '—'
+              : fmtSignedCurrency(period.month_revenue - period.previous.revenue)
+          }
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${period.label} ${formatCurrency(period.month_revenue)} · ${period.month_attended} atend. vs ${period.previous.label} ${formatCurrency(period.previous.revenue)} · ${period.previous.attended} atend.`,
+                  positive: period.month_revenue - period.previous.revenue >= 0,
+                  muted: true,
+                }
+              : null
+          }
+          emphasize
+        />
+      </div>
+
+      {!loading && period?.previous ? (
+        <p className="text-xs text-muted">
+          Comparativo MTD: {period.label} {formatCurrency(period.month_revenue)} ·{' '}
+          {period.month_attended} atend. vs {period.previous.label}{' '}
+          {formatCurrency(period.previous.revenue)} · {period.previous.attended} atend.
+          {period.mtd === false ? '' : ` · janela alinhada até dia ${period.to.slice(8)}`}
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <InsightCard
           icon={<Package size={15} />}
           label="Pacotes · Avec 30d"
           value={dashValue(
@@ -308,7 +392,7 @@ export default function DashboardPage() {
             period?.snapshot_missing ? 'sem snapshot' : formatCurrency(0),
           )}
         />
-        <MiniStat
+        <InsightCard
           icon={<Sparkles size={15} />}
           label="Novos · Avec 30d"
           value={dashValue(
@@ -316,7 +400,7 @@ export default function DashboardPage() {
             period?.snapshot_missing ? 'sem snapshot' : '0',
           )}
         />
-        <MiniStat
+        <InsightCard
           icon={<TrendingUp size={15} />}
           label="Retorno · Avec 30d"
           value={dashValue(
@@ -352,12 +436,12 @@ export default function DashboardPage() {
                 </p>
               )}
             </div>
-            <MiniStat
+            <InsightCard
               icon={<Users size={15} />}
               label={`Novos aguardando · funil · ${month}`}
               value={loading ? '—' : String(novos)}
             />
-            <MiniStat
+            <InsightCard
               icon={<Layers size={15} />}
               label={`Canais ativos · funil · ${month}`}
               value={loading ? '—' : String(activeChannels)}
@@ -634,19 +718,27 @@ export default function DashboardPage() {
                     <td className="py-2 tabular-nums text-muted">{i + 1}</td>
                     <td className="py-2 font-medium text-foreground/90">{p.name}</td>
                     <td className="py-2 tabular-nums">
-                      {formatCurrency(p.revenue)}
-                      {p.delta && <DeltaTag value={p.delta.revenue} suffix="" isCurrency />}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{formatCurrency(p.revenue)}</span>
+                        {p.delta && (
+                          <DeltaUnder value={p.delta.revenue} suffix="" isCurrency />
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 tabular-nums">
-                      {p.attended}
-                      {p.delta && <DeltaTag value={p.delta.attended} suffix="" />}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{p.attended}</span>
+                        {p.delta && <DeltaUnder value={p.delta.attended} suffix="" />}
+                      </div>
                     </td>
                     <td className="py-2 tabular-nums">{formatCurrency(p.ticket_avg)}</td>
                     <td className="py-2 tabular-nums">
-                      {p.occupancy != null ? formatPercent(p.occupancy) : '—'}
-                      {p.delta?.occupancy != null && (
-                        <DeltaTag value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{p.occupancy != null ? formatPercent(p.occupancy) : '—'}</span>
+                        {p.delta?.occupancy != null && (
+                          <DeltaUnder value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -669,19 +761,61 @@ export default function DashboardPage() {
   )
 }
 
-function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function fmtSignedCurrency(diff: number): string {
+  const rounded = Math.round(diff * 100) / 100
+  if (rounded === 0) return formatCurrency(0)
+  const sign = rounded > 0 ? '+' : '−'
+  return `${sign}${formatCurrency(Math.abs(rounded))}`
+}
+
+function fmtSignedNumber(diff: number): string {
+  if (diff === 0) return '0'
+  const sign = diff > 0 ? '+' : '−'
+  return `${sign}${Math.abs(diff)}`
+}
+
+function InsightCard({
+  icon,
+  label,
+  value,
+  compare,
+  emphasize,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  compare?: { text: string; positive: boolean; muted?: boolean } | null
+  emphasize?: boolean
+}) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div
+      className={`rounded-2xl border p-4 ${
+        emphasize ? 'border-gold/30 bg-gradient-to-b from-gold/10 to-card' : 'border-border bg-card'
+      }`}
+    >
       <div className="mb-2 flex items-center gap-1.5 text-muted">
         {icon}
         <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="text-2xl font-semibold tabular-nums leading-tight">{value}</p>
+      {compare ? (
+        <p
+          className={`mt-1.5 text-[0.7rem] leading-snug ${
+            compare.muted
+              ? 'text-muted'
+              : compare.positive
+                ? 'font-medium text-success'
+                : 'font-medium text-warning'
+          }`}
+        >
+          {compare.text}
+        </p>
+      ) : null}
     </div>
   )
 }
 
-function DeltaTag({
+function DeltaUnder({
   value,
   suffix,
   isCurrency,
@@ -694,10 +828,8 @@ function DeltaTag({
   const positive = value > 0
   const formatted = isCurrency ? formatCurrency(Math.abs(value)) : `${Math.abs(value)}${suffix}`
   return (
-    <span
-      className={`ml-1.5 text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}
-    >
-      {positive ? '+' : '-'}
+    <span className={`text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}>
+      {positive ? '+' : '−'}
       {formatted}
     </span>
   )
@@ -719,23 +851,23 @@ function TmCompareCol({
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <p className="text-[0.65rem] uppercase tracking-wide text-muted">{title}</p>
-      <div className="mt-2 flex items-baseline gap-2">
-        <p className="text-2xl font-semibold tabular-nums">
-          {current.avgMinutes != null ? `${current.avgMinutes} min` : '—'}
+      <p className="mt-2 text-2xl font-semibold tabular-nums leading-tight">
+        {current.avgMinutes != null ? `${current.avgMinutes} min` : '—'}
+      </p>
+      <p className="mt-0.5 text-xs text-muted">{current.label}</p>
+      <p className="mt-2 text-xs text-muted">
+        vs {previous.label}: {previous.avgMinutes != null ? `${previous.avgMinutes} min` : '—'}
+      </p>
+      {delta != null && (
+        <p
+          className={`mt-1 text-[0.7rem] font-semibold ${
+            delta <= 0 ? 'text-success' : 'text-warning'
+          }`}
+        >
+          {delta > 0 ? '+' : '−'}
+          {Math.abs(delta)} min vs {previous.label}
         </p>
-        <span className="text-xs text-muted">{current.label}</span>
-      </div>
-      <div className="mt-2 flex items-center justify-between text-xs text-muted">
-        <span>
-          vs {previous.label}: {previous.avgMinutes != null ? `${previous.avgMinutes} min` : '—'}
-        </span>
-        {delta != null && (
-          <span className={delta <= 0 ? 'font-semibold text-success' : 'font-semibold text-warning'}>
-            {delta > 0 ? '+' : ''}
-            {delta} min
-          </span>
-        )}
-      </div>
+      )}
     </div>
   )
 }
