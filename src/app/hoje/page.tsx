@@ -169,9 +169,7 @@ export default function HojePage() {
                 ? '—'
                 : salon?.revenue
                   ? formatCurrency(salon.revenue)
-                  : syncUi?.status === 'partial' || syncUi?.status === 'error'
-                    ? '—'
-                    : formatCurrency(0)
+                  : '—'
             }
             loading={loading}
             source={avecSource}

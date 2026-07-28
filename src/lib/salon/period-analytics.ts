@@ -65,13 +65,14 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
   return Math.round(avg * 1000) / 1000
 }
 
-/** Receita perdida estimada: (cancelados + no-shows) × ticket médio. */
+/** Receita perdida estimada: (cancelados + no-shows) × ticket médio.
+ * Sem ticket → null (não inventar R$ 0,00 nos cards). */
 export function estimateLostRevenue(
   cancelled: number,
   noShows: number,
   ticketAvg: number | null,
-): number {
-  if (ticketAvg == null || !(ticketAvg > 0)) return 0
+): number | null {
+  if (ticketAvg == null || !(ticketAvg > 0)) return null
   const lost = (Math.max(0, cancelled) + Math.max(0, noShows)) * ticketAvg
   return Math.round(lost * 100) / 100
 }
@@ -81,20 +82,16 @@ async function sumRevenueAndAttended(
   to: string,
 ): Promise<{ revenue: number; attended: number }> {
   const sql = getSql()
-  try {
-    const rows = (await sql`
-      select
-        coalesce(sum(revenue), 0)::float as revenue,
-        coalesce(sum(attended), 0)::int as attended
-      from salon_daily_metrics
-      where day >= ${from}::date and day <= ${to}::date
-    `) as { revenue: number; attended: number }[]
-    return {
-      revenue: Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100,
-      attended: Number(rows[0]?.attended ?? 0) || 0,
-    }
-  } catch {
-    return { revenue: 0, attended: 0 }
+  const rows = (await sql`
+    select
+      coalesce(sum(revenue), 0)::float as revenue,
+      coalesce(sum(attended), 0)::int as attended
+    from salon_daily_metrics
+    where day >= ${from}::date and day <= ${to}::date
+  `) as { revenue: number; attended: number }[]
+  return {
+    revenue: Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100,
+    attended: Number(rows[0]?.attended ?? 0) || 0,
   }
 }
 
@@ -103,20 +100,16 @@ async function sumAttendanceLoss(
   to: string,
 ): Promise<{ cancelled: number; no_shows: number }> {
   const sql = getSql()
-  try {
-    const rows = (await sql`
-      select
-        coalesce(sum(cancelled), 0)::int as cancelled,
-        coalesce(sum(no_shows), 0)::int as no_shows
-      from salon_daily_metrics
-      where day >= ${from}::date and day <= ${to}::date
-    `) as { cancelled: number; no_shows: number }[]
-    return {
-      cancelled: Number(rows[0]?.cancelled ?? 0) || 0,
-      no_shows: Number(rows[0]?.no_shows ?? 0) || 0,
-    }
-  } catch {
-    return { cancelled: 0, no_shows: 0 }
+  const rows = (await sql`
+    select
+      coalesce(sum(cancelled), 0)::int as cancelled,
+      coalesce(sum(no_shows), 0)::int as no_shows
+    from salon_daily_metrics
+    where day >= ${from}::date and day <= ${to}::date
+  `) as { cancelled: number; no_shows: number }[]
+  return {
+    cancelled: Number(rows[0]?.cancelled ?? 0) || 0,
+    no_shows: Number(rows[0]?.no_shows ?? 0) || 0,
   }
 }
 
@@ -129,7 +122,7 @@ export interface PeriodMonthTotals {
   attended: number
   cancelled: number
   no_shows: number
-  lost_revenue: number
+  lost_revenue: number | null
   /** Ticket médio do período comparável (null se sem atendidos). */
   ticket_avg: number | null
   /** Snapshot KPIs — null se P1/P2/P3 ausente no mês anterior. */
@@ -152,14 +145,14 @@ export interface PeriodAnalytics {
   cancelled: number
   no_shows: number
   ticket_avg: number | null
-  lost_revenue: number
+  lost_revenue: number | null
   packages: P2PackageRow[]
-  packages_sold: number
-  packages_revenue: number
+  packages_sold: number | null
+  packages_revenue: number | null
   booking_channels: P2ChannelRow[]
   acquisition: P1AcquisitionRow[]
   return_rate: number | null
-  new_clients_period: number
+  new_clients_period: number | null
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
   /** Totais do mês em salon_daily_metrics (receita/atendidos). */
@@ -205,8 +198,10 @@ export async function computePeriodAnalytics(opts?: {
   const allPackages = asJsonArray<P2PackageRow>(p2?.packages)
   const prevPackages = asJsonArray<P2PackageRow>(prevP2?.packages)
   // revenue no snapshot 0061 já é faturamento da linha (não preço unitário).
-  const packages_revenue =
-    Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+  // Sem P2 → null (não pintar R$ 0 / MoM falso).
+  const packages_revenue = p2
+    ? Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+    : null
   const prevPackagesRevenue = prevP2
     ? Math.round(prevPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
     : null
@@ -225,12 +220,12 @@ export async function computePeriodAnalytics(opts?: {
     ticket_avg,
     lost_revenue,
     packages: allPackages.slice(0, 10),
-    packages_sold: Number(p2?.packages_sold ?? 0) || 0,
+    packages_sold: p2 != null ? Number(p2.packages_sold ?? 0) || 0 : null,
     packages_revenue,
     booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
     acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
     return_rate: p3 != null ? Number(p3.return_rate) : null,
-    new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
+    new_clients_period: p3 != null ? Number(p3.new_clients_period ?? 0) || 0 : null,
     top_professionals: professionals.slice(0, 8),
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
     month_revenue: totals.revenue,

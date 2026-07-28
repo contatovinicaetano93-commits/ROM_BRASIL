@@ -332,7 +332,9 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Receita perdida (est.)</span>
                   <span className="min-w-0 text-right tabular-nums">
-                    {formatCurrency(data.analytics.lost_revenue)}
+                    {data.analytics.lost_revenue != null
+                      ? formatCurrency(data.analytics.lost_revenue)
+                      : '—'}
                     {(() => {
                       const mom = fmtMomDelta(
                         data.analytics.lost_revenue,
@@ -354,7 +356,9 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
                   <span className="min-w-0 break-words text-right tabular-nums [overflow-wrap:anywhere]">
-                    {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
+                    {data.analytics.packages_sold != null && data.analytics.packages_revenue != null
+                      ? `${data.analytics.packages_sold} · ${formatCurrency(data.analytics.packages_revenue)}`
+                      : '—'}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
@@ -363,7 +367,10 @@ export default function RelatoriosOverviewPage() {
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    ·{' '}
+                    {data.analytics.new_clients_period != null
+                      ? data.analytics.new_clients_period
+                      : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
