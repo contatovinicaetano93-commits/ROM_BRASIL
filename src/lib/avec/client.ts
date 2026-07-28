@@ -339,14 +339,20 @@ export function formatTruncationWarning(reportId: string, result: AvecReportFetc
 export async function fetchAllAvecReport(
   reportId: string,
   params: AvecReportParams = {},
-  maxPages = getAvecSyncMaxPages()
+  maxPages = getAvecSyncMaxPages(),
+  opts?: { deadlineAt?: number | null },
 ): Promise<AvecReportFetchResult> {
   const limit = params.limit ?? AVEC_PAGE_LIMIT
   const all: Record<string, unknown>[] = []
   let pagesFetched = 0
   let truncated = false
+  const deadlineAt = opts?.deadlineAt ?? null
 
   for (let page = 1; page <= maxPages; page++) {
+    if (deadlineAt != null && Date.now() >= deadlineAt) {
+      truncated = true
+      break
+    }
     const payload = await fetchAvecReport(reportId, { ...params, page, limit })
     const rows = extractRows(payload)
     pagesFetched = page

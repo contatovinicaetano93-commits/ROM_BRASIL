@@ -58,9 +58,9 @@ export interface StockSyncRun {
 }
 
 /** Fast estoque no cron Vercel (~300s): páginas curtas + orçamento de parede. */
-const STOCK_FAST_MAX_PAGES = 6
+const STOCK_FAST_MAX_PAGES = 2
 const STOCK_FAST_PAGE_LIMIT = 100
-const STOCK_FAST_BUDGET_MS = 220_000
+const STOCK_FAST_BUDGET_MS = 240_000
 
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
@@ -141,27 +141,25 @@ async function snapshotSafe(
   }
 }
 
-class StockBudgetExceededError extends Error {
-  constructor(step: string) {
-    super(`Sync estoque abortado por orçamento de tempo em ${step} (evita timeout/kill)`)
-    this.name = 'StockBudgetExceededError'
-  }
-}
-
-function assertBudget(deadlineAt: number | null, step: string) {
-  if (deadlineAt != null && Date.now() >= deadlineAt) {
-    throw new StockBudgetExceededError(step)
-  }
-}
-
 async function syncPositions(
   stats: StockSyncStats,
   syncRunId: string,
-  opts: { maxPages: number; pageLimit: number; deadlineAt: number | null },
+  opts: {
+    maxPages: number
+    pageLimit: number
+    deadlineAt: number | null
+    /** Fast com teto baixo: truncamento é esperado, não vira warning. */
+    expectTruncation?: boolean
+    skipSnapshot?: boolean
+  },
 ) {
   const id = reportId('stock_position')
   if (!id) return
-  assertBudget(opts.deadlineAt, '0149')
+  if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+    stats.warnings.push('0149: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
   const params = {
     inicio: fmtAvecDate(new Date()),
     marca: '',
@@ -172,28 +170,42 @@ async function syncPositions(
     site: avecSiteParam(),
   }
   try {
-    const result = await fetchAllAvecReport(id, params, opts.maxPages)
-    if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-    await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages, {
+      deadlineAt: opts.deadlineAt,
+    })
+    if (result.truncated && !opts.expectTruncation) {
+      stats.warnings.push(formatTruncationWarning(id, result))
+    }
+    if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt && result.rows.length === 0) {
+      stats.aborted = true
+      stats.warnings.push('0149: orçamento esgotado durante fetch (abort limpo)')
+      return
+    }
+    if (!opts.skipSnapshot) {
+      await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    }
 
     let parsedCount = 0
     for (const row of result.rows) {
-      assertBudget(opts.deadlineAt, '0149-apply')
+      if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0149: orçamento esgotado após ${stats.positions_synced} posições (abort limpo)`,
+        )
+        break
+      }
       const pos = normalizeStockPositionRow(row)
       if (!pos) continue
       parsedCount++
       await upsertStockProductFromPosition(pos)
       stats.positions_synced++
     }
-    // Se a Avec devolveu linhas mas quase nada foi reconhecido, o formato do
-    // relatório provavelmente mudou — sinaliza em vez de falhar em silêncio.
     if (result.rows.length > 5 && parsedCount < result.rows.length * 0.5) {
       stats.warnings.push(
         `0149: só ${parsedCount}/${result.rows.length} linhas reconhecidas — possível mudança no formato do relatório`
       )
     }
   } catch (e) {
-    if (e instanceof StockBudgetExceededError) throw e
     stats.errors.push(`0149 (posição): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
@@ -201,21 +213,43 @@ async function syncPositions(
 async function syncAlerts(
   stats: StockSyncStats,
   syncRunId: string,
-  opts: { maxPages: number; pageLimit: number; deadlineAt: number | null },
+  opts: {
+    maxPages: number
+    pageLimit: number
+    deadlineAt: number | null
+    expectTruncation?: boolean
+    skipSnapshot?: boolean
+  },
 ) {
   const id = reportId('stock_alert')
   if (!id) return
-  assertBudget(opts.deadlineAt, '0046')
+  if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+    stats.warnings.push('0046: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
   const params = { limit: opts.pageLimit }
   try {
-    const result = await fetchAllAvecReport(id, params, opts.maxPages)
-    if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-    await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages, {
+      deadlineAt: opts.deadlineAt,
+    })
+    if (result.truncated && !opts.expectTruncation) {
+      stats.warnings.push(formatTruncationWarning(id, result))
+    }
+    if (!opts.skipSnapshot) {
+      await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    }
 
     const seenAvecProductIds: string[] = []
     let active = 0
     for (const row of result.rows) {
-      assertBudget(opts.deadlineAt, '0046-apply')
+      if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0046: orçamento esgotado após ${active} alertas (abort limpo)`,
+        )
+        break
+      }
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
       const applied = await applyStockAlert(alert)
@@ -224,13 +258,10 @@ async function syncAlerts(
       active++
     }
     stats.alerts_active = active
-    // Só resolve stale quando o match funcionou (active>0) ou o relatório veio
-    // vazio de verdade — se 0046 trouxe linhas e nenhuma aplicou, não zera alertas.
     if (active > 0 || result.rows.length === 0) {
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
   } catch (e) {
-    if (e instanceof StockBudgetExceededError) throw e
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
@@ -338,6 +369,8 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     maxPages: mode === 'fast' ? STOCK_FAST_MAX_PAGES : 40,
     pageLimit: mode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
     deadlineAt,
+    expectTruncation: mode === 'fast',
+    skipSnapshot: mode === 'fast',
   }
 
   try {
@@ -361,26 +394,22 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || stats.warnings.length > 0 || stats.aborted
           ? 'partial'
           : 'ok'
 
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
+    const abortMsg = stats.aborted
+      ? (stats.warnings.find((w) => /orçamento|abort/i.test(w)) ??
+        'Sync estoque abortado por orçamento de tempo (evita timeout/kill)')
+      : null
     const topError =
       status === 'error'
         ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
-        : authErr
+        : (authErr ?? abortMsg ?? undefined)
 
     return await finishRun(run.id, status, stats, topError)
   } catch (e) {
-    if (e instanceof StockBudgetExceededError) {
-      stats.aborted = true
-      stats.errors.push(e.message)
-      stats.errors = formatAvecErrorList(stats.errors)
-      const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
-      const status: StockSyncRun['status'] = hadAnyData ? 'partial' : 'error'
-      return await finishRun(run.id, status, stats, e.message)
-    }
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)

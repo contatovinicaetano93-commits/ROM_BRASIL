@@ -723,13 +723,13 @@ async function syncDurationFrom0223(
 ) {
   const today = todayIso()
   const params = { ...periodRange(0, 0), profissional_id: '', limit: 250 }
-  // 20×250 = 5k linhas (fast); 40×250 = 10k (full) — suficiente p/ um dia.
-  const maxPages = mode === 'fast' ? 20 : 40
+  // Fast: 4 páginas bastam p/ amostrar tempo do dia; truncamento não vira warning
+  // (Avec BR costuma ter tempo=null — warning permanente = Sync parcial eterno).
+  const maxPages = mode === 'fast' ? 4 : 40
   try {
     const result = await fetchAllAvecReport('0223', params, maxPages)
-    warnIfTruncated(stats, '0223', result)
-    // Snapshot só no full e só amostra — payload gigante já foi problema no Neon.
     if (mode === 'full') {
+      warnIfTruncated(stats, '0223', result)
       await snapshotReport('0223', params, result.rows, stats, syncRunId)
     }
 
@@ -751,7 +751,8 @@ async function syncDurationFrom0223(
       service_duration_sum_minutes: sum,
       service_duration_count: count,
     })
-    if (count === 0) {
+    // Só no full: aviso de cadastro. No fast, tempo vazio é esperado e não marca partial.
+    if (count === 0 && mode === 'full') {
       stats.warnings.push(
         'TM 0223: nenhuma linha com campo tempo preenchido na Avec hoje — cadastre duração nos serviços.',
       )
