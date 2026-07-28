@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin, requireSession } from '@/lib/auth'
+import { cachedFetch } from '@/lib/cache'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { buildDirectorReport } from '@/lib/director-report/build'
 import {
@@ -138,21 +139,51 @@ export async function GET(req: NextRequest) {
 
     const compareMonthsParam = searchParams.get('compare_months')
     const stageParam = searchParams.get('stage')
-    const stage =
+    const stage: '0011' | '0021' | 'all' =
       stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
         ? stageParam
         : 'all'
-    const report = await buildDirectorReport({
-      selectedMonth: asMonth(searchParams.get('month')),
-      selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
-      compareQuarter0021: asQuarter(searchParams.get('compare_0021')),
-      compareMonths: compareMonthsParam === null ? false : compareMonthsParam !== '0',
-      selectedQuarter: asQuarter(searchParams.get('quarter')),
-      compareQuarter: asQuarter(searchParams.get('compare')),
-      professionalId: searchParams.get('professional_id') ?? undefined,
-      forceMock: searchParams.get('mock') === '1',
+    const professionalId = searchParams.get('professional_id') ?? undefined
+    const forceMock = searchParams.get('mock') === '1'
+    const selectedMonth = asMonth(searchParams.get('month'))
+    const selectedQuarter0021 = asQuarter(searchParams.get('quarter_0021'))
+    const compareQuarter0021 = asQuarter(searchParams.get('compare_0021'))
+    const compareMonths = compareMonthsParam === null ? false : compareMonthsParam !== '0'
+    const selectedQuarter = asQuarter(searchParams.get('quarter'))
+    const compareQuarter = asQuarter(searchParams.get('compare'))
+
+    const buildOpts = {
+      selectedMonth,
+      selectedQuarter0021,
+      compareQuarter0021,
+      compareMonths,
+      selectedQuarter,
+      compareQuarter,
+      professionalId,
+      forceMock,
       stage,
-    })
+    }
+
+    // JSON da UI: cache + budget Avec curto. CSV/cron: full sem cache.
+    const report =
+      format === 'json'
+        ? await cachedFetch(
+            [
+              'director:json:v3',
+              stage,
+              `m=${selectedMonth ?? ''}`,
+              `q21=${selectedQuarter0021 ?? ''}`,
+              `c21=${compareQuarter0021 ?? ''}`,
+              `cm=${compareMonths ? 1 : 0}`,
+              `q=${selectedQuarter ?? ''}`,
+              `c=${compareQuarter ?? ''}`,
+              `pro=${professionalId ?? ''}`,
+              `mock=${forceMock ? 1 : 0}`,
+            ].join(':'),
+            () => buildDirectorReport({ ...buildOpts, interactive: true }),
+            forceMock ? 60 : 300,
+          )
+        : await buildDirectorReport({ ...buildOpts, interactive: false })
 
     if (format === 'json') {
       return ok({

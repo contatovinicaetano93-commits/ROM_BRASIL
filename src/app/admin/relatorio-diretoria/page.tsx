@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { SectionCard, CountBadge, PrimaryButton } from '../../_components/ui'
+import { useClientSession } from '../../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, formatPercent, whatsAppWebUrl } from '@/lib/salon/format'
 import type { DirectorReport } from '@/lib/director-report/types'
@@ -104,14 +105,8 @@ const MONTHS = buildMonthOptions()
 
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
-  const [canViewRevenue, setCanViewRevenue] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setCanViewRevenue(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setCanViewRevenue(false))
-  }, [])
+  const { session } = useClientSession()
+  const canViewRevenue = Boolean(session?.can_view_revenue)
 
   // Estado independente por etapa — defaults = período corrente (SP)
   const [proId0011, setProId0011] = useState('')
@@ -135,15 +130,23 @@ export default function RelatorioDiretoriaPage() {
   const [stockKpis, setStockKpis] = useState<StockKpisPayload | null>(null)
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
+  const loadAbortRef = useRef<AbortController | null>(null)
 
   /** Carrega por etapa — 0011 não espera o 0021 (e vice-versa). */
   const load = useCallback(async () => {
+    if (tab === 'estoque') {
+      setLoading(false)
+      return
+    }
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoading(true)
     setError(null)
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 90_000)
+    // Servidor usa budget ~70s; 100s cobre rede + parse sem orphan falso.
+    const timer = window.setTimeout(() => controller.abort(), 100_000)
     try {
-      const stage = tab === 'estoque' ? '0011' : tab
+      const stage = tab
       const q = new URLSearchParams({
         month,
         quarter_0021: quarter0021,
@@ -158,7 +161,9 @@ export default function RelatorioDiretoriaPage() {
         cache: 'no-store',
         signal: controller.signal,
       })
+      if (controller.signal.aborted) return
       const json = await res.json()
+      if (controller.signal.aborted) return
       if (!res.ok || json.error) {
         setError(json.error ?? 'Não autorizado — entre com o login de gerência')
         return
@@ -180,14 +185,20 @@ export default function RelatorioDiretoriaPage() {
         }
       })
     } catch (e) {
+      if (controller.signal.aborted && loadAbortRef.current !== controller) {
+        // Substituído por outro load — não mostrar erro.
+        return
+      }
       if (e instanceof DOMException && e.name === 'AbortError') {
-        setError('Relatório demorou demais (>90s). Tente de novo ou marque “forçar demo”.')
+        setError('Relatório demorou demais (>100s). Tente de novo ou marque “forçar demo”.')
       } else {
         setError(String(e))
       }
     } finally {
       window.clearTimeout(timer)
-      setLoading(false)
+      if (loadAbortRef.current === controller) {
+        setLoading(false)
+      }
     }
   }, [
     month,
@@ -202,6 +213,9 @@ export default function RelatorioDiretoriaPage() {
 
   useEffect(() => {
     load()
+    return () => {
+      loadAbortRef.current?.abort()
+    }
   }, [load])
 
   const loadStock = useCallback(async () => {
@@ -246,14 +260,16 @@ export default function RelatorioDiretoriaPage() {
         return { pro: b.professional, sel, cmp, reactivation: b.reactivation }
       })
       .sort((a, b) => {
-        const byClients = b.reactivation.length - a.reactivation.length
+        const aN = a.sel?.clients_total ?? a.reactivation.length
+        const bN = b.sel?.clients_total ?? b.reactivation.length
+        const byClients = bN - aN
         if (byClients !== 0) return byClients
         return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
       })
   }, [data, quarter, compare, proId0011])
 
   const clientsOnList = useMemo(
-    () => selectedReturn.reduce((s, r) => s + r.reactivation.length, 0),
+    () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
     [selectedReturn],
   )
 
@@ -392,7 +408,13 @@ export default function RelatorioDiretoriaPage() {
           <p className="mt-2 text-xs text-muted">
             Fonte:{' '}
             <span className={data?.source === 'avec' ? 'text-foreground' : 'text-warning'}>
-              {loading ? '…' : data?.source === 'avec' ? 'Avec live' : 'demo / fixture'}
+              {loading && !data
+                ? '…'
+                : !data
+                  ? '—'
+                  : data.source === 'avec'
+                    ? 'Avec live'
+                    : 'demo / fixture'}
             </span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
@@ -571,7 +593,9 @@ export default function RelatorioDiretoriaPage() {
                         >
                           {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
                         </td>
-                        <td className="py-3 tabular-nums">{reactivation.length}</td>
+                        <td className="py-3 tabular-nums">
+                          {sel?.clients_total ?? reactivation.length}
+                        </td>
                       </tr>
                     )
                   })}
