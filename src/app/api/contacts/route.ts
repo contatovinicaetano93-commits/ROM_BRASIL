@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q') ?? searchParams.get('query') ?? null
     const status = searchParams.get('status')
 
-    const rawLimit = Number(searchParams.get('limit') ?? 2000)
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 2000) : 2000
+    const rawLimit = Number(searchParams.get('limit') ?? 100)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 2000) : 100
     // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
     let items = await listContactsWithSummary({ limit, query, pendingOnly, status })
 

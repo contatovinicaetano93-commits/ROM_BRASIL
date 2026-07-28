@@ -53,7 +53,7 @@ export default function ContatosPage() {
   async function load(searchQ = debouncedQuery, status = statusFilter) {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ sort: 'urgency', limit: '2000' })
+      const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)

@@ -123,11 +123,23 @@ export function getSessionSigningSecret() {
 }
 
 /** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
+/** Cache de tokens esperados por conta — evita N HMACs por request no middleware + handlers. */
+const expectedTokenCache = new Map<string, { token: string; expiresAt: number }>()
+const EXPECTED_TOKEN_TTL_MS = 5 * 60_000
+
+/** Cache cookie → sessão (mesmo isolate serverless). */
+const sessionByCookie = new Map<string, { session: AuthSession; expiresAt: number }>()
+const SESSION_COOKIE_TTL_MS = 60_000
+
 export async function createSessionToken(user: string, role: AuthRole) {
   const account = listAccounts().find((a) => a.role === role && timingSafeEqual(a.user, user))
   if (!account) return ''
   const secret = getSessionSigningSecret()
   if (!secret) return ''
+  const cacheKey = `${role}:${user}:${secret.slice(0, 8)}`
+  const hit = expectedTokenCache.get(cacheKey)
+  if (hit && hit.expiresAt > Date.now()) return hit.token
+
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
     'raw',
@@ -137,9 +149,11 @@ export async function createSessionToken(user: string, role: AuthRole) {
     ['sign'],
   )
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`rom-session:${role}:${user}`))
-  return Array.from(new Uint8Array(sig))
+  const token = Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+  expectedTokenCache.set(cacheKey, { token, expiresAt: Date.now() + EXPECTED_TOKEN_TTL_MS })
+  return token
 }
 
 export function validateCredentials(
@@ -165,20 +179,24 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
   }
 
   const cookie = req.cookies.get(AUTH_COOKIE)?.value
-  if (cookie) {
-    for (const account of listAccounts()) {
-      const expected = await createSessionToken(account.user, account.role)
-      if (expected && timingSafeEqual(cookie, expected)) {
-        return {
-          user: account.user,
-          role: account.role,
-          can_view_revenue: canViewRevenue(account.role),
-        }
-      }
-    }
-    // Cookie antigo (pré dual-login) — invalida silenciosamente
-  }
+  if (!cookie) return null
 
+  const cached = sessionByCookie.get(cookie)
+  if (cached && cached.expiresAt > Date.now()) return cached.session
+
+  for (const account of listAccounts()) {
+    const expected = await createSessionToken(account.user, account.role)
+    if (expected && timingSafeEqual(cookie, expected)) {
+      const session: AuthSession = {
+        user: account.user,
+        role: account.role,
+        can_view_revenue: canViewRevenue(account.role),
+      }
+      sessionByCookie.set(cookie, { session, expiresAt: Date.now() + SESSION_COOKIE_TTL_MS })
+      return session
+    }
+  }
+  // Cookie antigo (pré dual-login) — invalida silenciosamente
   return null
 }
 
