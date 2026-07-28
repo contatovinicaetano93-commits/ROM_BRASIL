@@ -7,11 +7,13 @@ export async function saveReportSnapshot(
   reportId: string,
   params: Record<string, unknown>,
   payload: unknown,
-  syncRunId?: string
+  syncRunId?: string,
+  opts?: { keepFullPayload?: boolean }
 ) {
   const sql = getSql()
   const rows = Array.isArray(payload) ? payload : []
-  const sample = rows.slice(0, MAX_SNAPSHOT_PAYLOAD_ROWS)
+  // KPIs de estoque somam o payload inteiro — não amostrar nesses relatórios.
+  const sample = opts?.keepFullPayload ? rows : rows.slice(0, MAX_SNAPSHOT_PAYLOAD_ROWS)
   await sql`
     insert into avec_report_snapshots (report_id, params, row_count, payload, sync_run_id)
     values (

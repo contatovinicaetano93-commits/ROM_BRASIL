@@ -689,12 +689,11 @@ async function syncDurationFrom0223(
       sum += minutes
       count++
     }
-    if (count > 0) {
-      await upsertSalonMetrics(today, {
-        service_duration_sum_minutes: sum,
-        service_duration_count: count,
-      })
-    }
+    // Sempre grava (inclui 0) — dia scoped pode vir vazio e não pode manter TM stale.
+    await upsertSalonMetrics(today, {
+      service_duration_sum_minutes: sum,
+      service_duration_count: count,
+    })
   } catch (e) {
     stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }

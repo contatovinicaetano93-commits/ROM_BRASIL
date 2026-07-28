@@ -99,10 +99,11 @@ async function snapshotSafe(
   params: Record<string, unknown>,
   rows: Record<string, unknown>[],
   stats: StockSyncStats,
-  syncRunId: string
+  syncRunId: string,
+  opts?: { keepFullPayload?: boolean }
 ) {
   try {
-    await saveReportSnapshot(id, params, rows, syncRunId)
+    await saveReportSnapshot(id, params, rows, syncRunId, opts)
     stats.snapshots_saved++
   } catch (e) {
     stats.warnings.push(`snapshot ${id}: ${e instanceof Error ? e.message : String(e)}`)
@@ -235,7 +236,9 @@ async function syncValuation(stats: StockSyncStats, syncRunId: string) {
     try {
       const result = await fetchAllAvecReport(id, job.params)
       if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-      await snapshotSafe(id, job.params, result.rows, stats, syncRunId)
+      await snapshotSafe(id, job.params, result.rows, stats, syncRunId, {
+        keepFullPayload: true,
+      })
     } catch (e) {
       stats.errors.push(`${id} (valorização): ${e instanceof Error ? e.message : String(e)}`)
     }

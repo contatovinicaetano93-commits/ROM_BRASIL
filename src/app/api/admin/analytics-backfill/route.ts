@@ -43,7 +43,7 @@ function parseIsoDay(value: unknown): string | undefined {
 /**
  * POST — preenche Visão analítica de um mês.
  * Body:
- *   { month: "2026-04" }                         → só snapshots (default)
+ *   { month: "2026-04" }                         → só p1 (default)
  *   { month, steps: ["cancellations"], cancelFrom, cancelMaxDays }
  *   { months: ["2026-01","2026-02"], steps: ["snapshots"] }  (máx. 2)
  */
