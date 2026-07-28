@@ -292,27 +292,25 @@ export default function DashboardPage() {
                 ? formatCurrency(period.month_revenue)
                 : 'sem receita'
           }
-          compare={
-            !loading && period?.previous
-              ? {
-                  text: `${fmtSignedCurrency(period.month_revenue - period.previous.revenue)} vs ${period.previous.label}`,
-                  positive: period.month_revenue - period.previous.revenue >= 0,
-                }
-              : null
-          }
+          compare={momCurrency(period?.month_revenue, period?.previous?.revenue, period?.previous?.label)}
         />
         <InsightCard
           icon={<Users size={15} />}
           label="Atendidos · mês acum."
           value={loading || !period ? '—' : String(period.month_attended)}
-          compare={
-            !loading && period?.previous
-              ? {
-                  text: `${fmtSignedNumber(period.month_attended - period.previous.attended)} vs ${period.previous.label}`,
-                  positive: period.month_attended - period.previous.attended >= 0,
-                }
-              : null
+          compare={momNumber(period?.month_attended, period?.previous?.attended, period?.previous?.label)}
+        />
+        <InsightCard
+          icon={<TrendingUp size={15} />}
+          label="Ticket médio · mês acum."
+          value={
+            loading || !period
+              ? '—'
+              : period.ticket_avg != null
+                ? formatCurrency(period.ticket_avg)
+                : 'sem ticket'
           }
+          compare={momCurrency(period?.ticket_avg, period?.previous?.ticket_avg, period?.previous?.label)}
         />
         <InsightCard
           icon={<Percent size={15} />}
@@ -323,6 +321,16 @@ export default function DashboardPage() {
               : null,
             period?.snapshot_missing ? 'sem snapshot' : 'sem ocupação',
           )}
+          compare={
+            !loading &&
+            period?.occupancy_avg != null &&
+            period.previous?.occupancy_avg != null
+              ? {
+                  text: `${fmtSignedPp((period.occupancy_avg - period.previous.occupancy_avg) * 100)} vs ${period.previous.label}`,
+                  positive: period.occupancy_avg - period.previous.occupancy_avg >= 0,
+                }
+              : null
+          }
         />
         <InsightCard
           icon={<AlertTriangle size={15} />}
@@ -334,15 +342,12 @@ export default function DashboardPage() {
                 ? 'sem atendidos'
                 : formatCurrency(period.lost_revenue)
           }
-          compare={
-            !loading && period?.previous
-              ? {
-                  text: `${fmtSignedCurrency(period.lost_revenue - period.previous.lost_revenue)} vs ${period.previous.label}`,
-                  // Menos receita perdida = melhor
-                  positive: period.lost_revenue - period.previous.lost_revenue <= 0,
-                }
-              : null
-          }
+          compare={momCurrency(
+            period?.lost_revenue,
+            period?.previous?.lost_revenue,
+            period?.previous?.label,
+            { invert: true },
+          )}
         />
         <InsightCard
           icon={<Users size={15} />}
@@ -365,33 +370,12 @@ export default function DashboardPage() {
               : null
           }
         />
-        <InsightCard
-          icon={<TrendingUp size={15} />}
-          label={period?.previous ? `Vs ${period.previous.label}` : 'Vs mês anterior'}
-          value={
-            loading || !period?.previous
-              ? '—'
-              : fmtSignedCurrency(period.month_revenue - period.previous.revenue)
-          }
-          compare={
-            !loading && period?.previous
-              ? {
-                  text: `${period.label} ${formatCurrency(period.month_revenue)} · ${period.month_attended} atend. vs ${period.previous.label} ${formatCurrency(period.previous.revenue)} · ${period.previous.attended} atend.`,
-                  positive: period.month_revenue - period.previous.revenue >= 0,
-                  muted: true,
-                }
-              : null
-          }
-          emphasize
-        />
       </div>
 
       {!loading && period?.previous ? (
         <p className="text-xs text-muted">
-          Comparativo MTD: {period.label} {formatCurrency(period.month_revenue)} ·{' '}
-          {period.month_attended} atend. vs {period.previous.label}{' '}
-          {formatCurrency(period.previous.revenue)} · {period.previous.attended} atend.
-          {period.mtd === false ? '' : ` · janela alinhada até dia ${period.to.slice(8)}`}
+          Deltas em verde/laranja = vs {period.previous.label}
+          {period.mtd ? ` (janela alinhada até dia ${period.to.slice(8)})` : ''}.
         </p>
       ) : null}
 
@@ -403,6 +387,15 @@ export default function DashboardPage() {
             period && !period.snapshot_missing ? formatCurrency(period.packages_revenue) : null,
             period?.snapshot_missing ? 'sem snapshot' : formatCurrency(0),
           )}
+          compare={
+            !period?.snapshot_missing
+              ? momCurrency(
+                  period?.packages_revenue,
+                  period?.previous?.packages_revenue,
+                  period?.previous?.label,
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<Sparkles size={15} />}
@@ -411,6 +404,15 @@ export default function DashboardPage() {
             period && !period.snapshot_missing ? String(period.new_clients_period) : null,
             period?.snapshot_missing ? 'sem snapshot' : '0',
           )}
+          compare={
+            !period?.snapshot_missing
+              ? momNumber(
+                  period?.new_clients_period,
+                  period?.previous?.new_clients_period,
+                  period?.previous?.label,
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<TrendingUp size={15} />}
@@ -421,6 +423,17 @@ export default function DashboardPage() {
               : null,
             period?.snapshot_missing ? 'sem snapshot' : 'sem taxa',
           )}
+          compare={
+            !loading &&
+            !period?.snapshot_missing &&
+            period?.return_rate != null &&
+            period.previous?.return_rate != null
+              ? {
+                  text: `${fmtSignedPp((period.return_rate - period.previous.return_rate) * 100)} vs ${period.previous.label}`,
+                  positive: period.return_rate - period.previous.return_rate >= 0,
+                }
+              : null
+          }
         />
       </div>
 
@@ -785,6 +798,43 @@ function fmtSignedNumber(diff: number): string {
   if (diff === 0) return '0'
   const sign = diff > 0 ? '+' : '−'
   return `${sign}${Math.abs(diff)}`
+}
+
+function fmtSignedPp(diffPoints: number): string {
+  const rounded = Math.round(diffPoints * 10) / 10
+  if (rounded === 0) return '0pp'
+  const sign = rounded > 0 ? '+' : '−'
+  return `${sign}${Math.abs(rounded)}pp`
+}
+
+type MomCompare = { text: string; positive: boolean; muted?: boolean }
+
+function momCurrency(
+  current: number | null | undefined,
+  previous: number | null | undefined,
+  label: string | null | undefined,
+  opts?: { invert?: boolean },
+): MomCompare | null {
+  if (current == null || previous == null || !label) return null
+  const diff = current - previous
+  return {
+    text: `${fmtSignedCurrency(diff)} vs ${label}`,
+    positive: opts?.invert ? diff <= 0 : diff >= 0,
+  }
+}
+
+function momNumber(
+  current: number | null | undefined,
+  previous: number | null | undefined,
+  label: string | null | undefined,
+  opts?: { invert?: boolean },
+): MomCompare | null {
+  if (current == null || previous == null || !label) return null
+  const diff = current - previous
+  return {
+    text: `${fmtSignedNumber(diff)} vs ${label}`,
+    positive: opts?.invert ? diff <= 0 : diff >= 0,
+  }
 }
 
 function InsightCard({
