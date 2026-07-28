@@ -90,6 +90,7 @@ export default function DashboardPage() {
       stale: boolean
       hint: string | null
       fast_stale?: boolean
+      never_synced?: boolean
     }
   }) | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -143,9 +144,11 @@ export default function DashboardPage() {
             const sync = periodJson.data.sync
             if (sync?.stale) {
               warnings.push(
-                sync.fast_stale
-                  ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
-                  : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
+                sync.never_synced
+                  ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
+                  : sync.fast_stale
+                    ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
+                    : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
               )
             } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
             else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
