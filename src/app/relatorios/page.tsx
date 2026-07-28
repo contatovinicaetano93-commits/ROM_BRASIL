@@ -126,9 +126,11 @@ export default function RelatoriosOverviewPage() {
       {data?.sync && (data.sync.stale || data.sync.status === 'partial' || data.sync.status === 'error') && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           {data.sync.stale
-            ? data.sync.fast_stale
-              ? 'Sync Avec fast desatualizado (>1h) — números de caixa podem estar velhos.'
-              : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
+            ? data.sync.never_synced
+              ? 'Nenhum sync Avec registrado ainda — confira Admin / cron.'
+              : data.sync.fast_stale
+                ? 'Sync Avec fast desatualizado (>1h) — números de caixa podem estar velhos.'
+                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
             : data.sync.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}

@@ -127,6 +127,8 @@ export interface PeriodAnalytics {
   to: string
   /** Snapshot P1 day used for rankings / occupancy / acquisition. */
   snapshot_day: string | null
+  /** true se P1/P2/P3 perto do fim da janela estão ausentes. */
+  snapshot_missing: boolean
   occupancy_avg: number | null
   cancelled: number
   no_shows: number
@@ -141,6 +143,9 @@ export interface PeriodAnalytics {
   new_clients_period: number
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
+  /** Totais do mês em salon_daily_metrics (receita/atendidos). */
+  month_revenue: number
+  month_attended: number
 }
 
 /**
@@ -174,6 +179,7 @@ export async function computePeriodAnalytics(opts?: {
     from,
     to,
     snapshot_day: p1?.day ?? p2?.day ?? p3?.day ?? null,
+    snapshot_missing: !p1 && !p2 && !p3,
     occupancy_avg: averageOccupancy(professionals),
     cancelled: loss.cancelled,
     no_shows: loss.no_shows,
@@ -188,5 +194,7 @@ export async function computePeriodAnalytics(opts?: {
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
     top_professionals: professionals.slice(0, 8),
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
+    month_revenue: totals.revenue,
+    month_attended: totals.attended,
   }
 }

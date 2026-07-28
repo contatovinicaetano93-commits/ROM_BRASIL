@@ -90,5 +90,8 @@ describe('period-analytics', () => {
     expect(result.booking_channels[0]?.channel).toBe('WhatsApp')
     expect(result.new_clients_period).toBe(18)
     expect(result.return_rate).toBe(0.42)
+    expect(result.snapshot_missing).toBe(false)
+    expect(result.month_revenue).toBeTypeOf('number')
+    expect(result.month_attended).toBeTypeOf('number')
   })
 })

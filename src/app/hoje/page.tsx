@@ -212,7 +212,8 @@ export default function HojePage() {
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando duração cadastrada na Avec (relatório 0223 · campo tempo).
+          TM cadastrado vazio: na Avec o relatório 0223 está sem campo tempo nos serviços. Não
+          inventamos minutos a partir do faturamento.
         </p>
       )}
 

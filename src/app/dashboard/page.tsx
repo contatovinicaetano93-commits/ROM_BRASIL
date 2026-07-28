@@ -202,7 +202,15 @@ export default function DashboardPage() {
   const topChannel = channelData[0]
   const snapshotHint = period?.snapshot_day
     ? `Avec snapshot ${period.snapshot_day} · janela ~30 dias`
-    : 'Avec · janela ~30 dias'
+    : period?.snapshot_missing
+      ? 'Sem snapshot Avec perto deste mês (rode analytics-backfill)'
+      : 'Avec · janela ~30 dias'
+
+  const dashValue = (v: string | null | undefined, empty = 'sem dado') => {
+    if (loading || !period) return '—'
+    if (v == null || v === '') return empty
+    return v
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
@@ -251,22 +259,34 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {period?.snapshot_missing && !loading ? (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Sem snapshot Avec (P1/P2/P3) perto de {period.to}. Cards de ocupação/pacotes/ranking podem
+          ficar vazios — rode analytics-backfill no Admin para o mês {period.month}.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <MiniStat
           icon={<Percent size={15} />}
           label={`Ocupação · Avec 30d · ${period?.label ?? '—'}`}
-          value={
-            loading || !period
-              ? '—'
-              : period.occupancy_avg != null
-                ? formatPercentPoints(period.occupancy_avg * 100)
-                : '—'
-          }
+          value={dashValue(
+            period?.occupancy_avg != null
+              ? formatPercentPoints(period.occupancy_avg * 100)
+              : null,
+            period?.snapshot_missing ? 'sem snapshot' : 'sem ocupação',
+          )}
         />
         <MiniStat
           icon={<AlertTriangle size={15} />}
           label="Receita perdida · mês acum."
-          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
+          value={
+            loading || !period
+              ? '—'
+              : period.month_attended === 0 && period.lost_revenue === 0
+                ? 'sem atendidos'
+                : formatCurrency(period.lost_revenue)
+          }
         />
         <MiniStat
           icon={<Users size={15} />}
@@ -280,23 +300,28 @@ export default function DashboardPage() {
         <MiniStat
           icon={<Package size={15} />}
           label="Pacotes · Avec 30d"
-          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
+          value={dashValue(
+            period && !period.snapshot_missing ? formatCurrency(period.packages_revenue) : null,
+            period?.snapshot_missing ? 'sem snapshot' : formatCurrency(0),
+          )}
         />
         <MiniStat
           icon={<Sparkles size={15} />}
           label="Novos · Avec 30d"
-          value={loading || !period ? '—' : String(period.new_clients_period)}
+          value={dashValue(
+            period && !period.snapshot_missing ? String(period.new_clients_period) : null,
+            period?.snapshot_missing ? 'sem snapshot' : '0',
+          )}
         />
         <MiniStat
           icon={<TrendingUp size={15} />}
           label="Retorno · Avec 30d"
-          value={
-            loading || !period
-              ? '—'
-              : period.return_rate != null
-                ? formatPercentPoints(period.return_rate * 100, 0)
-                : '—'
-          }
+          value={dashValue(
+            period?.return_rate != null
+              ? formatPercentPoints(period.return_rate * 100, 0)
+              : null,
+            period?.snapshot_missing ? 'sem snapshot' : 'sem taxa',
+          )}
         />
       </div>
 
@@ -392,8 +417,9 @@ export default function DashboardPage() {
             </p>
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-2 text-xs text-muted">
-                Sem duração cadastrada na Avec (relatório 0223 · campo tempo). Top serviços mostra
-                faturamento — não inventamos TM a partir disso.
+                Avec 0223 não tem campo <span className="font-medium">tempo</span> preenchido nos
+                serviços (cadastro na Avec). Jan–jun de receita já estão no caixa — TM cadastrado só
+                aparece depois que a unidade preencher duração nos serviços.
               </p>
             )}
           </SectionCard>
@@ -465,7 +491,11 @@ export default function DashboardPage() {
           <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
             <p className="mb-2 text-xs text-muted">{snapshotHint} · 0056.</p>
             {(period?.booking_channels.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem canais sincronizados.</p>
+              <p className="text-xs text-muted">
+                {period?.snapshot_missing
+                  ? 'Sem snapshot 0056 para este mês.'
+                  : 'Sem canais no snapshot Avec.'}
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {period!.booking_channels.map((c) => (
@@ -481,7 +511,11 @@ export default function DashboardPage() {
           <SectionCard title="Como nos conheceram">
             <p className="mb-2 text-xs text-muted">{snapshotHint} · 0003.</p>
             {(period?.acquisition.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem dados de aquisição.</p>
+              <p className="text-xs text-muted">
+                {period?.snapshot_missing
+                  ? 'Sem snapshot 0003 para este mês.'
+                  : 'Sem dados de aquisição no snapshot.'}
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {period!.acquisition.map((a) => (
@@ -501,7 +535,11 @@ export default function DashboardPage() {
               linha; valor ≠ preço unitário × qtd)
             </p>
             {(period?.packages.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem pacotes no snapshot.</p>
+              <p className="text-xs text-muted">
+                {period?.snapshot_missing
+                  ? 'Sem snapshot 0061 para este mês.'
+                  : 'Sem pacotes no snapshot Avec.'}
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {period!.packages.map((p) => (
@@ -522,7 +560,11 @@ export default function DashboardPage() {
               nome.
             </p>
             {(period?.top_services.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem ranking sincronizado.</p>
+              <p className="text-xs text-muted">
+                {period?.snapshot_missing
+                  ? 'Sem snapshot 0032 para este mês.'
+                  : 'Sem ranking de serviços no snapshot.'}
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {period!.top_services.map((s) => {
@@ -566,7 +608,9 @@ export default function DashboardPage() {
       >
         {!performance || performance.professionals.length === 0 ? (
           <p className="text-xs text-muted">
-            Sem dado ainda — depende da Avec (0021 + 0126). Detalhe em Relatórios.
+            Sem ranking — depende do snapshot Avec 0021+0126 perto do fim do mês selecionado
+            {period?.snapshot_missing ? ' (snapshot ausente agora)' : ''}. Detalhe em Relatórios ou
+            rode analytics-backfill.
           </p>
         ) : (
           <div className="overflow-x-auto">

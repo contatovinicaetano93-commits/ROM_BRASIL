@@ -160,12 +160,12 @@ export function withRequiredAvecReportParams(
     }
     case '0223': {
       // Sem janela a Avec devolve histórico enorme (100k+ linhas) e estoura paginação/DB.
-      const today = currentMonthRange().fim
+      const todayBr = fmtBrFromYmd(todayIso())
       return {
         ...params,
         profissional_id: params.profissional_id ?? '',
-        inicio: params.inicio ?? today,
-        fim: params.fim ?? today,
+        inicio: params.inicio ?? todayBr,
+        fim: params.fim ?? todayBr,
       }
     }
     case '0248': {

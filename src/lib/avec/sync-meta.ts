@@ -9,11 +9,13 @@ export type AvecSyncMeta = {
   /** Último fast (caixa/Hoje). */
   fast_created_at: string | null
   fast_stale: boolean
+  /** Nenhum sync finished ainda. */
+  never_synced: boolean
 }
 
 /**
  * Metadados de sync para banners em Visão/Financeiro/Relatórios.
- * Full >24h OU fast >1h → stale (caixa pode estar velho mesmo com full ok).
+ * Full >24h OU fast >1h OU nunca syncou → stale.
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   const [full, fast] = await Promise.all([
@@ -30,9 +32,10 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
       ? (Date.now() - new Date(fast.created_at).getTime()) / 3_600_000
       : null
 
+  const never_synced = full == null && fast == null
   const fullStale = fullAgeHours != null && fullAgeHours > 24
   const fastStale = fastAgeHours != null && fastAgeHours > 1
-  const stale = fullStale || fastStale
+  const stale = never_synced || fullStale || fastStale
 
   // Prefer the more recent finished run so a failed/partial fast is not hidden by an older full ok.
   const latest =
@@ -50,6 +53,7 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
     stale,
     hint: kpiSourceFromSyncStatus(stale ? 'stale' : syncStatus),
     fast_created_at: fast?.created_at ?? null,
-    fast_stale: fastStale,
+    fast_stale: never_synced || fastStale,
+    never_synced,
   }
 }

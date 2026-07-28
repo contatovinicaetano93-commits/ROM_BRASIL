@@ -533,9 +533,11 @@ export default function FinanceiroPage() {
       {syncMeta && (syncMeta.stale || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
           {syncMeta.stale
-            ? syncMeta.fast_stale
-              ? 'Sync Avec fast desatualizado (>1h) — caixa/Hoje podem estar velhos.'
-              : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
+            ? syncMeta.never_synced
+              ? 'Nenhum sync Avec registrado ainda — rode o sync no Admin ou aguarde o cron.'
+              : syncMeta.fast_stale
+                ? 'Sync Avec fast desatualizado (>1h) — caixa/Hoje podem estar velhos.'
+                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
             : syncMeta.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}
@@ -734,6 +736,14 @@ export default function FinanceiroPage() {
           arquivo.
         </p>
       </details>
+
+      {!loading && kpis && (kpis.current.daily?.length ?? 0) === 0 && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
+          Sem série diária em <strong>{kpis.current.label}</strong> (salon_daily_metrics vazio).
+          Use <em>Preencher ano (Avec)</em> acima — Jan–Jun já costumam estar no banco; meses novos
+          precisam do backfill se o sync só cobriu os últimos dias.
+        </div>
+      )}
 
       {!loading && kpis && (kpis.current.daily?.length ?? 0) > 0 && (
         <div className="rounded-2xl border border-border bg-card p-4">
