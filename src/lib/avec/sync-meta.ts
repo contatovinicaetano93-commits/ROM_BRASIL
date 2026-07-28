@@ -16,6 +16,10 @@ export type AvecSyncMeta = {
 /**
  * Metadados de sync para banners em Visão/Financeiro/Relatórios.
  * Full >24h OU fast >1h OU nunca syncou → stale.
+ *
+ * Timeout/kill não deve parecer "token expirado": se o último finished for
+ * só "Sync interrompido" mas houver um ok/partial mais recente (mesmo orphan
+ * já saneado), preferimos o mais recente com status real.
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   const [full, fast] = await Promise.all([

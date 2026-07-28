@@ -1,6 +1,6 @@
 /**
  * Renova AVEC_API_TOKEN via HTTP (Cognito + auth/amplify/signin).
- * Sem Playwright — seguro para cron Vercel a cada 6h.
+ * Sem Playwright — seguro para cron Vercel a cada 3h.
  */
 
 const COGNITO_URL = 'https://cognito-idp.us-east-1.amazonaws.com/'
@@ -62,9 +62,11 @@ async function cognitoPasswordAuth(email: string, password: string): Promise<str
       AuthFlow: 'USER_PASSWORD_AUTH',
       AuthParameters: { USERNAME: email, PASSWORD: password },
     }),
+    signal: AbortSignal.timeout(25_000),
   })
   if (!res.ok) {
-    throw new Error(`Cognito auth HTTP ${res.status}`)
+    const body = await res.text().catch(() => '')
+    throw new Error(`Cognito auth HTTP ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`)
   }
   const data = (await res.json()) as {
     AuthenticationResult?: { AccessToken?: string }
@@ -96,9 +98,11 @@ async function mintSalonVipToken(opts: {
       jwt_client: JWT_CLIENT,
       cognito_token: opts.cognitoAccessToken,
     }),
+    signal: AbortSignal.timeout(25_000),
   })
   if (!res.ok) {
-    throw new Error(`Avec amplify/signin HTTP ${res.status}`)
+    const body = await res.text().catch(() => '')
+    throw new Error(`Avec amplify/signin HTTP ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`)
   }
   const data = (await res.json()) as { data?: { signin?: { token?: string } } }
   const token = data.data?.signin?.token
@@ -108,6 +112,10 @@ async function mintSalonVipToken(opts: {
 
 export function isAvecLoginConfigured(): boolean {
   return Boolean(loginEmail() && loginPassword() && salonId())
+}
+
+export function hoursLeftInAvecToken(token: string): number {
+  return decodeHoursLeft(token)
 }
 
 /**

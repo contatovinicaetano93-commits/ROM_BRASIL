@@ -5,7 +5,7 @@
 
 import { getMockReport } from '@/lib/avec/fixtures'
 import { isAvecLoginConfigured } from '@/lib/avec/refresh-token'
-import { loadRuntimeAvecApiToken } from '@/lib/avec/token-store'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 import { todayIso } from '@/lib/salon/format'
 import { isProduction } from '@/lib/env'
 import { retryWithBackoff } from '@/lib/retry'
@@ -36,9 +36,8 @@ export interface AvecReportParams {
 
 async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
-  // Preferência: token renovado no Neon (cron 6h) → env Vercel.
-  const runtime = await loadRuntimeAvecApiToken()
-  const token = runtime ?? process.env.AVEC_API_TOKEN?.trim() ?? ''
+  // Renova sozinho se o JWT (~12h) estiver perto do fim — não cai no env Vercel expirado.
+  const token = await ensureFreshAvecApiToken({ minHoursLeft: 1 })
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
@@ -249,7 +248,6 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
-  const { baseUrl, token } = await getAvecConfig()
   const qs = new URLSearchParams()
   qs.set('page', String(effectiveParams.page ?? 1))
   qs.set('limit', String(effectiveParams.limit ?? 250))
@@ -258,7 +256,11 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     qs.set(k, String(v))
   }
 
+  const { baseUrl, token: initialToken } = await getAvecConfig()
   const url = `${baseUrl}/reports/${reportId}?${qs}`
+
+  let token = initialToken
+  let refreshedOnce = false
 
   return retryWithBackoff(
     async () => {
@@ -267,6 +269,25 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
         cache: 'no-store',
         signal: AbortSignal.timeout(30_000),
       })
+
+      if (res.status === 401 && !refreshedOnce && isAvecLoginConfigured()) {
+        refreshedOnce = true
+        // Descarta body 401 para liberar conexão antes do mint.
+        await res.text().catch(() => '')
+        token = await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 })
+        const retry = await fetch(url, {
+          headers: { Authorization: token, Accept: 'application/json' },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (retry.ok) return retry.json()
+        const text = await retry.text().catch(() => '')
+        const err = new Error(
+          `Avec ${reportId} HTTP ${retry.status}${text ? `: ${text.slice(0, 200)}` : ''}`,
+        )
+        ;(err as Error & { status?: number }).status = retry.status
+        throw err
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')

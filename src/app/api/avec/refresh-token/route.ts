@@ -9,7 +9,7 @@ export const maxDuration = 60
 
 /**
  * Renova JWT Avec (~12h) via Cognito + amplify/signin.
- * Cron Vercel: a cada 6 horas (0 every-6h * * *).
+ * Cron Vercel: a cada 3 horas (0 every-3h * * *).
  * Também aceita admin autenticado (force=1).
  */
 async function authorize(req: NextRequest) {
@@ -50,7 +50,7 @@ async function execute(req: NextRequest) {
     skipped: minted.skipped,
     hours_left: Math.round(minted.hours_left * 100) / 100,
     salon_id: minted.salon_id,
-    schedule: '0 */6 * * *',
+    schedule: '0 */3 * * *',
     note: minted.skipped
       ? 'Token ainda válido (≥4h) — refresh adiado'
       : 'Token Avec renovado e salvo no Neon (sync usa na hora)',

@@ -1,6 +1,14 @@
 import { getSql } from '@/lib/db'
+import {
+  hoursLeftInAvecToken,
+  isAvecLoginConfigured,
+  mintAvecApiToken,
+} from '@/lib/avec/refresh-token'
 
 const TOKEN_KEY = 'avec_api_token'
+
+/** Evita N mint Cognito em paralelo no mesmo isolate (várias queries 401). */
+let refreshInFlight: Promise<string> | null = null
 
 export async function ensureTokenStore(): Promise<void> {
   const sql = getSql()
@@ -71,5 +79,62 @@ export async function loadRuntimeAvecApiToken(): Promise<string | null> {
     return row.value
   } catch {
     return null
+  }
+}
+
+/**
+ * Garante JWT Avec válido para sync.
+ * - Se runtime/env ainda tem ≥ minHoursLeft → usa.
+ * - Senão, se login configurado → mint Cognito + grava no Neon.
+ * - Nunca cai num env expirado sem tentar renovar (era a causa do 401 em Estoque/Hoje).
+ */
+export async function ensureFreshAvecApiToken(opts?: {
+  force?: boolean
+  /** Horas mínimas restantes para reutilizar o token atual. Default 1. */
+  minHoursLeft?: number
+}): Promise<string> {
+  const minHours = opts?.minHoursLeft ?? 1
+  const force = opts?.force === true
+
+  const runtime = await loadRuntimeAvecApiToken()
+  const envTok = process.env.AVEC_API_TOKEN?.trim() || null
+  const candidates = [runtime, envTok].filter((t): t is string => Boolean(t))
+
+  if (!force) {
+    let best: { token: string; hours_left: number } | null = null
+    for (const t of candidates) {
+      const left = hoursLeftInAvecToken(t)
+      if (left >= minHours && (!best || left > best.hours_left)) {
+        best = { token: t, hours_left: left }
+      }
+    }
+    if (best) return best.token
+  }
+
+  if (!isAvecLoginConfigured()) {
+    for (const t of candidates) {
+      if (hoursLeftInAvecToken(t) > 0) return t
+    }
+    throw new Error(
+      'Token Avec ausente/expirado — configure AVEC_LOGIN_EMAIL/PASSWORD/UNIT_ID ou AVEC_API_TOKEN',
+    )
+  }
+
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    const minted = await mintAvecApiToken({
+      force: true,
+      currentToken: runtime ?? envTok,
+      minHoursLeft: 0,
+    })
+    await saveAvecApiToken(minted.token)
+    return minted.token
+  })()
+
+  try {
+    return await refreshInFlight
+  } finally {
+    refreshInFlight = null
   }
 }
