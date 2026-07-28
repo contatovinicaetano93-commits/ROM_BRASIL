@@ -308,8 +308,10 @@ export default function DashboardPage() {
           value={
             loading || !period
               ? '—'
-              : period.month_attended === 0 && period.lost_revenue === 0
-                ? 'sem atendidos'
+              : period.lost_revenue == null
+                ? period.ticket_avg == null
+                  ? 'sem ticket'
+                  : '—'
                 : formatCurrency(period.lost_revenue)
           }
           compare={momCurrency(
@@ -354,15 +356,15 @@ export default function DashboardPage() {
           icon={<Package size={15} />}
           label="Pacotes · Avec 30d"
           value={dashValue(
-            period && !period.snapshot_missing ? formatCurrency(period.packages_revenue) : null,
-            period?.snapshot_missing ? 'sem snapshot' : formatCurrency(0),
+            period?.packages_revenue != null ? formatCurrency(period.packages_revenue) : null,
+            period?.snapshot_missing ? 'sem snapshot' : 'sem pacotes',
           )}
           compare={
-            !period?.snapshot_missing
+            period?.packages_revenue != null
               ? momCurrency(
-                  period?.packages_revenue,
-                  period?.previous?.packages_revenue,
-                  period?.previous?.label,
+                  period.packages_revenue,
+                  period.previous?.packages_revenue,
+                  period.previous?.label,
                 )
               : null
           }
@@ -371,15 +373,15 @@ export default function DashboardPage() {
           icon={<Sparkles size={15} />}
           label="Novos · Avec 30d"
           value={dashValue(
-            period && !period.snapshot_missing ? String(period.new_clients_period) : null,
-            period?.snapshot_missing ? 'sem snapshot' : '0',
+            period?.new_clients_period != null ? String(period.new_clients_period) : null,
+            period?.snapshot_missing ? 'sem snapshot' : 'sem P3',
           )}
           compare={
-            !period?.snapshot_missing
+            period?.new_clients_period != null
               ? momNumber(
-                  period?.new_clients_period,
-                  period?.previous?.new_clients_period,
-                  period?.previous?.label,
+                  period.new_clients_period,
+                  period.previous?.new_clients_period,
+                  period.previous?.label,
                 )
               : null
           }
@@ -613,7 +615,10 @@ export default function DashboardPage() {
           <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
             <p className="mb-2 text-xs text-muted">
               {snapshotHint} · 0061 · {period?.packages_sold ?? 0} vendidos ·{' '}
-              {period ? formatCurrency(period.packages_revenue) : '—'} (soma dos totais de
+              {period?.packages_revenue != null
+                ? formatCurrency(period.packages_revenue)
+                : '—'}{' '}
+              (soma dos totais de
               linha; valor ≠ preço unitário × qtd)
             </p>
             {(period?.packages.length ?? 0) === 0 ? (

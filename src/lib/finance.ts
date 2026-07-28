@@ -389,7 +389,11 @@ async function buildBucket(
   const expensesRounded = Math.round(expenses * 100) / 100
   const gross_margin =
     revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
-  const ticket_avg = attended > 0 ? Math.round((revenueRounded / attended) * 100) / 100 : null
+  // Ticket só com receita de métricas diárias — 0081 misturado com attended inventa ticket.
+  const ticket_avg =
+    revenue_source === 'metrics' && attended > 0
+      ? Math.round((revenueRounded / attended) * 100) / 100
+      : null
   const margin_after_cmv =
     revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null
 
