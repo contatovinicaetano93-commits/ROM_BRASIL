@@ -160,6 +160,21 @@ function addDaysIso(day: string, delta: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Último dia civil do mês imediatamente anterior a `day` (YYYY-MM-DD).
+ * Usado no ranking MoM (snapshot atual vs EOM do mês passado).
+ */
+export function previousCalendarMonthEnd(day: string): string {
+  const y = Number(day.slice(0, 4))
+  const m = Number(day.slice(5, 7))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+    return addDaysIso(day, -30)
+  }
+  // Dia 0 do mês `m` = último dia do mês anterior.
+  const d = new Date(Date.UTC(y, m - 1, 0))
+  return d.toISOString().slice(0, 10)
+}
+
 export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
   const sql = getSql()
   try {
