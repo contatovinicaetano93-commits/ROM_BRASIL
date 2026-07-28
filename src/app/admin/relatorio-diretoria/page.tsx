@@ -285,6 +285,7 @@ export default function RelatorioDiretoriaPage() {
       format,
       quarter,
       compare,
+      stage: '0011',
     })
     if (forceDemo) q.set('mock', '1')
     if (proId0011) q.set('professional_id', proId0011)
@@ -298,6 +299,7 @@ export default function RelatorioDiretoriaPage() {
       quarter_0021: quarter0021,
       compare_0021: compareQuarter0021,
       compare_months: compareMonths ? '1' : '0',
+      stage: '0021',
     })
     if (forceDemo) q.set('mock', '1')
     if (proId0021) q.set('professional_id', proId0021)
