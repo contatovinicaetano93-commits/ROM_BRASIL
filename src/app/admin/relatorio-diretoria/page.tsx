@@ -92,6 +92,11 @@ function defaultQuarterKey() {
   return `${year}-Q${Math.ceil(month / 3)}`
 }
 
+/** 0011 precisa de trimestre fechado — corrente costuma vir sem lista Avec. */
+function defaultQuarterKey0011() {
+  return previousQuarterKey(defaultQuarterKey())
+}
+
 function previousQuarterKey(key: string) {
   const [y, qStr] = key.split('-Q')
   const year = Number(y)
@@ -108,10 +113,10 @@ export default function RelatorioDiretoriaPage() {
   const { session } = useClientSession()
   const canViewRevenue = Boolean(session?.can_view_revenue)
 
-  // Estado independente por etapa — defaults = período corrente (SP)
+  // 0011 default = trimestre fechado anterior (evita 0% no tri em aberto)
   const [proId0011, setProId0011] = useState('')
-  const [quarter, setQuarter] = useState(defaultQuarterKey)
-  const [compare, setCompare] = useState(() => previousQuarterKey(defaultQuarterKey()))
+  const [quarter, setQuarter] = useState(defaultQuarterKey0011)
+  const [compare, setCompare] = useState(() => previousQuarterKey(defaultQuarterKey0011()))
 
   const [proId0021, setProId0021] = useState('')
   const [month, setMonth] = useState(defaultMonthKey)

@@ -4,6 +4,17 @@ import {
   directorUiBudget,
   fetchLiveDirectorBlocks,
 } from './avec-live'
+
+/** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
+function shortenAvecWarning(w: string): string {
+  if (/salao_id/i.test(w)) {
+    return '0011: Avec exige salao_id — confira AVEC_UNIT_ID'
+  }
+  if (/HTTP 400/i.test(w)) {
+    return w.replace(/\{[\s\S]*\}/, '').trim().slice(0, 120) || 'Avec HTTP 400'
+  }
+  return w.length > 160 ? `${w.slice(0, 157)}…` : w
+}
 import {
   buildMockReturnBlocks,
   buildMockRevenueBlocks,
@@ -118,7 +129,7 @@ export async function buildDirectorReport(
         source = 'avec'
       }
       if (live.warnings.length) {
-        liveNote = live.warnings.slice(0, 3).join(' · ')
+        liveNote = live.warnings.slice(0, 3).map(shortenAvecWarning).join(' · ')
       }
     } catch (e) {
       liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`

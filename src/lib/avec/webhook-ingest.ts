@@ -234,7 +234,33 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     await updateContact(contact.id, { status: payload.status })
   }
 
-  if (event === 'appointment.created' || event === 'appointment.updated') {
+  if (event === 'appointment.cancelled' && payload.service_name) {
+    const services = await listServices(contact.id)
+    const service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
+    if (service?.scheduled_at) await clearServiceSchedule(service.id)
+  }
+
+  if (
+    (event === 'appointment.created' || event === 'appointment.updated') &&
+    payload.status === 'convertido' &&
+    payload.service_name
+  ) {
+    const services = await listServices(contact.id)
+    let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
+    if (!service) {
+      service = await addService(contact.id, {
+        name: payload.service_name,
+        category: guessServiceCategory(payload.service_name),
+      })
+    }
+    await markServiceDone(service.id, {
+      doneAt: payload.completed_at ?? payload.scheduled_at ?? undefined,
+      professionalName: payload.professional_name,
+      lastPrice: payload.price,
+    })
+    await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
+    await updateContact(contact.id, { status: 'convertido' })
+  } else if (event === 'appointment.created' || event === 'appointment.updated') {
     if (payload.service_name && payload.scheduled_at) {
       const services = await listServices(contact.id)
       let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
@@ -248,12 +274,6 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
     }
-  }
-
-  if (event === 'appointment.cancelled' && payload.service_name) {
-    const services = await listServices(contact.id)
-    const service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
-    if (service?.scheduled_at) await clearServiceSchedule(service.id)
   }
 
   if (event === 'service.completed' && payload.service_name) {

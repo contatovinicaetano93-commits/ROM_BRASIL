@@ -6,6 +6,7 @@
 import { getMockReport } from '@/lib/avec/fixtures'
 import { isAvecLoginConfigured } from '@/lib/avec/refresh-token'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
+import { getAvecUnitId } from '@/lib/brand'
 import { todayIso } from '@/lib/salon/format'
 import { isProduction } from '@/lib/env'
 import { retryWithBackoff } from '@/lib/retry'
@@ -182,6 +183,14 @@ export function withRequiredAvecReportParams(
       delete rest.inicio
       delete rest.fim
       return { ...returnRatePeriods(params), ...rest }
+    }
+    case '0011': {
+      // Relatório de retorno exige salao_id (hidden) — sem isso a Avec devolve HTTP 400.
+      const unit = getAvecUnitId()
+      return {
+        ...params,
+        salao_id: params.salao_id ?? unit ?? undefined,
+      }
     }
     default:
       return params

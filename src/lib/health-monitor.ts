@@ -40,7 +40,13 @@ export class HealthMonitor {
       }
 
       if (health.stock?.last_fast) {
-        const status = calculateSyncStatus(health.stock.last_fast.created_at, health.stock.last_fast.error)
+        // Cron estoque BR = a cada hora — limiar de "failed por idade" > 90 min (não 60).
+        const status = calculateSyncStatus(
+          health.stock.last_fast.created_at,
+          health.stock.last_fast.error,
+          300,
+          90 * 60,
+        )
         if (status.status === 'failed') {
           issues.push(`Stock sync failed: ${status.error}`)
           await this.alertIfNew('stock_sync_failed', 'error', 'Stock Sync Failed', status.error || 'Unknown error')

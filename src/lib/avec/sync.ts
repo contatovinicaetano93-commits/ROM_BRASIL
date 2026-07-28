@@ -15,6 +15,7 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  clearServiceSchedule,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -55,6 +56,12 @@ import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
+import {
+  isAvecCancelledStatus,
+  isAvecNegativeOutcomeStatus,
+  isAvecNoShowStatus,
+  isAvecPaidStatus,
+} from '@/lib/avec/appointment-status'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -288,16 +295,26 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const appt = normalizeAppointmentRow(row)
       if (!appt) continue
 
-      if (mode === 'fast' && appt.scheduledAt) {
-        const day = toSalonDateIso(appt.scheduledAt)
-        if (day !== today) continue
-      }
+      const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
+      if (mode === 'fast' && apptDay && apptDay !== today) continue
 
-      // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
+      // Status agenda 0051. No-show KPI: ainda contabiliza aqui (BR); 0248 é complementar.
+      // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
       const status = (appt.status ?? '').toLowerCase()
-      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
+      const isNoShow = isAvecNoShowStatus(status)
+      const isNegativeOutcome = isAvecNegativeOutcomeStatus(status)
+      const isPaid = isAvecPaidStatus(status)
+      const isCancelled = isAvecCancelledStatus(status)
+      const isLostOutcome = isCancelled || isNoShow || isNegativeOutcome
+
+      if (isNoShow && appt.scheduledAt) {
         const day = toSalonDateIso(appt.scheduledAt)
         if (day) noShowsByDay.set(day, (noShowsByDay.get(day) ?? 0) + 1)
+      }
+
+      if (!appt.avecClientId && !appt.phone) {
+        stats.warnings.push('agenda: linha sem avec_client_id e sem telefone — ignorada')
+        continue
       }
 
       const contact = await upsertInBatch({
@@ -307,7 +324,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        status: 'agendado',
+        status: isPaid ? 'convertido' : isLostOutcome ? undefined : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -315,18 +332,47 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         const had = existing.some((s) => s.name.toLowerCase() === appt.serviceName!.toLowerCase())
         const service = await findOrCreateService(contact.id, appt.serviceName)
         if (!had) stats.services_created++
-        if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-          await scheduleService(service.id, appt.scheduledAt, appt.professional)
-          stats.services_scheduled++
-        } else if (appt.professional && !service.professional_name) {
-          await patchServiceVisitMeta(service.id, {
+
+        // 0051 status Pago = comanda fechada → Concluídos no Pipeline (paridade IG).
+        if (isPaid) {
+          await markServiceDone(service.id, {
+            doneAt: appt.scheduledAt,
             professionalName: appt.professional,
+            lastPrice: appt.price,
           })
+          stats.services_completed++
+        } else if (isLostOutcome) {
+          if (
+            apptDay &&
+            service.scheduled_at &&
+            toSalonDateIso(service.scheduled_at) === apptDay
+          ) {
+            await clearServiceSchedule(service.id)
+          }
+          const remaining = await listServices(contact.id)
+          if (!remaining.some((s) => s.scheduled_at)) {
+            await updateContact(contact.id, { status: 'perdido' })
+          }
+        } else {
+          if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
+            await scheduleService(service.id, appt.scheduledAt, appt.professional)
+            stats.services_scheduled++
+          } else if (appt.professional && !service.professional_name) {
+            await patchServiceVisitMeta(service.id, {
+              professionalName: appt.professional,
+            })
+          }
         }
+
         if (appt.professional && isNailService(appt.serviceName)) {
           await setPreferredManicurist(contact.id, appt.professional)
         } else if (appt.professional && isHairService(appt.serviceName)) {
           await setPreferredHairstylist(contact.id, appt.professional)
+        }
+      } else if (isLostOutcome) {
+        const remaining = await listServices(contact.id)
+        if (!remaining.some((s) => s.scheduled_at)) {
+          await updateContact(contact.id, { status: 'perdido' })
         }
       }
 
