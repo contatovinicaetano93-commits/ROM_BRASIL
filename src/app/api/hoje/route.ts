@@ -19,8 +19,8 @@ import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
 const METRICS_FRESH_MS = 2 * 60 * 60 * 1000
-/** Curto: faturamento Avec muda ao longo do dia; 30s escondia caixa fresco. */
-const HOJE_CACHE_TTL_SEC = 10
+/** 30s: 2ª visita fluida; caixa Avec ainda atualiza ao longo do dia. */
+const HOJE_CACHE_TTL_SEC = 30
 
 function metricsAreFresh(updatedAt: string | null | undefined): boolean {
   if (!updatedAt) return false

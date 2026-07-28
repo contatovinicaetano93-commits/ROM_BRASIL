@@ -34,6 +34,7 @@ import {
 import { fmtSchedule, whatsAppUrl, formatCurrency } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
+import { useClientSession } from '../../_components/SessionProvider'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 import { LastVisitCard, type LastVisitData } from '../../_components/LastVisitCard'
 import { contactReturnLabel, sanitizeContactReturnTo } from '@/lib/auth-redirect'
@@ -195,10 +196,11 @@ export default function ContactDetailPage() {
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { session } = useClientSession()
+  const isAdmin = Boolean(session?.can_view_revenue)
 
   const load = useCallback(async () => {
-    const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
+    const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store', clientCache: false })
     const json = await res.json()
     if (json.error) setError(json.error)
     else setData(json.data)
@@ -236,11 +238,6 @@ export default function ContactDetailPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
-
-    apiFetch('/api/auth/session', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setIsAdmin(false))
   }, [id])
 
   async function anonymize() {

@@ -6,7 +6,7 @@ import { RefreshCw, ChevronRight, Database, Link2 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL, PrimaryButton } from '../_components/ui'
 import { LogoutButton } from '../_components/LogoutButton'
 import { SetupChecklist } from './SetupChecklist'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import type { RomSeedPreset } from '@/lib/brand'
 import {
@@ -273,7 +273,10 @@ export default function AdminPage() {
           <LogoutButton label="Sair" />
           <button
             type="button"
-            onClick={load}
+            onClick={() => {
+              clearApiClientCache()
+              void load()
+            }}
             disabled={state === 'loading'}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60 lg:hover:bg-gold/15"
           >
