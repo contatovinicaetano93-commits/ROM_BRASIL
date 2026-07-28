@@ -82,11 +82,11 @@ async function orderContactsByUrgency(
  * Com status: lista o funil real (ex.: Novo lead / Importado), não só o top urgente.
  */
 export async function listContactsWithSummary(
-  limitOrOpts: number | ListContactsWithSummaryOpts = 500,
+  limitOrOpts: number | ListContactsWithSummaryOpts = 2000,
 ): Promise<ContactListItem[]> {
   const opts: ListContactsWithSummaryOpts =
     typeof limitOrOpts === 'number' ? { limit: limitOrOpts } : limitOrOpts
-  const limit = Math.min(Math.max(1, opts.limit ?? 500), 500)
+  const limit = Math.min(Math.max(1, opts.limit ?? 2000), 2000)
   const rawQuery = (opts.query ?? '').trim()
   const q = rawQuery.toLowerCase()
   const qDigits = rawQuery.replace(/\D/g, '')

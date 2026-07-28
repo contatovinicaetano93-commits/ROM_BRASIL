@@ -13,7 +13,7 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -171,28 +171,6 @@ export interface PeriodAnalytics {
   previous: PeriodMonthTotals | null
 }
 
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const dt = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`
-}
-
-/** Janela do mês anterior comparável: se atual é MTD, corta o anterior no mesmo dia. */
-function resolvePreviousComparableWindow(
-  current: ReturnType<typeof resolveMonthWindow>,
-): { month: string; from: string; to: string; label: string } {
-  const month = previousMonthKey(current.month)
-  const full = resolveMonthWindow(month, current.to)
-  if (!current.mtd) {
-    return { month, from: full.from, to: full.to, label: labelMonthPt(month) }
-  }
-  const dayNum = Number(current.to.slice(8, 10))
-  const lastDay = Number(full.to.slice(8, 10))
-  const clamped = Math.min(dayNum, lastDay)
-  const to = `${month}-${String(clamped).padStart(2, '0')}`
-  return { month, from: full.from, to, label: labelMonthPt(month) }
-}
-
 /**
  * Analytics comercial/operacional do período (Visão analítica).
  * Usa snapshots Avec P1/P2/P3 + métricas diárias — não é extrato financeiro.
@@ -204,19 +182,21 @@ export async function computePeriodAnalytics(opts?: {
   const { month, from, to } = window
   const prevWindow = resolvePreviousComparableWindow(window)
   const nearOpts = { maxSkewDays: 14 }
-  const [totals, loss, p1, p2, p3, prevTotals, prevLoss, prevP1, prevP2, prevP3] =
-    await Promise.all([
-      sumRevenueAndAttended(from, to),
-      sumAttendanceLoss(from, to),
-      getSalonP1DailyNear(to, nearOpts),
-      getSalonP2DailyNear(to, nearOpts),
-      getSalonP3DailyNear(to, nearOpts),
-      sumRevenueAndAttended(prevWindow.from, prevWindow.to),
-      sumAttendanceLoss(prevWindow.from, prevWindow.to),
-      getSalonP1DailyNear(prevWindow.to, nearOpts),
-      getSalonP2DailyNear(prevWindow.to, nearOpts),
-      getSalonP3DailyNear(prevWindow.to, nearOpts),
-    ])
+  // Sequencial em 2 lotes: evita pico no pooler (max:1) e timeouts no Overview.
+  const [totals, loss, p1, p2, p3] = await Promise.all([
+    sumRevenueAndAttended(from, to),
+    sumAttendanceLoss(from, to),
+    getSalonP1DailyNear(to, nearOpts),
+    getSalonP2DailyNear(to, nearOpts),
+    getSalonP3DailyNear(to, nearOpts),
+  ])
+  const [prevTotals, prevLoss, prevP1, prevP2, prevP3] = await Promise.all([
+    sumRevenueAndAttended(prevWindow.from, prevWindow.to),
+    sumAttendanceLoss(prevWindow.from, prevWindow.to),
+    getSalonP1DailyNear(prevWindow.to, nearOpts),
+    getSalonP2DailyNear(prevWindow.to, nearOpts),
+    getSalonP3DailyNear(prevWindow.to, nearOpts),
+  ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
   const prevTicket =

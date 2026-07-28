@@ -23,6 +23,27 @@ function currentMonthKey() {
 
 type OverviewPayload = MonthOverview & { sync?: AvecSyncMeta }
 
+function fmtMomDelta(
+  current: number | null | undefined,
+  previous: number | null | undefined,
+  opts?: { currency?: boolean; invert?: boolean },
+): { text: string; positive: boolean } | null {
+  if (current == null || previous == null) return null
+  const diff = current - previous
+  if (!Number.isFinite(diff)) return null
+  const abs = Math.abs(diff)
+  const formatted = opts?.currency
+    ? formatCurrency(abs)
+    : abs % 1 === 0
+      ? String(abs)
+      : abs.toFixed(1)
+  const sign = diff > 0 ? '+' : diff < 0 ? '−' : ''
+  return {
+    text: `${sign}${formatted}`,
+    positive: opts?.invert ? diff <= 0 : diff >= 0,
+  }
+}
+
 export default function RelatoriosOverviewPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(currentMonthKey)
@@ -31,18 +52,30 @@ export default function RelatoriosOverviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { materialize?: boolean }) => {
     setLoading(true)
     setError(null)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 45_000)
     try {
-      const res = await apiFetch(`/api/relatorios/overview?month=${month}`, { cache: 'no-store' })
+      const params = new URLSearchParams({ month })
+      if (opts?.materialize) params.set('materialize', '1')
+      const res = await apiFetch(`/api/relatorios/overview?${params}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data as OverviewPayload)
     } catch (e) {
       setData(null)
-      setError(e instanceof Error ? e.message : String(e))
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setError('Overview demorou demais (>45s). Tente de novo ou use um mês já sincronizado.')
+      } else {
+        setError(e instanceof Error ? e.message : String(e))
+      }
     } finally {
+      window.clearTimeout(timer)
       setLoading(false)
     }
   }, [month])
@@ -74,6 +107,66 @@ export default function RelatoriosOverviewPage() {
 
   const incomplete = data?.completeness.status === 'incomplete'
   const inProgress = data?.completeness.status === 'in_progress'
+  const prevLabel = data?.finance_previous?.label ?? data?.analytics.previous?.label ?? 'mês anterior'
+
+  const closingCards = data
+    ? [
+        {
+          label: 'Receita',
+          value: formatCurrency(data.closing.revenue),
+          mom: fmtMomDelta(data.closing.revenue, data.finance_previous?.revenue, { currency: true }),
+        },
+        {
+          label: 'Atendidos',
+          value: String(data.closing.attended),
+          mom: fmtMomDelta(data.closing.attended, data.finance_previous?.attended),
+        },
+        {
+          label: 'Ticket',
+          value: formatCurrency(data.closing.ticket_avg),
+          mom: fmtMomDelta(data.closing.ticket_avg, data.finance_previous?.ticket_avg, {
+            currency: true,
+          }),
+        },
+        {
+          label: 'Fluxo',
+          value: formatCurrency(data.closing.cash_flow),
+          mom: fmtMomDelta(data.closing.cash_flow, data.finance_previous?.cash_flow, {
+            currency: true,
+          }),
+        },
+        {
+          label: 'Despesas',
+          value: formatCurrency(data.closing.expenses),
+          mom: fmtMomDelta(data.closing.expenses, data.finance_previous?.expenses, {
+            currency: true,
+            invert: true,
+          }),
+        },
+        {
+          label: 'CMV',
+          value: formatCurrency(data.closing.cmv),
+          mom: fmtMomDelta(data.closing.cmv, data.finance_previous?.cmv, {
+            currency: true,
+            invert: true,
+          }),
+        },
+        {
+          label: 'Cancelamentos',
+          value: String(data.closing.cancelled),
+          mom: fmtMomDelta(data.closing.cancelled, data.analytics.previous?.cancelled, {
+            invert: true,
+          }),
+        },
+        {
+          label: 'No-shows',
+          value: String(data.closing.no_shows),
+          mom: fmtMomDelta(data.closing.no_shows, data.analytics.previous?.no_shows, {
+            invert: true,
+          }),
+        },
+      ]
+    : []
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
@@ -92,7 +185,7 @@ export default function RelatoriosOverviewPage() {
           </label>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void load({ materialize: true })}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:bg-card disabled:opacity-50"
           >
@@ -177,23 +270,31 @@ export default function RelatoriosOverviewPage() {
                     ? 'Mês em andamento — o fechamento completa no último dia.'
                     : 'Mês sem buracos no acumulado diário ROM.'}
               </p>
+              <p className="mt-1 text-[0.7rem] opacity-80">
+                Deltas vs {prevLabel} (mês anterior ao mês base escolhido).
+              </p>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: 'Receita', value: formatCurrency(data.closing.revenue) },
-              { label: 'Atendidos', value: String(data.closing.attended) },
-              { label: 'Ticket', value: formatCurrency(data.closing.ticket_avg) },
-              { label: 'Fluxo', value: formatCurrency(data.closing.cash_flow) },
-              { label: 'Despesas', value: formatCurrency(data.closing.expenses) },
-              { label: 'CMV', value: formatCurrency(data.closing.cmv) },
-              { label: 'Cancelamentos', value: String(data.closing.cancelled) },
-              { label: 'No-shows', value: String(data.closing.no_shows) },
-            ].map((kpi) => (
-              <div key={kpi.label} className="rounded-xl border border-border bg-card px-4 py-3">
+            {closingCards.map((kpi) => (
+              <div
+                key={kpi.label}
+                className="min-w-0 overflow-hidden rounded-xl border border-border bg-card px-4 py-3"
+              >
                 <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kpi.label}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{kpi.value}</p>
+                <p className="mt-1 max-w-full break-words text-lg font-semibold tabular-nums leading-tight [overflow-wrap:anywhere]">
+                  {kpi.value}
+                </p>
+                {kpi.mom && (
+                  <p
+                    className={`mt-1 text-[0.7rem] font-medium ${
+                      kpi.mom.positive ? 'text-success' : 'text-warning'
+                    }`}
+                  >
+                    {kpi.mom.text} vs {prevLabel}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -203,19 +304,56 @@ export default function RelatoriosOverviewPage() {
               <ul className="flex flex-col gap-2 text-sm">
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Ocupação média</span>
-                  <span className="tabular-nums">
+                  <span className="min-w-0 text-right tabular-nums">
                     {data.analytics.occupancy_avg != null
                       ? formatPercentPoints(data.analytics.occupancy_avg * 100)
                       : '—'}
+                    {(() => {
+                      const mom = fmtMomDelta(
+                        data.analytics.occupancy_avg != null
+                          ? data.analytics.occupancy_avg * 100
+                          : null,
+                        data.analytics.previous?.occupancy_avg != null
+                          ? data.analytics.previous.occupancy_avg * 100
+                          : null,
+                      )
+                      return mom ? (
+                        <span
+                          className={`ml-2 text-[0.7rem] ${
+                            mom.positive ? 'text-success' : 'text-warning'
+                          }`}
+                        >
+                          {mom.text} pp
+                        </span>
+                      ) : null
+                    })()}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Receita perdida (est.)</span>
-                  <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                  <span className="min-w-0 text-right tabular-nums">
+                    {formatCurrency(data.analytics.lost_revenue)}
+                    {(() => {
+                      const mom = fmtMomDelta(
+                        data.analytics.lost_revenue,
+                        data.analytics.previous?.lost_revenue,
+                        { currency: true, invert: true },
+                      )
+                      return mom ? (
+                        <span
+                          className={`ml-2 text-[0.7rem] ${
+                            mom.positive ? 'text-success' : 'text-warning'
+                          }`}
+                        >
+                          {mom.text}
+                        </span>
+                      ) : null
+                    })()}
+                  </span>
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
-                  <span className="tabular-nums">
+                  <span className="min-w-0 break-words text-right tabular-nums [overflow-wrap:anywhere]">
                     {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
                   </span>
                 </li>

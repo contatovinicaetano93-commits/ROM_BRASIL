@@ -27,6 +27,8 @@ export interface MonthOverview {
   completeness: MonthCompleteness
   status_label: string
   finance: FinanceKpis['current']
+  /** Bucket MoM alinhado (MTD→mesmo dia; mês fechado→mês cheio). */
+  finance_previous: FinanceKpis['previous']
   analytics: PeriodAnalytics
   closing: {
     revenue: number
@@ -76,14 +78,14 @@ export async function computeMonthOverview(opts?: {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
 
-  const [finance, analytics, completeness] = await Promise.all([
-    computeFinanceKpis({ month }),
-    computePeriodAnalytics({ month }),
-    getMonthCompleteness(month),
-  ])
+  // Sequencial (não Promise.all): Overview + Financeiro + Analytics no mesmo
+  // request estouravam o pooler e a página ficava em “Carregando…” sem timeout.
+  const completeness = await getMonthCompleteness(month)
+  const finance = await computeFinanceKpis({ month })
+  const analytics = await computePeriodAnalytics({ month })
 
   let materializedAt: string | null = null
-  if (opts?.materialize !== false) {
+  if (opts?.materialize === true) {
     try {
       const row = await materializeSalonMonthMetrics(month, {
         analytics,
@@ -110,6 +112,7 @@ export async function computeMonthOverview(opts?: {
     completeness,
     status_label: statusLabelPt(completeness.status),
     finance: finance.current,
+    finance_previous: finance.previous,
     analytics,
     closing: {
       revenue: finance.current.revenue,

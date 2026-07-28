@@ -6,7 +6,7 @@ import {
 } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -106,12 +106,6 @@ const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set',
 
 function currentMonthKey(referenceDay: string): string {
   return referenceDay.slice(0, 7)
-}
-
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 /** Aceita YYYY-MM ou YYYY-MM-DD (usa só o mês). */
@@ -360,8 +354,14 @@ export interface FinanceKpis {
   previous: FinanceKpiBucket
 }
 
-async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
-  const { from, to } = monthRange(monthKey)
+async function buildBucket(
+  monthKey: string,
+  range?: { from: string; to: string; label?: string },
+): Promise<FinanceKpiBucket> {
+  const base = monthRange(monthKey)
+  const from = range?.from ?? base.from
+  const to = range?.to ?? base.to
+  const label = range?.label ?? labelMonthPt(monthKey)
   const [metricsRevenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
@@ -395,7 +395,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
 
   return {
     month: monthKey,
-    label: labelMonthPt(monthKey),
+    label,
     from,
     to,
     revenue: revenueRounded,
@@ -423,11 +423,33 @@ export async function computeFinanceKpis(opts?: {
   await ensureFiscalSplitTable().catch(() => undefined)
   const current =
     normalizeMonthKey(opts?.month) ?? currentMonthKey(todayIso())
-  const compare =
-    normalizeMonthKey(opts?.compareMonth) ?? previousMonthKey(current)
-  const [currentBucket, previousBucket] = await Promise.all([
-    buildBucket(current),
-    buildBucket(compare),
-  ])
+  const currentWindow = resolveMonthWindow(current)
+  const compareKey = normalizeMonthKey(opts?.compareMonth)
+  const prevWindow = compareKey
+    ? (() => {
+        const w = resolveMonthWindow(compareKey, currentWindow.to)
+        return {
+          month: w.month,
+          from: w.from,
+          to: w.to,
+          label: labelMonthPt(w.month),
+          mtd_aligned: false,
+        }
+      })()
+    : resolvePreviousComparableWindow(currentWindow)
+  const currentLabel = currentWindow.mtd
+    ? `${labelMonthPt(current)} (até dia ${Number(currentWindow.to.slice(8, 10))})`
+    : labelMonthPt(current)
+  // Sequencial: bucket atual depois comparado — reduz pico no pooler.
+  const currentBucket = await buildBucket(current, {
+    from: currentWindow.from,
+    to: currentWindow.to,
+    label: currentLabel,
+  })
+  const previousBucket = await buildBucket(prevWindow.month, {
+    from: prevWindow.from,
+    to: prevWindow.to,
+    label: prevWindow.label,
+  })
   return { current: currentBucket, previous: previousBucket }
 }
