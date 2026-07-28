@@ -102,16 +102,18 @@ function emptyMonthRow(month: MonthKey): MonthRevenueRow {
 export const DIRECTOR_UI_BUDGET_MS = 70_000
 /** 20 × 250 = 5k linhas/trimestre — suficiente p/ taxa + lista; CSV completo usa budget completo. */
 export const DIRECTOR_UI_MAX_PAGES = 20
+/** UI slim: menos páginas → resposta antes do abort do browser. */
+export const DIRECTOR_UI_SLIM_MAX_PAGES = 12
 
 export type DirectorFetchBudget = {
   deadlineAt: number | null
   maxPages: number
 }
 
-export function directorUiBudget(now = Date.now()): DirectorFetchBudget {
+export function directorUiBudget(now = Date.now(), maxPages = DIRECTOR_UI_MAX_PAGES): DirectorFetchBudget {
   return {
     deadlineAt: now + DIRECTOR_UI_BUDGET_MS,
-    maxPages: DIRECTOR_UI_MAX_PAGES,
+    maxPages,
   }
 }
 

@@ -308,6 +308,31 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
   `) as ScheduledServiceRow[]
 }
 
+/** Agendamentos abertos só do dia (painel Hoje / alinhado ao Pipeline). */
+export async function listTodaySchedules(
+  day: string,
+  limit = 150,
+): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and c.anonymized_at is null
+      and cs.scheduled_at is not null
+      and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and (
+        cs.last_done_at is null
+        or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      )
+    order by cs.scheduled_at asc
+    limit ${limit}
+  `) as ScheduledServiceRow[]
+}
+
 /** Pipeline do dia: agendados ainda abertos + concluídos (last_done_at no dia). */
 export async function listTodayPipeline(day: string): Promise<{
   scheduled: ScheduledServiceRow[]

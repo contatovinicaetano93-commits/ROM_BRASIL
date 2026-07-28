@@ -11,7 +11,7 @@ import {
   countOverdueServices,
   slicePlaybookForRole,
 } from '@/lib/salon/playbook'
-import { listUpcomingSchedules } from '@/lib/services'
+import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
         const salonRaw = await getSalonMetrics(day)
         const playbookAll = await listActionItems({ limit: 60 })
-        const scheduleRaw = await listUpcomingSchedules(7, 150)
+        const scheduleRaw = await listTodaySchedules(day, 150)
         const leadRows = (await sql`
           select
             count(*) filter (where status = 'novo')::int as novos,

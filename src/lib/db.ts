@@ -14,7 +14,7 @@ try {
  *
  * Do NOT switch back to neon() from @neondatabase/serverless:
  * neon() is HTTP-only and fails against *.supabase.com / pooler hosts.
- * Iguatemi remains on Neon in its own repo.
+ * BR e IG usam Supabase pooler; só o Cérebro usa Neon.
  */
 export type Sql = {
   // Tagged template + helper sql(ids) para IN (...)

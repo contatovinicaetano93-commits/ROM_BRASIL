@@ -65,7 +65,7 @@ export function validateDeploymentEnv(): DeploymentValidation {
 
   if (!process.env.DATABASE_URL?.trim()) {
     warnings.push(
-      'DATABASE_URL ausente — use um banco Postgres dedicado por unidade (Brasil: Supabase; Iguatemi: Neon — nunca compartilhe).',
+      'DATABASE_URL ausente — use um banco Postgres dedicado por unidade (BR e IG: Supabase; só Cérebro: Neon — nunca compartilhe).',
     )
   }
 

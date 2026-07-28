@@ -2,6 +2,7 @@ import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
 import {
   directorFullBudget,
   directorUiBudget,
+  DIRECTOR_UI_SLIM_MAX_PAGES,
   fetchLiveDirectorBlocks,
 } from './avec-live'
 import {
@@ -52,6 +53,13 @@ export interface BuildDirectorReportOptions {
    * true = budget Avec curto (UI JSON). false/omit = full (cron, CSV, e-mail).
    */
   interactive?: boolean
+  /** Cap de páginas Avec 0011 na UI (slim). */
+  maxPages0011?: number
+  /**
+   * Limita clientes de reativação por profissional na resposta JSON (UI).
+   * null/undefined = sem corte (CSV/e-mail).
+   */
+  reactivationLimit?: number | null
 }
 
 function comparisonMonthSet(
@@ -110,7 +118,12 @@ export async function buildDirectorReport(
         {
           includeReturn: need0011,
           includeRevenue: need0021,
-          budget: opts.interactive ? directorUiBudget() : directorFullBudget(),
+          budget: opts.interactive
+            ? directorUiBudget(
+                Date.now(),
+                opts.maxPages0011 ?? DIRECTOR_UI_SLIM_MAX_PAGES,
+              )
+            : directorFullBudget(),
         },
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
@@ -213,6 +226,18 @@ export async function buildDirectorReport(
   draft.period.label_0011 = label0011(draft)
   draft.period.label_0021 = label0021(draft)
   draft.period.label = reportPeriodLabel(draft)
+
+  const reactivationLimit = opts.reactivationLimit
+  if (
+    reactivationLimit != null &&
+    Number.isFinite(reactivationLimit) &&
+    reactivationLimit >= 0
+  ) {
+    draft.return_blocks = draft.return_blocks.map((b) => ({
+      ...b,
+      reactivation: b.reactivation.slice(0, reactivationLimit),
+    }))
+  }
 
   return draft
 }

@@ -143,6 +143,7 @@ export async function GET(req: NextRequest) {
       stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
         ? stageParam
         : 'all'
+    const slim = searchParams.get('slim') === '1'
     const professionalId = searchParams.get('professional_id') ?? undefined
     const forceMock = searchParams.get('mock') === '1'
     const selectedMonth = asMonth(searchParams.get('month'))
@@ -162,6 +163,9 @@ export async function GET(req: NextRequest) {
       professionalId,
       forceMock,
       stage,
+      maxPages0011: slim ? 12 : undefined,
+      reactivationLimit:
+        format === 'json' && slim ? (professionalId ? 80 : 8) : null,
     }
 
     // JSON da UI: cache + budget Avec curto. CSV/cron: full sem cache.
@@ -169,8 +173,9 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v3',
+              'director:json:v4',
               stage,
+              `slim=${slim ? 1 : 0}`,
               `m=${selectedMonth ?? ''}`,
               `q21=${selectedQuarter0021 ?? ''}`,
               `c21=${compareQuarter0021 ?? ''}`,

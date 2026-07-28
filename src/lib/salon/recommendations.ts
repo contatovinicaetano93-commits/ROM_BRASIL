@@ -72,8 +72,8 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
         )::int as due_soon,
         count(*) filter (
           where scheduled_at is not null
-            and scheduled_at >= now()
-            and scheduled_at <= now() + interval '7 days'
+            and scheduled_at >= date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
+            and scheduled_at < (date_trunc('day', now() at time zone 'America/Sao_Paulo') + interval '1 day') at time zone 'America/Sao_Paulo'
         )::int as scheduled_soon
       from svc
       group by contact_id
