@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession, requireAdmin } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { cachedFetch, MemoryCache } from '@/lib/cache'
 import { listVideos, createVideo } from '@/lib/onboarding'
 
 export async function GET(req: NextRequest) {
