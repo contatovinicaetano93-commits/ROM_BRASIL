@@ -7,6 +7,7 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
+import { loadRuntimeAvecApiToken } from '@/lib/avec/token-store'
 
 const logger = new Logger('Health')
 
@@ -90,6 +91,15 @@ export async function getHealthStatus() {
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
+  // Token pode vir do env ou do runtime (app_runtime_secrets via refresh-token cron).
+  let runtimeToken: string | null = null
+  try {
+    runtimeToken = await loadRuntimeAvecApiToken()
+  } catch {
+    // Falha silenciosa — apenas reduz fidelidade do diagnóstico.
+  }
+  const tokenOk = envOk('AVEC_API_TOKEN') || Boolean(runtimeToken)
+
   return {
     ok: connected && validation.ok,
     deployment,
@@ -114,7 +124,7 @@ export async function getHealthStatus() {
       configured: isAvecConfigured(),
       mock: isAvecMock(),
       base_url: getAvecBaseUrl(),
-      token: envOk('AVEC_API_TOKEN'),
+      token: tokenOk,
       webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
       webhook_url: '/api/webhooks/avec',
       last_fast: lastFast,
