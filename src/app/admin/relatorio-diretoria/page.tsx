@@ -357,6 +357,7 @@ export default function RelatorioDiretoriaPage() {
       const res = await apiFetch('/api/director-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 60_000,
         body: JSON.stringify({
           stage: '0011',
           quarter,
@@ -378,6 +379,7 @@ export default function RelatorioDiretoriaPage() {
       const res = await apiFetch('/api/director-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 60_000,
         body: JSON.stringify({
           stage: '0021',
           month,
