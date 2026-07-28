@@ -1,4 +1,5 @@
 import { getLastAvecSync } from '@/lib/avec/sync'
+import { cachedFetch } from '@/lib/cache'
 import { kpiSourceFromSyncStatus } from '@/lib/kpi-source'
 
 export type AvecSyncMeta = {
@@ -22,42 +23,47 @@ export type AvecSyncMeta = {
  * já saneado), preferimos o mais recente com status real.
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
-  const [full, fast] = await Promise.all([
-    getLastAvecSync('full', { finishedOnly: true }).catch(() => null),
-    getLastAvecSync('fast', { finishedOnly: true }).catch(() => null),
-  ])
+  return cachedFetch(
+    'avec:sync-meta:v1',
+    async () => {
+      const [full, fast] = await Promise.all([
+        getLastAvecSync('full', { finishedOnly: true }).catch(() => null),
+        getLastAvecSync('fast', { finishedOnly: true }).catch(() => null),
+      ])
 
-  const fullAgeHours =
-    full?.created_at != null
-      ? (Date.now() - new Date(full.created_at).getTime()) / 3_600_000
-      : null
-  const fastAgeHours =
-    fast?.created_at != null
-      ? (Date.now() - new Date(fast.created_at).getTime()) / 3_600_000
-      : null
+      const fullAgeHours =
+        full?.created_at != null
+          ? (Date.now() - new Date(full.created_at).getTime()) / 3_600_000
+          : null
+      const fastAgeHours =
+        fast?.created_at != null
+          ? (Date.now() - new Date(fast.created_at).getTime()) / 3_600_000
+          : null
 
-  const never_synced = full == null && fast == null
-  const fullStale = fullAgeHours != null && fullAgeHours > 24
-  const fastStale = fastAgeHours != null && fastAgeHours > 1
-  const stale = never_synced || fullStale || fastStale
+      const never_synced = full == null && fast == null
+      const fullStale = fullAgeHours != null && fullAgeHours > 24
+      const fastStale = fastAgeHours != null && fastAgeHours > 1
+      const stale = never_synced || fullStale || fastStale
 
-  // Prefer the more recent finished run so a failed/partial fast is not hidden by an older full ok.
-  const latest =
-    full && fast
-      ? new Date(fast.created_at).getTime() >= new Date(full.created_at).getTime()
-        ? fast
-        : full
-      : (full ?? fast)
-  const syncStatus = latest?.status ?? null
-  const created_at = latest?.created_at ?? null
+      const latest =
+        full && fast
+          ? new Date(fast.created_at).getTime() >= new Date(full.created_at).getTime()
+            ? fast
+            : full
+          : (full ?? fast)
+      const syncStatus = latest?.status ?? null
+      const created_at = latest?.created_at ?? null
 
-  return {
-    status: syncStatus,
-    created_at,
-    stale,
-    hint: kpiSourceFromSyncStatus(stale ? 'stale' : syncStatus),
-    fast_created_at: fast?.created_at ?? null,
-    fast_stale: never_synced || fastStale,
-    never_synced,
-  }
+      return {
+        status: syncStatus,
+        created_at,
+        stale,
+        hint: kpiSourceFromSyncStatus(stale ? 'stale' : syncStatus),
+        fast_created_at: fast?.created_at ?? null,
+        fast_stale: never_synced || fastStale,
+        never_synced,
+      }
+    },
+    30,
+  )
 }

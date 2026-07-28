@@ -182,21 +182,18 @@ export async function computePeriodAnalytics(opts?: {
   const { month, from, to } = window
   const prevWindow = resolvePreviousComparableWindow(window)
   const nearOpts = { maxSkewDays: 14 }
-  // Sequencial em 2 lotes: evita pico no pooler (max:1) e timeouts no Overview.
-  const [totals, loss, p1, p2, p3] = await Promise.all([
-    sumRevenueAndAttended(from, to),
-    sumAttendanceLoss(from, to),
-    getSalonP1DailyNear(to, nearOpts),
-    getSalonP2DailyNear(to, nearOpts),
-    getSalonP3DailyNear(to, nearOpts),
-  ])
-  const [prevTotals, prevLoss, prevP1, prevP2, prevP3] = await Promise.all([
-    sumRevenueAndAttended(prevWindow.from, prevWindow.to),
-    sumAttendanceLoss(prevWindow.from, prevWindow.to),
-    getSalonP1DailyNear(prevWindow.to, nearOpts),
-    getSalonP2DailyNear(prevWindow.to, nearOpts),
-    getSalonP3DailyNear(prevWindow.to, nearOpts),
-  ])
+  // Sequencial no pooler max:1 — Promise.all(5) × 2 lotes competia com outras
+  // lambdas e o Overview ficava em “Carregando…” até abortar.
+  const totals = await sumRevenueAndAttended(from, to)
+  const loss = await sumAttendanceLoss(from, to)
+  const p1 = await getSalonP1DailyNear(to, nearOpts)
+  const p2 = await getSalonP2DailyNear(to, nearOpts)
+  const p3 = await getSalonP3DailyNear(to, nearOpts)
+  const prevTotals = await sumRevenueAndAttended(prevWindow.from, prevWindow.to)
+  const prevLoss = await sumAttendanceLoss(prevWindow.from, prevWindow.to)
+  const prevP1 = await getSalonP1DailyNear(prevWindow.to, nearOpts)
+  const prevP2 = await getSalonP2DailyNear(prevWindow.to, nearOpts)
+  const prevP3 = await getSalonP3DailyNear(prevWindow.to, nearOpts)
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
   const prevTicket =

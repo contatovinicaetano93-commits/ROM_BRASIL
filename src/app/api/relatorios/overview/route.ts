@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
+import { cachedFetch } from '@/lib/cache'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
@@ -19,12 +20,20 @@ export async function GET(req: NextRequest) {
     const format = req.nextUrl.searchParams.get('format')
     // Default: só leitura ao vivo. Materializar só com ?materialize=1 (botão Atualizar).
     const materialize = req.nextUrl.searchParams.get('materialize') === '1'
-    const overview = await computeMonthOverview({ month, materialize })
-    const sync = await loadAvecSyncMeta()
+
+    const payload = await cachedFetch(
+      `relatorios:overview:v2:${month ?? 'cur'}:mat=${materialize ? 1 : 0}`,
+      async () => {
+        const overview = await computeMonthOverview({ month, materialize })
+        const sync = await loadAvecSyncMeta()
+        return { ...overview, sync }
+      },
+      materialize ? 5 : 60,
+    )
 
     if (format === 'csv') {
-      const csv = buildMonthOverviewCsv(overview)
-      const filename = `overview_${overview.month}_${overview.panel}.csv`
+      const csv = buildMonthOverviewCsv(payload)
+      const filename = `overview_${payload.month}_${payload.panel}.csv`
       return new Response(csv, {
         status: 200,
         headers: {
@@ -35,7 +44,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return ok({ ...overview, sync })
+    return ok(payload)
   } catch (e) {
     return handleError(e)
   }
