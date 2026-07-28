@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Wallet, Boxes, GraduationCap, Stethoscope, FileBarChart } from 'lucide-react'
 import { BOTTOM_NAV } from './nav'
+import { useClientSession } from './SessionProvider'
 
 const FINANCE_BOTTOM_NAV = [
   { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
@@ -20,14 +20,8 @@ const STOCK_BOTTOM_NAV = [
 
 export function BottomNav() {
   const pathname = usePathname()
-  const [role, setRole] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setRole(json.data?.role ?? null))
-      .catch(() => setRole(null))
-  }, [])
+  const { session } = useClientSession()
+  const role = session?.role ?? null
 
   // Financeiro/estoque são isolados pelo middleware — bottom nav própria,
   // sem abas que só levariam a um redirect de volta.

@@ -103,15 +103,19 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
 /** Abre run no início — snapshots recebem sync_run_id correto. */
 async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
   const sql = getSql()
-  // Runs mortos por timeout/kill não devem bloquear o min-gap.
+  // Runs mortos por timeout/kill não devem bloquear o min-gap / status UI.
   await sql`
     update avec_sync_runs
     set
       status = 'error',
       error = coalesce(error, 'Sync interrompido (timeout/kill)'),
       stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
-    where kind = ${kind}
+    where kind in ('fast', 'full', 'stock_fast', 'stock_full')
       and coalesce(stats->>'running', 'false') = 'true'
+      and (
+        kind = ${kind}
+        or created_at < now() - interval '8 minutes'
+      )
   `
   const starting: AvecSyncStats = { ...stats, running: true }
   const rows = (await sql`
@@ -144,18 +148,9 @@ export async function getLastAvecSync(
   opts?: { finishedOnly?: boolean },
 ): Promise<AvecSyncRun | null> {
   const sql = getSql()
-  // Runs órfãos (lambda kill) não podem ficar running=true e esconder o status real.
-  await sql`
-    update avec_sync_runs
-    set
-      status = 'error',
-      error = coalesce(error, 'Sync interrompido (timeout/kill)'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
-    where kind in ('fast', 'full', 'stock_fast', 'stock_full')
-      and coalesce(stats->>'running', 'false') = 'true'
-      and created_at < now() - interval '8 minutes'
-  `.catch(() => undefined)
-
+  // NÃO fazer UPDATE aqui — Relatórios/Hoje/Visão chamam isto a cada load e
+  // o write no pooler (max:1) deixava os painéis em “Carregando…”.
+  // Orphans são saneados em beginAvecSyncRun / beginRun (estoque).
   const finishedOnly = opts?.finishedOnly === true
   if (kind) {
     const rows = finishedOnly

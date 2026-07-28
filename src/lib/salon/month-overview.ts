@@ -1,5 +1,6 @@
 import { computeFinanceKpis, type FinanceKpis } from '@/lib/finance'
 import { getBrand } from '@/lib/brand'
+import { cachedFetch } from '@/lib/cache'
 import { computePeriodAnalytics, type PeriodAnalytics } from '@/lib/salon/period-analytics'
 import {
   getMonthCompleteness,
@@ -78,11 +79,19 @@ export async function computeMonthOverview(opts?: {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
 
-  // Sequencial (não Promise.all): Overview + Financeiro + Analytics no mesmo
-  // request estouravam o pooler e a página ficava em “Carregando…” sem timeout.
+  // Sequencial + cache curto: Overview + Financeiro + Analytics no mesmo
+  // request sem cache estouravam o pooler e a página ficava em “Carregando…”.
   const completeness = await getMonthCompleteness(month)
-  const finance = await computeFinanceKpis({ month })
-  const analytics = await computePeriodAnalytics({ month })
+  const finance = await cachedFetch(
+    `finance:kpis:lib:v1:${month}`,
+    () => computeFinanceKpis({ month }),
+    60,
+  )
+  const analytics = await cachedFetch(
+    `period:analytics:lib:v1:${month}`,
+    () => computePeriodAnalytics({ month }),
+    60,
+  )
 
   let materializedAt: string | null = null
   if (opts?.materialize === true) {

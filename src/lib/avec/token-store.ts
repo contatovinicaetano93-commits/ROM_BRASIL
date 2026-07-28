@@ -10,6 +10,10 @@ const TOKEN_KEY = 'avec_api_token'
 /** Evita N mint Cognito em paralelo no mesmo isolate (várias queries 401). */
 let refreshInFlight: Promise<string> | null = null
 
+/** Token fresco em memória — evita hit no Neon a cada getAvecConfig. */
+let memToken: { token: string; expiresAtMs: number } | null = null
+const MEM_TOKEN_TTL_MS = 60_000
+
 export async function ensureTokenStore(): Promise<void> {
   const sql = getSql()
   await sql`
@@ -96,6 +100,11 @@ export async function ensureFreshAvecApiToken(opts?: {
   const minHours = opts?.minHoursLeft ?? 1
   const force = opts?.force === true
 
+  if (!force && memToken && memToken.expiresAtMs > Date.now()) {
+    const left = hoursLeftInAvecToken(memToken.token)
+    if (left >= minHours) return memToken.token
+  }
+
   const runtime = await loadRuntimeAvecApiToken()
   const envTok = process.env.AVEC_API_TOKEN?.trim() || null
   const candidates = [runtime, envTok].filter((t): t is string => Boolean(t))
@@ -108,7 +117,10 @@ export async function ensureFreshAvecApiToken(opts?: {
         best = { token: t, hours_left: left }
       }
     }
-    if (best) return best.token
+    if (best) {
+      memToken = { token: best.token, expiresAtMs: Date.now() + MEM_TOKEN_TTL_MS }
+      return best.token
+    }
   }
 
   if (!isAvecLoginConfigured()) {
@@ -129,6 +141,7 @@ export async function ensureFreshAvecApiToken(opts?: {
       minHoursLeft: 0,
     })
     await saveAvecApiToken(minted.token)
+    memToken = { token: minted.token, expiresAtMs: Date.now() + MEM_TOKEN_TTL_MS }
     return minted.token
   })()
 
