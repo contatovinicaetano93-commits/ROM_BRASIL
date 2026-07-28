@@ -134,70 +134,62 @@ export default function AdminPage() {
   const load = useCallback(async () => {
     setState('loading')
     setError(null)
-    try {
-      // Sequencial + parse seguro: uma rota HTML/timeout não derruba a página inteira
-      // com SyntaxError no Safari.
-      const errs: string[] = []
 
-      try {
-        const k = await readApiJson(await apiFetch('/api/kpis', { cache: 'no-store' }))
-        if (k.error) errs.push(`KPIs: ${k.error}`)
-        else setKpis(k.data as KpiData)
-      } catch (e) {
-        errs.push(`KPIs: ${e instanceof Error ? e.message : String(e)}`)
-      }
+    const TIMEOUT = 25_000
+    const errs: string[] = []
 
-      try {
-        const h = await readApiJson(await apiFetch('/api/health', { cache: 'no-store' }))
-        if (h.error) errs.push(`Health: ${h.error}`)
-        else {
-          const data = h.data as HealthStatus | { ok?: boolean } | null
-          // Health público ({ok}) sem database — ignora (sessão/auth incompleta).
-          if (data && typeof data === 'object' && 'database' in data) {
-            setHealth(data as HealthStatus)
-          } else {
-            errs.push('Health: resposta parcial — atualize o login e tente de novo')
-          }
+    const settle = (label: string) => (r: PromiseSettledResult<{ data?: unknown; error?: string }>) => {
+      if (r.status === 'rejected') {
+        const e = r.reason
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          errs.push(`${label}: tempo esgotado (${TIMEOUT / 1000}s)`)
+        } else {
+          errs.push(`${label}: ${e instanceof Error ? e.message : String(e)}`)
         }
-      } catch (e) {
-        errs.push(`Health: ${e instanceof Error ? e.message : String(e)}`)
+        return null
       }
-
-      try {
-        const a = await readApiJson(await apiFetch('/api/avec/sync', { cache: 'no-store' }))
-        if (a.error) errs.push(`Avec: ${a.error}`)
-        else setAvec(a.data as AvecStatus)
-      } catch (e) {
-        errs.push(`Avec: ${e instanceof Error ? e.message : String(e)}`)
+      if (r.value.error) {
+        errs.push(`${label}: ${r.value.error}`)
+        return null
       }
+      return r.value
+    }
 
-      try {
-        const c = await readApiJson(
-          await apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store' }),
-        )
-        if (c.error) errs.push(`Contatos: ${c.error}`)
-        else setContacts((c.data as ContactRow[]) ?? [])
-      } catch (e) {
-        errs.push(`Contatos: ${e instanceof Error ? e.message : String(e)}`)
-      }
+    const [kpisR, healthR, avecR, contactsR, scheduleR] = await Promise.allSettled([
+      apiFetch('/api/kpis', { cache: 'no-store', timeoutMs: TIMEOUT }).then(readApiJson),
+      apiFetch('/api/health', { cache: 'no-store', timeoutMs: TIMEOUT }).then(readApiJson),
+      apiFetch('/api/avec/sync', { cache: 'no-store', timeoutMs: TIMEOUT }).then(readApiJson),
+      apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store', timeoutMs: TIMEOUT }).then(readApiJson),
+      apiFetch('/api/schedule', { cache: 'no-store', timeoutMs: TIMEOUT }).then(readApiJson),
+    ])
 
-      try {
-        const s = await readApiJson(await apiFetch('/api/schedule', { cache: 'no-store' }))
-        if (s.error) errs.push(`Agendamentos: ${s.error}`)
-        else setSchedule((s.data as ScheduleRow[]) ?? [])
-      } catch (e) {
-        errs.push(`Agendamentos: ${e instanceof Error ? e.message : String(e)}`)
-      }
+    const k = settle('KPIs')(kpisR)
+    if (k) setKpis(k.data as KpiData)
 
-      if (errs.length) {
-        setError(errs.join(' · '))
-        setState('error')
+    const h = settle('Health')(healthR)
+    if (h) {
+      const data = h.data as HealthStatus | { ok?: boolean } | null
+      if (data && typeof data === 'object' && 'database' in data) {
+        setHealth(data as HealthStatus)
       } else {
-        setState('ok')
+        errs.push('Health: resposta parcial — atualize o login e tente de novo')
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    }
+
+    const a = settle('Avec')(avecR)
+    if (a) setAvec(a.data as AvecStatus)
+
+    const c = settle('Contatos')(contactsR)
+    if (c) setContacts((c.data as ContactRow[]) ?? [])
+
+    const s = settle('Agendamentos')(scheduleR)
+    if (s) setSchedule((s.data as ScheduleRow[]) ?? [])
+
+    if (errs.length) {
+      setError(errs.join(' · '))
       setState('error')
+    } else {
+      setState('ok')
     }
   }, [])
 
