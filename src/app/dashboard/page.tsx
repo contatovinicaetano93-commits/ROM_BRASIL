@@ -84,7 +84,13 @@ export default function DashboardPage() {
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
   const [period, setPeriod] = useState<(PeriodAnalytics & {
-    sync?: { status: string | null; created_at: string | null; stale: boolean; hint: string | null }
+    sync?: {
+      status: string | null
+      created_at: string | null
+      stale: boolean
+      hint: string | null
+      fast_stale?: boolean
+    }
   }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
@@ -135,8 +141,13 @@ export default function DashboardPage() {
           else if (periodJson.data) {
             setPeriod(periodJson.data)
             const sync = periodJson.data.sync
-            if (sync?.stale) warnings.push('Sync Avec desatualizado (>24h) — números podem estar velhos')
-            else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
+            if (sync?.stale) {
+              warnings.push(
+                sync.fast_stale
+                  ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
+                  : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
+              )
+            } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
             else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
           }
         } catch {
@@ -381,8 +392,8 @@ export default function DashboardPage() {
             </p>
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-2 text-xs text-muted">
-                Sem duração na Avec para esta unidade (relatório 0223 campo tempo, ou início/fim no
-                0002). Top serviços mostra faturamento — não inventamos TM a partir disso.
+                Sem duração cadastrada na Avec (relatório 0223 · campo tempo). Top serviços mostra
+                faturamento — não inventamos TM a partir disso.
               </p>
             )}
           </SectionCard>

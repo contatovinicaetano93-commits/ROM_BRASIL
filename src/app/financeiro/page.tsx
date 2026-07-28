@@ -533,7 +533,9 @@ export default function FinanceiroPage() {
       {syncMeta && (syncMeta.stale || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
           {syncMeta.stale
-            ? 'Sync Avec desatualizado (>24h) — números podem estar velhos.'
+            ? syncMeta.fast_stale
+              ? 'Sync Avec fast desatualizado (>1h) — caixa/Hoje podem estar velhos.'
+              : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
             : syncMeta.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}
