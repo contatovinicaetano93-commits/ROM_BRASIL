@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
@@ -107,11 +107,15 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { fresh?: boolean }) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/pipeline', { cache: 'no-store' })
+      if (opts?.fresh) clearApiClientCache('/api/pipeline')
+      const res = await apiFetch('/api/pipeline', {
+        cache: 'no-store',
+        clientCache: opts?.fresh ? false : undefined,
+      })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data)
@@ -123,7 +127,7 @@ export default function PipelinePage() {
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
   const dayLabel = data
@@ -150,7 +154,7 @@ export default function PipelinePage() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => void load({ fresh: true })}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
         >

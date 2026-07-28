@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Play, Plus, X } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
+import { useClientSession } from '../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
 
 interface OnboardingPillar {
@@ -47,7 +48,8 @@ export default function OnboardingPage() {
   const [videos, setVideos] = useState<OnboardingVideo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { session } = useClientSession()
+  const isAdmin = Boolean(session?.can_view_revenue)
   const [playing, setPlaying] = useState<OnboardingVideo | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -71,11 +73,7 @@ export default function OnboardingPage() {
   }, [])
 
   useEffect(() => {
-    load()
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setIsAdmin(false))
+    void load()
   }, [load])
 
   const videosByPillar = useMemo(() => {

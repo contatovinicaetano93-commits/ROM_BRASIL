@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, handleError, err } from '@/lib/api-response'
+import { cachedFetch, MemoryCache } from '@/lib/cache'
 import { listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
@@ -37,13 +38,29 @@ export async function GET(req: NextRequest) {
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 2000) : 100
-    // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
-    let items = await listContactsWithSummary({ limit, query, pendingOnly, status })
 
-    if (sort === 'urgency') {
-      // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.
-      items.sort(compareByOverdueThenName)
-    }
+    const cacheKey = [
+      'contacts:list:v1',
+      `lim=${limit}`,
+      `sort=${sort}`,
+      `pend=${pendingOnly ? 1 : 0}`,
+      `q=${query ?? ''}`,
+      `st=${status ?? ''}`,
+    ].join(':')
+
+    const items = await cachedFetch(
+      cacheKey,
+      async () => {
+        // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
+        let rows = await listContactsWithSummary({ limit, query, pendingOnly, status })
+        if (sort === 'urgency') {
+          // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.
+          rows = [...rows].sort(compareByOverdueThenName)
+        }
+        return rows
+      },
+      query ? 15 : 30,
+    )
 
     return ok(items)
   } catch (e) {
@@ -89,6 +106,7 @@ export async function POST(req: NextRequest) {
       payload: { notes: payload.notes ?? null, services: payload.services?.length ?? 0 },
     })
 
+    MemoryCache.deletePrefix('contacts:list:')
     return ok(contact, undefined, 201)
   } catch (e) {
     return handleError(e)
