@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
+import { isDbPoolExhaustedError } from '@/lib/db'
 
 const logger = new Logger('API')
 
@@ -24,6 +25,14 @@ export function handleError(e: unknown) {
       stack: e.stack,
       name: e.name,
     })
+    if (isDbPoolExhaustedError(e)) {
+      return err(
+        isProduction()
+          ? 'Banco temporariamente ocupado — atualize a página em alguns segundos'
+          : e.message,
+        503,
+      )
+    }
     const clientMessage = isProduction() ? 'Erro interno do servidor' : e.message
     return err(clientMessage, 500)
   }

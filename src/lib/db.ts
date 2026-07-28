@@ -29,19 +29,49 @@ export type Sql = {
 
 const clients = new Map<string, PostgresSql>()
 
+/**
+ * Session pooler (5432) no Supabase tem poucas slots (EMAXCONNSESSION).
+ * Em serverless (Vercel), transaction mode (6543) libera a conexão a cada query.
+ */
+export function resolveDatabaseUrl(raw: string): string {
+  const trimmed = raw.trim()
+  try {
+    const u = new URL(trimmed)
+    const isSupabasePooler =
+      u.hostname.includes('pooler.supabase.com') || u.hostname.includes('.pooler.supabase.')
+    const port = u.port || '5432'
+    if (isSupabasePooler && port === '5432') {
+      u.port = '6543'
+      return u.toString()
+    }
+  } catch {
+    // URL inválida — deixa o postgres.js falhar com a string original.
+  }
+  return trimmed
+}
+
+export function isDbPoolExhaustedError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /EMAXCONNSESSION|max clients reached|remaining connection slots|too many connections/i.test(
+    msg,
+  )
+}
+
 function getClient(databaseUrl: string): PostgresSql {
-  let client = clients.get(databaseUrl)
+  const resolved = resolveDatabaseUrl(databaseUrl)
+  let client = clients.get(resolved)
   if (!client) {
-    client = postgres(databaseUrl, {
+    client = postgres(resolved, {
       ssl: 'require',
-      max: 3,
+      // 1 conn por isolate serverless — várias lambdas × max:3 estouravam o pooler.
+      max: 1,
       // Transaction/Session pooler: prepared statements quebram no modo transaction.
       prepare: false,
-      idle_timeout: 20,
-      max_lifetime: 60 * 5,
-      connect_timeout: 15,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
     })
-    clients.set(databaseUrl, client)
+    clients.set(resolved, client)
   }
   return client
 }
@@ -71,7 +101,7 @@ function wrap(sql: PostgresSql): Sql {
 
 /**
  * Cliente Postgres (Supabase pooler / Neon TCP) — só em route handlers (server-side).
- * DATABASE_URL: Session pooler (5432) ou Transaction (6543) no Vercel.
+ * DATABASE_URL: Session pooler (5432) é reescrito para Transaction (6543) quando Supabase.
  */
 export function getSql(databaseUrl?: string): Sql {
   const url = (databaseUrl ?? process.env.DATABASE_URL)?.trim()
