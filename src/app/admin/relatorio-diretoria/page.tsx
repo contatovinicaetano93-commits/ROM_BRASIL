@@ -148,8 +148,8 @@ export default function RelatorioDiretoriaPage() {
     loadAbortRef.current = controller
     setLoading(true)
     setError(null)
-    // Servidor usa budget ~70s; 120s cobre rede + parse sem orphan falso.
-    const timer = window.setTimeout(() => controller.abort(), 120_000)
+    // Servidor usa budget ~45s + teto 55s; 90s cobre rede + parse.
+    const timer = window.setTimeout(() => controller.abort(), 90_000)
     try {
       const stage = tab
       const q = new URLSearchParams({
@@ -166,6 +166,8 @@ export default function RelatorioDiretoriaPage() {
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
         signal: controller.signal,
+        clientCache: false,
+        timeoutMs: 90_000,
       })
       if (controller.signal.aborted) return
       const json = await res.json()
@@ -196,7 +198,7 @@ export default function RelatorioDiretoriaPage() {
         return
       }
       if (e instanceof DOMException && e.name === 'AbortError') {
-        setError('Relatório demorou demais (>120s). Tente de novo ou marque “forçar demo”.')
+        setError('Relatório demorou demais (>90s). Tente de novo ou marque “forçar demo”.')
       } else {
         setError(String(e))
       }

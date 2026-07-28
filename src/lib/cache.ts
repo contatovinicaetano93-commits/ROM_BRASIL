@@ -3,6 +3,8 @@ export interface CacheEntry<T> {
   expiresAt: number
 }
 
+const inflight = new Map<string, Promise<unknown>>()
+
 export class MemoryCache {
   private static cache = new Map<string, CacheEntry<any>>()
   private static maxSize = 1000
@@ -59,9 +61,21 @@ export async function cachedFetch<T>(
   const cached = MemoryCache.get<T>(key)
   if (cached) return cached
 
-  const value = await fn()
-  MemoryCache.set(key, value, ttlSeconds)
-  return value
+  const existing = inflight.get(key) as Promise<T> | undefined
+  if (existing) return existing
+
+  const pending = (async () => {
+    try {
+      const value = await fn()
+      MemoryCache.set(key, value, ttlSeconds)
+      return value
+    } finally {
+      inflight.delete(key)
+    }
+  })()
+
+  inflight.set(key, pending)
+  return pending
 }
 
 export function createCachedFunction<T>(

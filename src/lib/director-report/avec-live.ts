@@ -99,11 +99,11 @@ function emptyMonthRow(month: MonthKey): MonthRevenueRow {
 }
 
 /** Budget interativo: caber no abort 90s do browser + deixar margem de rede. */
-export const DIRECTOR_UI_BUDGET_MS = 70_000
-/** 20 × 250 = 5k linhas/trimestre — suficiente p/ taxa + lista; CSV completo usa budget completo. */
-export const DIRECTOR_UI_MAX_PAGES = 20
+export const DIRECTOR_UI_BUDGET_MS = 45_000
+/** 8 × 250 = 2k linhas/trimestre — UI precisa responder antes do abort. */
+export const DIRECTOR_UI_MAX_PAGES = 8
 /** UI slim: menos páginas → resposta antes do abort do browser. */
-export const DIRECTOR_UI_SLIM_MAX_PAGES = 12
+export const DIRECTOR_UI_SLIM_MAX_PAGES = 6
 
 export type DirectorFetchBudget = {
   deadlineAt: number | null

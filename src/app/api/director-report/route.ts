@@ -16,10 +16,37 @@ import {
   getDirectorReportRecipients,
   isDirectorEmailConfigured,
 } from '@/lib/director-report/email'
-import type { DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
+import type { DirectorReport, DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
 import { buildProfessionalProfileWorkbook } from '@/lib/director-report/xlsx-profile'
 
 export const maxDuration = 300
+
+/** Teto duro da UI — se Avec travar, devolve demo em vez de “Carregando…” infinito. */
+const DIRECTOR_UI_HARD_MS = 55_000
+
+async function buildForUi(
+  opts: Parameters<typeof buildDirectorReport>[0],
+): Promise<DirectorReport> {
+  try {
+    return await Promise.race([
+      buildDirectorReport({ ...opts, interactive: true }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(Object.assign(new Error('UI_DEADLINE'), { code: 'UI_DEADLINE' })), DIRECTOR_UI_HARD_MS)
+      }),
+    ])
+  } catch (e) {
+    const code = e && typeof e === 'object' && 'code' in e ? (e as { code?: string }).code : null
+    if (code === 'UI_DEADLINE' || (e instanceof Error && e.message === 'UI_DEADLINE')) {
+      const mock = await buildDirectorReport({ ...opts, forceMock: true, interactive: true })
+      const note = 'Avec demorou demais — mostrando demo. Toque Atualizar ou “Forçar demo”.'
+      return {
+        ...mock,
+        schedule_note: [mock.schedule_note, note].filter(Boolean).join(' · '),
+      }
+    }
+    throw e
+  }
+}
 
 function asMonth(v: string | null): MonthKey | undefined {
   if (!v || !/^\d{4}-\d{2}$/.test(v)) return undefined
@@ -163,17 +190,17 @@ export async function GET(req: NextRequest) {
       professionalId,
       forceMock,
       stage,
-      maxPages0011: slim ? 12 : undefined,
+      maxPages0011: slim ? 6 : undefined,
       reactivationLimit:
         format === 'json' && slim ? (professionalId ? 80 : 8) : null,
     }
 
-    // JSON da UI: cache + budget Avec curto. CSV/cron: full sem cache.
+    // JSON da UI: cache + budget Avec curto + teto duro. CSV/cron: full sem cache.
     const report =
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v4',
+              'director:json:v5',
               stage,
               `slim=${slim ? 1 : 0}`,
               `m=${selectedMonth ?? ''}`,
@@ -185,8 +212,8 @@ export async function GET(req: NextRequest) {
               `pro=${professionalId ?? ''}`,
               `mock=${forceMock ? 1 : 0}`,
             ].join(':'),
-            () => buildDirectorReport({ ...buildOpts, interactive: true }),
-            forceMock ? 60 : 300,
+            () => buildForUi(buildOpts),
+            forceMock ? 60 : 180,
           )
         : await buildDirectorReport({ ...buildOpts, interactive: false })
 
