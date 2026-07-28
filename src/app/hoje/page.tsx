@@ -98,13 +98,19 @@ export default function HojePage() {
   const [playbookOpen, setPlaybookOpen] = usePersistedBool(HOJE_OPEN_PLAYBOOK_KEY, false)
 
   useEffect(() => {
-    apiFetch('/api/hoje', { cache: 'no-store' })
+    apiFetch('/api/hoje', { cache: 'no-store', timeoutMs: 25_000 })
       .then((r) => r.json())
       .then((json) => {
         if (json.error) setError(json.error)
         else setData(json.data)
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          setError('Painel demorou para carregar. Aguarde e tente novamente.')
+        } else {
+          setError(String(e))
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 

@@ -57,7 +57,7 @@ export default function ContatosPage() {
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store', timeoutMs: 25_000 })
       const json = await res.json()
       if (json.error) setError(json.error)
       else {
@@ -65,7 +65,11 @@ export default function ContatosPage() {
         setContacts(json.data ?? [])
       }
     } catch (e) {
-      setError(String(e))
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setError('Lista demorou para carregar. Tente novamente.')
+      } else {
+        setError(String(e))
+      }
     } finally {
       setLoading(false)
     }
