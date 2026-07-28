@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
+
+export const maxDuration = 20
 import { cachedFetch } from '@/lib/cache'
 import { listTodayPipeline } from '@/lib/services'
 import { todayIso } from '@/lib/salon/format'

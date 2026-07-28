@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
+
+export const maxDuration = 30
 import { cachedFetch } from '@/lib/cache'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'

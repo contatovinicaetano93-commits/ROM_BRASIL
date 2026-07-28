@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { cachedFetch } from '@/lib/cache'
+
+export const maxDuration = 20
 import { computePeriodAnalytics } from '@/lib/salon/period-analytics'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
+
+export const maxDuration = 20
 import { cachedFetch } from '@/lib/cache'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { monthToDateRange } from '@/lib/salon/period-analytics'

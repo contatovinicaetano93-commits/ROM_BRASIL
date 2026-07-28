@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ok, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
+
+export const maxDuration = 25
 import { listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'

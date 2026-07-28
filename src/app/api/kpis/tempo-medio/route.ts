@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
+
+export const maxDuration = 20
 import { fetchTmComparison } from '@/lib/salon/tm-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { todayIso } from '@/lib/salon/format'
