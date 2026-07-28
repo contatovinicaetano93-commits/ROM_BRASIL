@@ -4,16 +4,20 @@ import { requireAdmin } from '@/lib/auth'
 import {
   getLatestSalonP1Daily,
   getSalonP1DailyNear,
+  previousCalendarMonthEnd,
   type P1ProfessionalRow,
 } from '@/lib/salon/p1-metrics'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { asJsonArray } from '@/lib/sql-json'
 
-function addDays(day: string, delta: number): string {
-  const d = new Date(`${day}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + delta)
-  return d.toISOString().slice(0, 10)
+function normalizeProName(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 interface ProfessionalWithDelta extends P1ProfessionalRow {
@@ -41,14 +45,16 @@ export async function GET(req: NextRequest) {
     }
 
     const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
-    const compareTarget = addDays(latest.day, -30)
+    // MoM civil (igual IG na Visão): snapshot do mês vs EOM do mês anterior —
+    // não rolling −30d (quebrava quando o EOM anterior caía fora do maxSkew).
+    const compareTarget = previousCalendarMonthEnd(latest.day)
     const compare = await getSalonP1DailyNear(compareTarget, { maxSkewDays: 14 })
     const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
-    const compareByName = new Map(comparePros.map((p) => [p.name, p]))
+    const compareByName = new Map(comparePros.map((p) => [normalizeProName(p.name), p]))
 
     const professionals: ProfessionalWithDelta[] = professionalsRaw
       .map((p) => {
-        const prev = compareByName.get(p.name)
+        const prev = compareByName.get(normalizeProName(p.name))
         return {
           ...p,
           delta: prev

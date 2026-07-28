@@ -746,13 +746,14 @@ export default function DashboardPage() {
             </table>
             {performance.compare_day && (
               <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação: janela de 30 dias até {performance.reference_day} vs até{' '}
-                {performance.compare_day}
+                Comparação: snapshot {performance.reference_day} vs mês anterior (
+                {performance.compare_day})
               </p>
             )}
             <p className="mt-2 text-[0.65rem] text-muted">
               Ocupação vem do Avec 0126 (pode passar de 100% com overbooking). Traço (—) =
-              sem match de nome entre 0021 (faturamento) e 0126.
+              sem match de nome entre 0021 (faturamento) e 0126. Valores em verde/laranja =
+              variação vs mês anterior.
             </p>
           </div>
         )}
