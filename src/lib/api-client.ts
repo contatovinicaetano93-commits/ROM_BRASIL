@@ -6,6 +6,11 @@ type ApiFetchInit = RequestInit & {
    * false = forçar rede (botão Atualizar).
    */
   clientCache?: boolean
+  /**
+   * Aborta a requisição após N ms. Compatível com signal externo existente.
+   * Um AbortError (DOMException name='AbortError') é lançado no timeout.
+   */
+  timeoutMs?: number
 }
 
 const CLIENT_GET_TTL_SEC = 45
@@ -69,7 +74,7 @@ function invalidateForMutation(url: string) {
 }
 
 export function apiFetch(input: string, init?: ApiFetchInit) {
-  const { clientCache, ...rest } = init ?? {}
+  const { clientCache, timeoutMs, ...rest } = init ?? {}
   const method = (rest.method ?? 'GET').toUpperCase()
   const allowCache = method === 'GET' && clientCache !== false
   const key = cacheKey(input, method)
@@ -82,27 +87,44 @@ export function apiFetch(input: string, init?: ApiFetchInit) {
     }
   }
 
-  return fetch(input, { ...rest, credentials: 'include' }).then(async (res) => {
-    if (method !== 'GET' && res.ok) {
-      invalidateForMutation(input)
+  let signal = rest.signal ?? undefined
+  let timer: ReturnType<typeof setTimeout> | null = null
+  if (timeoutMs != null && timeoutMs > 0) {
+    const controller = new AbortController()
+    const external = signal
+    if (external) {
+      if (external.aborted) controller.abort(external.reason)
+      else external.addEventListener('abort', () => controller.abort(external.reason), { once: true })
     }
-    if (allowCache && res.ok) {
-      try {
-        const body = await res.clone().arrayBuffer()
-        const headers: [string, string][] = []
-        res.headers.forEach((v, k) => headers.push([k, v]))
-        store.set(key, {
-          body,
-          status: res.status,
-          statusText: res.statusText,
-          headers,
-          expiresAt: Date.now() + CLIENT_GET_TTL_SEC * 1000,
-        })
-        pruneExpired()
-      } catch {
-        // ignore cache write failures
+    timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'AbortError')), timeoutMs)
+    signal = controller.signal
+  }
+
+  return fetch(input, { ...rest, credentials: 'include', signal })
+    .then(async (res) => {
+      if (method !== 'GET' && res.ok) {
+        invalidateForMutation(input)
       }
-    }
-    return res
-  })
+      if (allowCache && res.ok) {
+        try {
+          const body = await res.clone().arrayBuffer()
+          const headers: [string, string][] = []
+          res.headers.forEach((v, k) => headers.push([k, v]))
+          store.set(key, {
+            body,
+            status: res.status,
+            statusText: res.statusText,
+            headers,
+            expiresAt: Date.now() + CLIENT_GET_TTL_SEC * 1000,
+          })
+          pruneExpired()
+        } catch {
+          // ignore cache write failures
+        }
+      }
+      return res
+    })
+    .finally(() => {
+      if (timer != null) clearTimeout(timer)
+    })
 }
