@@ -72,6 +72,8 @@ export interface AvecSyncStats {
   p1_rows?: number
   p2_rows?: number
   p3_rows?: number
+  /** Linhas 0223 com campo tempo válido (TM cadastrado). */
+  duration_rows?: number
   /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
   running?: boolean
 }
@@ -698,6 +700,7 @@ async function syncDurationFrom0223(
   try {
     const result = await fetchAllAvecReport('0223', params, maxPages)
     warnIfTruncated(stats, '0223', result)
+    // Snapshot só no full e só amostra — payload gigante já foi problema no Neon.
     if (mode === 'full') {
       await snapshotReport('0223', params, result.rows, stats, syncRunId)
     }
@@ -714,11 +717,17 @@ async function syncDurationFrom0223(
       sum += minutes
       count++
     }
+    stats.duration_rows = count
     // Sempre grava (inclui 0) — dia scoped pode vir vazio e não pode manter TM stale.
     await upsertSalonMetrics(today, {
       service_duration_sum_minutes: sum,
       service_duration_count: count,
     })
+    if (count === 0) {
+      stats.warnings.push(
+        'TM 0223: nenhuma linha com campo tempo preenchido na Avec hoje — cadastre duração nos serviços.',
+      )
+    }
   } catch (e) {
     stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -832,7 +841,13 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     stats.errors = formatAvecErrorList(stats.errors)
 
     const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 && stats.clients_upserted + stats.appointments_synced === 0
+      stats.errors.length > 0 &&
+      stats.clients_upserted +
+        stats.appointments_synced +
+        stats.attendances_synced +
+        stats.revenue_rows +
+        stats.cancellation_rows ===
+        0
         ? 'error'
         : stats.errors.length > 0 || stats.warnings.length > 0
           ? 'partial'

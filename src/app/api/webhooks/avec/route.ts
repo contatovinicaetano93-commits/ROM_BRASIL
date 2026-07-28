@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         price: 180,
       },
       note:
-        'Configure este URL no painel Avec (ou Zapier/Make bridge). Cada evento dispara sync fast/full em background; cron /api/avec/sync fica como backup.',
+        'Configure este URL no painel Avec (ou Zapier/Make bridge). Cada evento dispara sync fast em background; full fica no cron 2×/dia. Cron /api/avec/sync é a rede de segurança.',
     })
   } catch (e) {
     return handleError(e)

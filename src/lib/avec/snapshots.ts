@@ -38,6 +38,7 @@ export async function pruneAvecSyncHistory(opts?: {
     with d as (
       delete from avec_report_snapshots
       where fetched_at < now() - (${snapshotDays}::int * interval '1 day')
+         or (report_id = '0223' and row_count > ${MAX_SNAPSHOT_PAYLOAD_ROWS * 2})
       returning 1
     )
     select count(*)::int as n from d
