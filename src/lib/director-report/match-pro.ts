@@ -98,6 +98,18 @@ export function matchDirectorProfessional(
   const key = occupancyMergeKey(raw)
   if (!key) return null
 
+  // Apelidos conhecidos (planilha 0011 vs roster Lake).
+  const ALIASES: Record<string, string[]> = {
+    'dani mariniello': ['daniela mariniello'],
+    'daniela mariniello': ['dani mariniello'],
+    'vitor m': ['vitor moreira de alvarenga morais', 'vitor moreira'],
+  }
+  const aliasTargets = ALIASES[key] ?? []
+  for (const alias of aliasTargets) {
+    const hit = professionals.find((p) => occupancyMergeKey(p.name) === alias)
+    if (hit) return hit
+  }
+
   const exact = professionals.find((p) => occupancyMergeKey(p.name) === key)
   if (exact) return exact
 

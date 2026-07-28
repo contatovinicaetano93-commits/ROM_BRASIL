@@ -16,7 +16,7 @@ import {
   reportPeriodLabel,
   reportReferenceDate,
 } from './period'
-import { listDirectorProfessionals } from './professionals'
+import { listDirectorReportProfessionals } from './professionals'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 export interface BuildDirectorReportOptions {
@@ -31,6 +31,8 @@ export interface BuildDirectorReportOptions {
   compareQuarter?: QuarterKey
   professionalId?: string
   forceMock?: boolean
+  /** Se definido, só monta a etapa pedida (0011 ou 0021) — acelera a UI. */
+  stage?: '0011' | '0021' | 'all'
 }
 
 function comparisonMonthSet(
@@ -56,16 +58,26 @@ export async function buildDirectorReport(
   const selectedQuarter = opts.selectedQuarter ?? defaultSelectedQuarter()
   const compareQuarter = opts.compareQuarter ?? defaultCompareQuarter()
 
-  let professionals = listDirectorProfessionals(true)
+  let professionals = listDirectorReportProfessionals(true)
   if (opts.professionalId) {
     professionals = professionals.filter((p) => p.id === opts.professionalId)
   }
 
+  const stage = opts.stage ?? 'all'
+  const need0011 = stage === 'all' || stage === '0011'
+  const need0021 = stage === 'all' || stage === '0021'
+
   const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
   let source: 'mock' | 'avec' = 'mock'
-  let return_blocks = buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
-  let revenue_blocks = buildMockRevenueBlocks(professionals, selectedMonth)
+  let return_blocks = need0011
+    ? buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
+    : []
+  let revenue_blocks = need0021
+    ? buildMockRevenueBlocks(professionals, selectedMonth)
+    : []
   let liveNote: string | null = null
+  let live0011 = false
+  let live0021 = false
 
   if (avecReady) {
     try {
@@ -76,16 +88,21 @@ export async function buildDirectorReport(
         compareQuarter0021,
         selectedQuarter,
         compareQuarter,
+        { includeReturn: need0011, includeRevenue: need0021 },
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
       // jogar fora o dado real da outra que funcionou.
-      if (live.return_blocks) {
+      if (need0011 && live.return_blocks) {
         return_blocks = live.return_blocks
+        live0011 = true
       }
-      if (live.revenue_blocks) {
+      if (need0021 && live.revenue_blocks) {
         revenue_blocks = live.revenue_blocks
+        live0021 = true
       }
-      if (live.return_blocks && live.revenue_blocks) {
+      if ((need0011 ? live0011 : true) && (need0021 ? live0021 : true)) {
+        source = 'avec'
+      } else if (live0011 || live0021) {
         source = 'avec'
       }
       if (live.warnings.length) {
@@ -97,7 +114,7 @@ export async function buildDirectorReport(
     }
   }
 
-  if (compareMonths && compareQuarter0021) {
+  if (need0021 && compareMonths && compareQuarter0021) {
     const quarterMonths = comparisonMonthSet(
       selectedMonth,
       selectedQuarter0021,
@@ -110,7 +127,9 @@ export async function buildDirectorReport(
   }
 
   const selectedRevenue =
-    compareMonths && compareQuarter0021
+    !need0021
+      ? []
+      : compareMonths && compareQuarter0021
       ? revenue_blocks.map((b) => {
           const [, newer] = orderQuarters(selectedQuarter0021, compareQuarter0021)
           const row = b.quarters.find((q) => q.quarter === newer)
@@ -148,12 +167,12 @@ export async function buildDirectorReport(
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note:
       professionals.length === 0
-        ? '⚠ Nenhum profissional cadastrado no roster desta unidade — relatório sai vazio (sem envio útil).'
+        ? '⚠ Nenhum profissional de piso (cabelo/maquiagem) no roster — relatório sai vazio.'
         : source === 'avec'
-          ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec${liveNote ? ` · ${liveNote}` : ''}`
+          ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec · ${professionals.length} profissionais de piso${liveNote ? ` · ${liveNote}` : ''}`
           : avecReady
-            ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture${liveNote ? ` · ${liveNote}` : ''}`
-            : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou trimestre vs trimestre) · dados mock',
+            ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture · ${professionals.length} profissionais de piso${liveNote ? ` · ${liveNote}` : ''}`
+            : `Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês · dados mock · ${professionals.length} profissionais de piso`,
     return_blocks,
     revenue_blocks,
     summary: {

@@ -59,6 +59,7 @@ async function runDelivery(
     selectedQuarter: opts.quarter,
     compareQuarter: opts.compare,
     professionalId: opts.professionalId,
+    stage: opts.stage === 'all' ? 'all' : opts.stage,
   })
   const delivery = await deliverDirectorReport(report, opts.stage)
 
@@ -136,6 +137,11 @@ export async function GET(req: NextRequest) {
     }
 
     const compareMonthsParam = searchParams.get('compare_months')
+    const stageParam = searchParams.get('stage')
+    const stage =
+      stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
+        ? stageParam
+        : 'all'
     const report = await buildDirectorReport({
       selectedMonth: asMonth(searchParams.get('month')),
       selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
@@ -145,6 +151,7 @@ export async function GET(req: NextRequest) {
       compareQuarter: asQuarter(searchParams.get('compare')),
       professionalId: searchParams.get('professional_id') ?? undefined,
       forceMock: searchParams.get('mock') === '1',
+      stage,
     })
 
     if (format === 'json') {

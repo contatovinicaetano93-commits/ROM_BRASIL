@@ -136,11 +136,14 @@ export default function RelatorioDiretoriaPage() {
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
 
-  /** Carrega base completa — filtros de profissional são só na UI/envio de cada etapa. */
+  /** Carrega por etapa — 0011 não espera o 0021 (e vice-versa). */
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 90_000)
     try {
+      const stage = tab === 'estoque' ? '0011' : tab
       const q = new URLSearchParams({
         month,
         quarter_0021: quarter0021,
@@ -148,22 +151,54 @@ export default function RelatorioDiretoriaPage() {
         compare_months: compareMonths ? '1' : '0',
         quarter,
         compare,
+        stage,
       })
       if (forceDemo) q.set('mock', '1')
-      const res = await apiFetch(`/api/director-report?${q}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/director-report?${q}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       const json = await res.json()
       if (!res.ok || json.error) {
         setError(json.error ?? 'Não autorizado — entre com o login de gerência')
-        setData(null)
         return
       }
-      setData(json.data)
+      setData((prev) => {
+        const next = json.data as DirectorReport
+        if (!prev) return next
+        // Merge por etapa: não apaga a outra aba enquanto recarrega.
+        return {
+          ...next,
+          return_blocks:
+            stage === '0021' && prev.return_blocks.length
+              ? prev.return_blocks
+              : next.return_blocks,
+          revenue_blocks:
+            stage === '0011' && prev.revenue_blocks.length
+              ? prev.revenue_blocks
+              : next.revenue_blocks,
+        }
+      })
     } catch (e) {
-      setError(String(e))
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setError('Relatório demorou demais (>90s). Tente de novo ou marque “forçar demo”.')
+      } else {
+        setError(String(e))
+      }
     } finally {
+      window.clearTimeout(timer)
       setLoading(false)
     }
-  }, [month, quarter0021, compareQuarter0021, compareMonths, quarter, compare, forceDemo])
+  }, [
+    month,
+    quarter0021,
+    compareQuarter0021,
+    compareMonths,
+    quarter,
+    compare,
+    forceDemo,
+    tab,
+  ])
 
   useEffect(() => {
     load()
@@ -210,7 +245,17 @@ export default function RelatorioDiretoriaPage() {
         const cmp = b.quarters.find((q) => q.quarter === compare)
         return { pro: b.professional, sel, cmp, reactivation: b.reactivation }
       })
+      .sort((a, b) => {
+        const byClients = b.reactivation.length - a.reactivation.length
+        if (byClients !== 0) return byClients
+        return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
+      })
   }, [data, quarter, compare, proId0011])
+
+  const clientsOnList = useMemo(
+    () => selectedReturn.reduce((s, r) => s + r.reactivation.length, 0),
+    [selectedReturn],
+  )
 
   const quarterPair = useMemo(() => {
     if (!compareMonths) return { older: quarter0021, newer: quarter0021 }
@@ -428,13 +473,13 @@ export default function RelatorioDiretoriaPage() {
             <Kpi
               icon={<Users size={16} />}
               label="Na lista"
-              value={loading ? '—' : String(selectedReturn.length)}
+              value={loading && !data ? '—' : String(clientsOnList)}
             />
             <Kpi
               icon={<TrendingUp size={16} />}
               label="Retorno médio"
               value={
-                loading
+                loading && !data
                   ? '—'
                   : formatPercent(
                       selectedReturn.length
@@ -488,39 +533,46 @@ export default function RelatorioDiretoriaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading && (
+                  {loading && selectedReturn.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-muted">
-                        Carregando…
+                        Carregando 0011…
                       </td>
                     </tr>
                   )}
-                  {!loading &&
-                    selectedReturn.map(({ pro, sel, cmp, reactivation }) => {
-                      const delta =
-                        sel && cmp
-                          ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10
-                          : null
-                      return (
-                        <tr key={pro.id} className="border-b border-border/60">
-                          <td className="py-3 pr-3 font-medium">{pro.name}</td>
-                          <td className="py-3 pr-3 tabular-nums text-gold">
-                            {formatPercent(sel?.return_rate, 1)}
-                          </td>
-                          <td className="py-3 pr-3 tabular-nums">
-                            {formatPercent(cmp?.return_rate, 1)}
-                          </td>
-                          <td
-                            className={`py-3 pr-3 tabular-nums ${
-                              delta != null && delta < 0 ? 'text-danger' : 'text-success'
-                            }`}
-                          >
-                            {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
-                          </td>
-                          <td className="py-3 tabular-nums">{reactivation.length}</td>
-                        </tr>
-                      )
-                    })}
+                  {!loading && selectedReturn.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-muted">
+                        Nenhum profissional de piso com dados neste trimestre. Confira o sync Avec
+                        ou marque “forçar demo”.
+                      </td>
+                    </tr>
+                  )}
+                  {selectedReturn.map(({ pro, sel, cmp, reactivation }) => {
+                    const delta =
+                      sel && cmp
+                        ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10
+                        : null
+                    return (
+                      <tr key={pro.id} className="border-b border-border/60">
+                        <td className="py-3 pr-3 font-medium">{pro.name}</td>
+                        <td className="py-3 pr-3 tabular-nums text-gold">
+                          {formatPercent(sel?.return_rate, 1)}
+                        </td>
+                        <td className="py-3 pr-3 tabular-nums">
+                          {formatPercent(cmp?.return_rate, 1)}
+                        </td>
+                        <td
+                          className={`py-3 pr-3 tabular-nums ${
+                            delta != null && delta < 0 ? 'text-danger' : 'text-success'
+                          }`}
+                        >
+                          {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
+                        </td>
+                        <td className="py-3 tabular-nums">{reactivation.length}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
