@@ -31,6 +31,7 @@ import {
   applyStockMovement,
   enrichMovementWithPurchaseOrigin,
 } from '@/lib/stock'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 
 export type StockSyncMode = 'fast' | 'full'
 
@@ -362,6 +363,9 @@ export async function runStockSync(mode: StockSyncMode = 'fast'): Promise<StockS
 
 async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> {
   const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
+  await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {
+    // fetchAvecReport ainda force-refresh no 401
+  })
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
   const deadlineAt = mode === 'fast' ? Date.now() + STOCK_FAST_BUDGET_MS : null

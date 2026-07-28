@@ -54,6 +54,7 @@ import { syncP2Kpis } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -143,6 +144,18 @@ export async function getLastAvecSync(
   opts?: { finishedOnly?: boolean },
 ): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  // Runs órfãos (lambda kill) não podem ficar running=true e esconder o status real.
+  await sql`
+    update avec_sync_runs
+    set
+      status = 'error',
+      error = coalesce(error, 'Sync interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+    where kind in ('fast', 'full', 'stock_fast', 'stock_full')
+      and coalesce(stats->>'running', 'false') = 'true'
+      and created_at < now() - interval '8 minutes'
+  `.catch(() => undefined)
+
   const finishedOnly = opts?.finishedOnly === true
   if (kind) {
     const rows = finishedOnly
@@ -774,6 +787,11 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
+
+  // JWT ~12h: renova antes do primeiro report (evita 401 + banner "token expirado").
+  await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {
+    // sync continua — fetchAvecReport ainda tenta force-refresh no 401
+  })
 
   const deployment = getDeploymentContext()
 
