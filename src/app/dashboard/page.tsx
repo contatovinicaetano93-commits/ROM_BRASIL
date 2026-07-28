@@ -111,32 +111,44 @@ export default function DashboardPage() {
         const kpisJson = await kpisRes.json()
         if (cancelled) return
         if (kpisJson.error) setError(kpisJson.error)
-        else setData(kpisJson.data)
+        else {
+          setData(kpisJson.data)
+          setError(null)
+        }
 
-        const [tmRes, perfRes, periodRes] = await Promise.all([
-          apiFetch(`/api/kpis/tempo-medio?month=${month}`, { cache: 'no-store' }),
-          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store' }),
-          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
-        ])
-        if (cancelled) return
-
+        // Sequencial (não Promise.all): cada rota abre conexão no pooler —
+        // 4 lambdas em paralelo estouravam EMAXCONNSESSION (Visão em branco).
         const warnings: string[] = []
 
         try {
+          const tmRes = await apiFetch(`/api/kpis/tempo-medio?month=${month}`, {
+            cache: 'no-store',
+          })
+          if (cancelled) return
           const tmJson = await tmRes.json()
           if (tmJson.data) setTm(tmJson.data)
+          else if (tmJson.error) warnings.push(`TM: ${tmJson.error}`)
         } catch {
           // opcional
         }
 
         try {
+          const perfRes = await apiFetch(`/api/kpis/performance?month=${month}`, {
+            cache: 'no-store',
+          })
+          if (cancelled) return
           const perfJson = await perfRes.json()
           if (perfJson.data) setPerformance(perfJson.data)
+          else if (perfJson.error) warnings.push(`Ranking: ${perfJson.error}`)
         } catch {
           // opcional
         }
 
         try {
+          const periodRes = await apiFetch(`/api/kpis/periodo?month=${month}`, {
+            cache: 'no-store',
+          })
+          if (cancelled) return
           const periodJson = await periodRes.json()
           if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
           else if (periodJson.data) {
