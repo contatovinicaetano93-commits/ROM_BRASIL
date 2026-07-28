@@ -130,6 +130,13 @@ export interface PeriodMonthTotals {
   cancelled: number
   no_shows: number
   lost_revenue: number
+  /** Ticket médio do período comparável (null se sem atendidos). */
+  ticket_avg: number | null
+  /** Snapshot KPIs — null se P1/P2/P3 ausente no mês anterior. */
+  occupancy_avg: number | null
+  packages_revenue: number | null
+  new_clients_period: number | null
+  return_rate: number | null
 }
 
 export interface PeriodAnalytics {
@@ -197,15 +204,19 @@ export async function computePeriodAnalytics(opts?: {
   const { month, from, to } = window
   const prevWindow = resolvePreviousComparableWindow(window)
   const nearOpts = { maxSkewDays: 14 }
-  const [totals, loss, p1, p2, p3, prevTotals, prevLoss] = await Promise.all([
-    sumRevenueAndAttended(from, to),
-    sumAttendanceLoss(from, to),
-    getSalonP1DailyNear(to, nearOpts),
-    getSalonP2DailyNear(to, nearOpts),
-    getSalonP3DailyNear(to, nearOpts),
-    sumRevenueAndAttended(prevWindow.from, prevWindow.to),
-    sumAttendanceLoss(prevWindow.from, prevWindow.to),
-  ])
+  const [totals, loss, p1, p2, p3, prevTotals, prevLoss, prevP1, prevP2, prevP3] =
+    await Promise.all([
+      sumRevenueAndAttended(from, to),
+      sumAttendanceLoss(from, to),
+      getSalonP1DailyNear(to, nearOpts),
+      getSalonP2DailyNear(to, nearOpts),
+      getSalonP3DailyNear(to, nearOpts),
+      sumRevenueAndAttended(prevWindow.from, prevWindow.to),
+      sumAttendanceLoss(prevWindow.from, prevWindow.to),
+      getSalonP1DailyNear(prevWindow.to, nearOpts),
+      getSalonP2DailyNear(prevWindow.to, nearOpts),
+      getSalonP3DailyNear(prevWindow.to, nearOpts),
+    ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
   const prevTicket =
@@ -213,10 +224,15 @@ export async function computePeriodAnalytics(opts?: {
       ? Math.round((prevTotals.revenue / prevTotals.attended) * 100) / 100
       : null
   const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals)
+  const prevProfessionals = asJsonArray<P1ProfessionalRow>(prevP1?.professionals)
   const allPackages = asJsonArray<P2PackageRow>(p2?.packages)
+  const prevPackages = asJsonArray<P2PackageRow>(prevP2?.packages)
   // revenue no snapshot 0061 já é faturamento da linha (não preço unitário).
   const packages_revenue =
     Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+  const prevPackagesRevenue = prevP2
+    ? Math.round(prevPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+    : null
   const lost_revenue = estimateLostRevenue(loss.cancelled, loss.no_shows, ticket_avg)
 
   return {
@@ -253,6 +269,11 @@ export async function computePeriodAnalytics(opts?: {
       cancelled: prevLoss.cancelled,
       no_shows: prevLoss.no_shows,
       lost_revenue: estimateLostRevenue(prevLoss.cancelled, prevLoss.no_shows, prevTicket),
+      ticket_avg: prevTicket,
+      occupancy_avg: prevP1 ? averageOccupancy(prevProfessionals) : null,
+      packages_revenue: prevPackagesRevenue,
+      new_clients_period: prevP3 != null ? Number(prevP3.new_clients_period ?? 0) || 0 : null,
+      return_rate: prevP3 != null ? Number(prevP3.return_rate) : null,
     },
   }
 }
