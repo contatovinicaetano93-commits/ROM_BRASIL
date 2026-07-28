@@ -6,6 +6,8 @@ import {
   logEvent,
   setPreferredManicurist,
   setPreferredHairstylist,
+  resolveUpsertPhone,
+  type ContactRow,
 } from '@/lib/contacts'
 import {
   listServices,
@@ -205,6 +207,30 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
   if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
 }
 
+/**
+ * Dedupa upserts no batch do sync: mesmo telefone (ou mesmo avec id) reusa a
+ * mesma Promise encadeada — evita corrida contacts_phone_idx dentro do relatório.
+ */
+function createBatchContactUpserter() {
+  const chains = new Map<string, Promise<ContactRow>>()
+
+  return function upsertInBatch(
+    input: Parameters<typeof upsertContact>[0],
+  ): Promise<ContactRow> {
+    const phone = resolveUpsertPhone(input.phone)
+    const avec = input.avecClientId?.trim() || null
+    const key = phone ? `p:${phone}` : avec ? `a:${avec}` : null
+    if (!key) return upsertContact(input)
+
+    const prev = chains.get(key)
+    // then(fn, fn): após rejeição a cadeia continua (mesmo padrão de withUpsertKey).
+    const run = () => upsertContact(input)
+    const next = (prev ?? Promise.resolve()).then(run, run)
+    chains.set(key, next)
+    return next
+  }
+}
+
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
     const params = { limit: 250, site: avecSiteParam() }
@@ -247,6 +273,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
   const today = todayIso()
   const noShowsByDay = new Map<string, number>()
+  const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
     try {
@@ -265,7 +292,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         if (day) noShowsByDay.set(day, (noShowsByDay.get(day) ?? 0) + 1)
       }
 
-      const contact = await upsertContact({
+      const contact = await upsertInBatch({
         avecClientId: appt.avecClientId ?? undefined,
         name: appt.clientName,
         email: appt.email,
@@ -322,6 +349,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
+  const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
     try {
@@ -334,7 +362,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
 
       // TM cadastrado vem só do 0223 (`syncDurationFrom0223`) — não usar início/fim 0002.
 
-      const contact = await upsertContact({
+      const contact = await upsertInBatch({
         avecClientId: att.avecClientId ?? undefined,
         name: att.clientName,
         phone: att.phone,
@@ -695,13 +723,13 @@ async function syncDurationFrom0223(
 ) {
   const today = todayIso()
   const params = { ...periodRange(0, 0), profissional_id: '', limit: 250 }
-  // 20×250 = 5k linhas (fast); 40×250 = 10k (full) — suficiente p/ um dia.
-  const maxPages = mode === 'fast' ? 20 : 40
+  // Fast: 4 páginas bastam p/ amostrar tempo do dia; truncamento não vira warning
+  // (Avec BR costuma ter tempo=null — warning permanente = Sync parcial eterno).
+  const maxPages = mode === 'fast' ? 4 : 40
   try {
     const result = await fetchAllAvecReport('0223', params, maxPages)
-    warnIfTruncated(stats, '0223', result)
-    // Snapshot só no full e só amostra — payload gigante já foi problema no Neon.
     if (mode === 'full') {
+      warnIfTruncated(stats, '0223', result)
       await snapshotReport('0223', params, result.rows, stats, syncRunId)
     }
 
@@ -723,7 +751,8 @@ async function syncDurationFrom0223(
       service_duration_sum_minutes: sum,
       service_duration_count: count,
     })
-    if (count === 0) {
+    // Só no full: aviso de cadastro. No fast, tempo vazio é esperado e não marca partial.
+    if (count === 0 && mode === 'full') {
       stats.warnings.push(
         'TM 0223: nenhuma linha com campo tempo preenchido na Avec hoje — cadastre duração nos serviços.',
       )
@@ -785,10 +814,10 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
-      await Promise.all([
-        syncAppointments(stats, mode, syncRunId),
-        syncAttendances(stats, mode, syncRunId),
-      ])
+      // Sequencial: agenda e atendidos compartilham phones — Promise.all
+      // gerava corrida em contacts_phone_idx (partial com duplicate key).
+      await syncAppointments(stats, mode, syncRunId)
+      await syncAttendances(stats, mode, syncRunId)
       try {
         await syncDurationFrom0223(stats, mode, syncRunId)
       } catch (e) {

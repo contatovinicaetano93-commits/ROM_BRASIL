@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { mergeContactStatus } from '@/lib/contacts'
+import {
+  mergeContactStatus,
+  isUniqueViolation,
+  resolveUpsertPhone,
+} from '@/lib/contacts'
 
 describe('mergeContactStatus', () => {
   it('não rebaixa convertido para agendado (sync de agendamentos Avec)', () => {
@@ -21,5 +25,29 @@ describe('mergeContactStatus', () => {
 
   it('marca perdido quando explícito', () => {
     expect(mergeContactStatus('convertido', 'perdido')).toBe('perdido')
+  })
+})
+
+describe('resolveUpsertPhone', () => {
+  it('normaliza BR para E.164 e rejeita curto', () => {
+    expect(resolveUpsertPhone('(11) 97028-4991')).toBe('+5511970284991')
+    expect(resolveUpsertPhone('123')).toBeNull()
+    expect(resolveUpsertPhone(null)).toBeNull()
+  })
+
+  it('não devolve telefone cru quando normalize falha', () => {
+    expect(resolveUpsertPhone('abc-def')).toBeNull()
+  })
+})
+
+describe('isUniqueViolation', () => {
+  it('detecta código 23505 e mensagem contacts_phone_idx', () => {
+    expect(isUniqueViolation({ code: '23505' })).toBe(true)
+    expect(
+      isUniqueViolation(
+        new Error('duplicate key value violates unique constraint "contacts_phone_idx"'),
+      ),
+    ).toBe(true)
+    expect(isUniqueViolation(new Error('timeout'))).toBe(false)
   })
 })
