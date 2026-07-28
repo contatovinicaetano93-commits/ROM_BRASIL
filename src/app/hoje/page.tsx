@@ -164,9 +164,18 @@ export default function HojePage() {
           <KpiCard
             icon={<DollarSign size={16} />}
             label="Faturamento"
-            value={loading ? '—' : formatCurrency(salon?.revenue ?? 0)}
+            value={
+              loading
+                ? '—'
+                : salon?.revenue
+                  ? formatCurrency(salon.revenue)
+                  : syncUi?.status === 'partial' || syncUi?.status === 'error'
+                    ? '—'
+                    : formatCurrency(0)
+            }
             loading={loading}
             source={avecSource}
+            warn={!loading && !salon?.revenue && (syncUi?.status === 'partial' || syncUi?.status === 'error')}
           />
         )}
         <KpiCard

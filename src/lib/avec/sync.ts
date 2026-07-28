@@ -50,7 +50,7 @@ import {
 } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
-import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
+import { syncP2Kpis } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
@@ -808,9 +808,10 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       await syncClients(stats, syncRunId)
     }
     if (mode === 'fast') {
-      // KPI do dia primeiro e em paralelo (0088 + 0052); agenda/atendidos em seguida.
+      // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
+      // o faturamento de Hoje já está gravado (antes ficava 0 com sync morto).
+      await syncRevenue(stats, mode, syncRunId)
       await Promise.all([
-        syncRevenue(stats, mode, syncRunId),
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
@@ -818,16 +819,8 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       // gerava corrida em contacts_phone_idx (partial com duplicate key).
       await syncAppointments(stats, mode, syncRunId)
       await syncAttendances(stats, mode, syncRunId)
-      try {
-        await syncDurationFrom0223(stats, mode, syncRunId)
-      } catch (e) {
-        stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
-      }
-      try {
-        await syncPaymentMixRecent(stats, syncRunId, 0)
-      } catch (e) {
-        stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
-      }
+      // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido)
+      // e o cron seguinte não atualizava o caixa a tempo.
     } else {
       // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
       for (const [label, fn] of [
