@@ -87,7 +87,32 @@ interface HealthStatus {
 type LoadState = 'loading' | 'ok' | 'error'
 
 function fmtIso(iso: string) {
-  return new Date(iso).toLocaleString('pt-BR')
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso || '—'
+  try {
+    return d.toLocaleString('pt-BR')
+  } catch {
+    return iso
+  }
+}
+
+/** Safari: JSON.parse/html de timeout vira SyntaxError "string did not match…". */
+async function readApiJson(res: Response): Promise<{ data?: unknown; error?: string }> {
+  const text = await res.text()
+  if (!text.trim()) {
+    return { error: `Resposta vazia (HTTP ${res.status})` }
+  }
+  try {
+    return JSON.parse(text) as { data?: unknown; error?: string }
+  } catch {
+    const snippet = text.replace(/\s+/g, ' ').slice(0, 80)
+    return {
+      error:
+        res.status >= 500
+          ? `Servidor indisponível (HTTP ${res.status})`
+          : `Resposta inválida (HTTP ${res.status}): ${snippet}`,
+    }
+  }
 }
 
 export default function AdminPage() {
@@ -110,31 +135,59 @@ export default function AdminPage() {
     setState('loading')
     setError(null)
     try {
-      // Sequencial (não Promise.all): 5 lambdas em paralelo estouravam o pooler
-      // e o Diagnóstico ficava minutos em loading / falhava com EMAXCONNSESSION.
+      // Sequencial + parse seguro: uma rota HTML/timeout não derruba a página inteira
+      // com SyntaxError no Safari.
       const errs: string[] = []
 
-      const k = await apiFetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json())
-      if (k.error) errs.push(`KPIs: ${k.error}`)
-      else setKpis(k.data)
+      try {
+        const k = await readApiJson(await apiFetch('/api/kpis', { cache: 'no-store' }))
+        if (k.error) errs.push(`KPIs: ${k.error}`)
+        else setKpis(k.data as KpiData)
+      } catch (e) {
+        errs.push(`KPIs: ${e instanceof Error ? e.message : String(e)}`)
+      }
 
-      const h = await apiFetch('/api/health', { cache: 'no-store' }).then((r) => r.json())
-      if (h.error) errs.push(`Health: ${h.error}`)
-      else setHealth(h.data)
+      try {
+        const h = await readApiJson(await apiFetch('/api/health', { cache: 'no-store' }))
+        if (h.error) errs.push(`Health: ${h.error}`)
+        else {
+          const data = h.data as HealthStatus | { ok?: boolean } | null
+          // Health público ({ok}) sem database — ignora (sessão/auth incompleta).
+          if (data && typeof data === 'object' && 'database' in data) {
+            setHealth(data as HealthStatus)
+          } else {
+            errs.push('Health: resposta parcial — atualize o login e tente de novo')
+          }
+        }
+      } catch (e) {
+        errs.push(`Health: ${e instanceof Error ? e.message : String(e)}`)
+      }
 
-      const a = await apiFetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json())
-      if (a.error) errs.push(`Avec: ${a.error}`)
-      else setAvec(a.data)
+      try {
+        const a = await readApiJson(await apiFetch('/api/avec/sync', { cache: 'no-store' }))
+        if (a.error) errs.push(`Avec: ${a.error}`)
+        else setAvec(a.data as AvecStatus)
+      } catch (e) {
+        errs.push(`Avec: ${e instanceof Error ? e.message : String(e)}`)
+      }
 
-      const c = await apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store' }).then(
-        (r) => r.json(),
-      )
-      if (c.error) errs.push(`Contatos: ${c.error}`)
-      else setContacts(c.data ?? [])
+      try {
+        const c = await readApiJson(
+          await apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store' }),
+        )
+        if (c.error) errs.push(`Contatos: ${c.error}`)
+        else setContacts((c.data as ContactRow[]) ?? [])
+      } catch (e) {
+        errs.push(`Contatos: ${e instanceof Error ? e.message : String(e)}`)
+      }
 
-      const s = await apiFetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json())
-      if (s.error) errs.push(`Agendamentos: ${s.error}`)
-      else setSchedule(s.data ?? [])
+      try {
+        const s = await readApiJson(await apiFetch('/api/schedule', { cache: 'no-store' }))
+        if (s.error) errs.push(`Agendamentos: ${s.error}`)
+        else setSchedule((s.data as ScheduleRow[]) ?? [])
+      } catch (e) {
+        errs.push(`Agendamentos: ${e instanceof Error ? e.message : String(e)}`)
+      }
 
       if (errs.length) {
         setError(errs.join(' · '))
@@ -143,7 +196,7 @@ export default function AdminPage() {
         setState('ok')
       }
     } catch (e) {
-      setError(String(e))
+      setError(e instanceof Error ? e.message : String(e))
       setState('error')
     }
   }, [])
@@ -155,17 +208,16 @@ export default function AdminPage() {
   async function testAvec() {
     setConnMsg('Testando…')
     try {
-      const res = await apiFetch('/api/avec/sync?test=1', { cache: 'no-store' })
-      const json = await res.json()
-      const c = json.data?.connection
+      const json = await readApiJson(await apiFetch('/api/avec/sync?test=1', { cache: 'no-store' }))
+      const c = (json.data as AvecStatus | undefined)?.connection
       if (c?.ok) setConnMsg(`OK — ${c.sample_rows ?? 0} linha(s) no relatório 0004`)
       else {
         const raw = c?.error ?? json.error ?? 'erro desconhecido'
         setConnMsg(`Falhou: ${formatAvecUserMessage(raw) ?? raw}`)
       }
-      if (json.data) setAvec(json.data)
+      if (json.data) setAvec(json.data as AvecStatus)
     } catch (e) {
-      setConnMsg(String(e))
+      setConnMsg(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -173,13 +225,14 @@ export default function AdminPage() {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const res = await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' })
-      const json = await res.json()
+      const json = await readApiJson(
+        await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' }),
+      )
       if (json.error) setSyncMsg(`Erro: ${json.error}`)
-      else setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
+      else setSyncMsg(`Sync ${(json.data as { status?: string } | undefined)?.status ?? 'ok'} — recarregando…`)
       await load()
     } catch (e) {
-      setSyncMsg(String(e))
+      setSyncMsg(e instanceof Error ? e.message : String(e))
     } finally {
       setSyncing(false)
     }
@@ -189,17 +242,18 @@ export default function AdminPage() {
     setSeeding(true)
     setSeedMsg(null)
     try {
-      const res = await apiFetch('/api/seed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preset: seedPreset }),
-      })
-      const json = await res.json()
+      const json = await readApiJson(
+        await apiFetch('/api/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preset: seedPreset }),
+        }),
+      )
       if (json.error) setSeedMsg(`Erro: ${json.error}`)
-      else setSeedMsg(json.data?.message ?? 'Seed concluído')
+      else setSeedMsg((json.data as { message?: string } | undefined)?.message ?? 'Seed concluído')
       await load()
     } catch (e) {
-      setSeedMsg(String(e))
+      setSeedMsg(e instanceof Error ? e.message : String(e))
     } finally {
       setSeeding(false)
     }
@@ -272,7 +326,7 @@ export default function AdminPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Configuração" badge={<EndpointBadge path="/api/health" />}>
-          {health ? (
+          {health?.database ? (
             <div className="space-y-2 text-sm">
               <HealthRow label="Banco de dados" ok={health.database.connected} detail={health.database.error ?? undefined} />
               <HealthRow
@@ -328,8 +382,10 @@ export default function AdminPage() {
               </button>
               {seedMsg && <p className="text-xs text-muted">{seedMsg}</p>}
             </div>
-          ) : (
+          ) : state === 'loading' ? (
             <Skeleton />
+          ) : (
+            <Empty />
           )}
         </SectionCard>
 
