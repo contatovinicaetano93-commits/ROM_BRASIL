@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
+import { toSalonDateIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -165,7 +166,9 @@ export async function markServiceDone(
   return service
 }
 
-/** Agenda serviço. Não grava last_price (preço de visita feita = só markServiceDone). */
+/** Agenda serviço. Não grava last_price (preço de visita feita = só markServiceDone).
+ * Não reabre se já foi concluído no mesmo dia (SP) — evita race fast sync 0051∥0002.
+ */
 export async function scheduleService(
   serviceId: string,
   scheduledAt: string,
@@ -179,6 +182,11 @@ export async function scheduleService(
       scheduled_at = ${scheduledAt}::timestamptz,
       professional_name = coalesce(${professionalName ?? null}, professional_name)
     where id = ${serviceId}
+      and (
+        last_done_at is null
+        or (last_done_at at time zone 'America/Sao_Paulo')::date
+          <> (coalesce(${scheduledAt}::timestamptz, now()) at time zone 'America/Sao_Paulo')::date
+      )
     returning *
   `) as ClientService[]
   return rows[0] ?? null
