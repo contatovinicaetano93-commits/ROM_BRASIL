@@ -35,34 +35,47 @@ export async function GET(req: NextRequest) {
     const sort = searchParams.get('sort') ?? 'urgency'
     const query = searchParams.get('q') ?? searchParams.get('query') ?? null
     const status = searchParams.get('status')
+    const channel = searchParams.get('channel')
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 2000) : 100
 
     const cacheKey = [
-      'contacts:list:v1',
+      'contacts:list:v2',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
       `q=${query ?? ''}`,
       `st=${status ?? ''}`,
+      `ch=${channel ?? ''}`,
     ].join(':')
 
-    const items = await cachedFetch(
+    const result = await cachedFetch(
       cacheKey,
       async () => {
-        // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
-        let rows = await listContactsWithSummary({ limit, query, pendingOnly, status })
+        const { items: rawItems, total } = await listContactsWithSummary({
+          limit,
+          query,
+          pendingOnly,
+          status,
+          channel,
+        })
+        let items = rawItems
         if (sort === 'urgency') {
-          // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.
-          rows = [...rows].sort(compareByOverdueThenName)
+          items = [...items].sort(compareByOverdueThenName)
         }
-        return rows
+        return { items, total }
       },
       query ? 15 : 30,
     )
 
-    return ok(items)
+    return ok(result.items, {
+      total: result.total,
+      limit,
+      status: status ?? 'all',
+      channel: channel ?? 'all',
+      pending: pendingOnly,
+    })
   } catch (e) {
     return handleError(e)
   }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
 import {
   Avatar,
@@ -34,13 +35,25 @@ interface Contact {
 /** Status fixos do funil — sempre disponíveis no filtro (mesmo com lista vazia). */
 const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido']
 
-export default function ContatosPage() {
+/** Canais fixos — filtro server-side (não só os da página atual). */
+const CHANNEL_OPTIONS = ['whatsapp', 'avec', 'manual', 'telegram', 'instagram']
+
+function statusFromSearchParam(raw: string | null): string {
+  if (raw && FUNNEL_STATUS_OPTIONS.includes(raw)) return raw
+  return 'all'
+}
+
+function ContatosPageContent() {
+  const searchParams = useSearchParams()
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [pendingOnly, setPendingOnly] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState(() =>
+    statusFromSearchParam(searchParams.get('status')),
+  )
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -50,19 +63,26 @@ export default function ContatosPage() {
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load(searchQ = debouncedQuery, status = statusFilter) {
+  async function load(
+    searchQ = debouncedQuery,
+    status = statusFilter,
+    channel = channelFilter,
+  ) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
+      if (channel !== 'all') params.set('channel', channel)
+      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store', timeoutMs: 20_000 })
       const json = await res.json()
       if (json.error) setError(json.error)
       else {
         setError(null)
         setContacts(json.data ?? [])
+        const total = json.meta?.total
+        setTotalInBase(typeof total === 'number' ? total : null)
       }
     } catch (e) {
       setError(String(e))
@@ -72,23 +92,41 @@ export default function ContatosPage() {
   }
 
   useEffect(() => {
-    void load(debouncedQuery, statusFilter)
+    void load(debouncedQuery, statusFilter, channelFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOnly, debouncedQuery, statusFilter])
+  }, [pendingOnly, debouncedQuery, statusFilter, channelFilter])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (statusFilter === 'all') url.searchParams.delete('status')
+    else url.searchParams.set('status', statusFilter)
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }, [statusFilter])
 
   const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
   const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
-  const channelOptions = Array.from(new Set(contacts.map((c) => c.channel)))
   const hasFilters = true
 
-  // Status já vem filtrado no servidor; canal continua client-side na página atual.
-  const filtered = contacts.filter((c) => {
-    if (channelFilter !== 'all' && c.channel !== channelFilter) return false
-    return true
-  })
+  // Status e canal já vêm filtrados no servidor.
+  const filtered = contacts
 
   const emptyNovoHint =
-    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery && !error
+    statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
+  const emptyImportadoHint =
+    statusFilter === 'importado' && !loading && contacts.length === 0 && !debouncedQuery && !error
+  const truncatedHint =
+    !loading &&
+    totalInBase != null &&
+    totalInBase > contacts.length &&
+    contacts.length > 0 &&
+    !debouncedQuery
+
+  const subtitle = loading
+    ? 'Todos os canais, em um só lugar'
+    : totalInBase != null && totalInBase > contacts.length
+      ? `Mostrando ${filtered.length} de ${totalInBase} ${statusFilter === 'all' ? 'contatos' : (STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()}`
+      : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -96,13 +134,7 @@ export default function ContatosPage() {
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
           <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Clientes & leads</h1>
-        <p className="mt-0.5 text-xs text-muted">
-          {loading
-            ? 'Todos os canais, em um só lugar'
-            : contacts.length >= 2000 && !debouncedQuery
-              ? `${filtered.length} de ${contacts.length} (lista limitada a 2000 — refine a busca)`
-              : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`}
-        </p>
+        <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
         </div>
         <div className="shrink-0 lg:w-72">
           <PrimaryButton onClick={() => setFormOpen(true)}>
@@ -127,6 +159,19 @@ export default function ContatosPage() {
           {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
         </button>
         <UrgencyBadgeLegend />
+        {truncatedHint && (
+          <p className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted">
+            Lista limitada a {contacts.length} de {totalInBase}. Use a busca ou o filtro{' '}
+            <button
+              type="button"
+              className="text-gold underline-offset-2 hover:underline"
+              onClick={() => setStatusFilter('importado')}
+            >
+              Importado
+            </button>{' '}
+            / status para achar um contato específico.
+          </p>
+        )}
       </div>
 
       <div className="relative">
@@ -161,19 +206,18 @@ export default function ContatosPage() {
             active={statusFilter}
             onSelect={setStatusFilter}
           />
-          {channelOptions.length > 0 && (
-            <FilterRow
-              label="Canal"
-              options={channelOptions.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
-              active={channelFilter}
-              onSelect={setChannelFilter}
-            />
-          )}
+          <FilterRow
+            label="Canal"
+            options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
+            active={channelFilter}
+            onSelect={setChannelFilter}
+          />
           <p className="text-[0.7rem] leading-relaxed text-muted">
             <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
             {' '}
             <span className="font-medium text-foreground/80">Importado</span> = base Avec (0004), não
-            é lead novo do funil.
+            é lead novo do funil. Lista limitada a 2000 por consulta — use busca por nome/telefone
+            para achar além do topo.
           </p>
         </div>
       )}
@@ -196,7 +240,7 @@ export default function ContatosPage() {
             </div>
           ))}
 
-        {!loading && contacts.length === 0 && !error && !debouncedQuery && (
+        {!loading && contacts.length === 0 && !error && !debouncedQuery && !emptyNovoHint && !emptyImportadoHint && (
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato ainda. Toque em “Novo contato”.</p>
         )}
 
@@ -214,7 +258,22 @@ export default function ContatosPage() {
           </p>
         )}
 
-        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && (
+        {!loading && emptyImportadoHint && (
+          <p className="px-4 py-12 text-center text-sm text-muted">
+            Nenhum contato Importado agora — rode o sync Avec (0004) ou confira se já foram
+            promovidos para Agendado/Convertido. Leads WhatsApp ficam em{' '}
+            <button
+              type="button"
+              className="text-gold underline-offset-2 hover:underline"
+              onClick={() => setStatusFilter('novo')}
+            >
+              Novo lead
+            </button>
+            .
+          </p>
+        )}
+
+        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && !emptyImportadoHint && (
           <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
             <p>Nenhum contato encontrado com esses filtros.</p>
             {pendingOnly && statusFilter !== 'all' && (
@@ -304,6 +363,22 @@ export default function ContatosPage() {
 
       {formOpen && <NewContactSheet onClose={() => setFormOpen(false)} onCreated={load} />}
     </main>
+  )
+}
+
+export default function ContatosPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
+          <div className="h-10 w-48 animate-pulse rounded-xl bg-card" />
+          <div className="h-12 w-full animate-pulse rounded-2xl bg-card" />
+          <div className="h-72 w-full animate-pulse rounded-2xl bg-card" />
+        </main>
+      }
+    >
+      <ContatosPageContent />
+    </Suspense>
   )
 }
 

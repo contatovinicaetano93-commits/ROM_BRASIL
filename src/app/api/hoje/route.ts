@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { getSql } from '@/lib/db'
-import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
+import { getSalonMetrics } from '@/lib/salon/metrics'
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
 import {
@@ -11,23 +11,17 @@ import {
   countOverdueServices,
   slicePlaybookForRole,
 } from '@/lib/salon/playbook'
-import { listUpcomingSchedules } from '@/lib/services'
+import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
-const METRICS_FRESH_MS = 2 * 60 * 60 * 1000
-/** 30s: 2ª visita fluida; caixa Avec ainda atualiza ao longo do dia. */
-const HOJE_CACHE_TTL_SEC = 30
+/** Painel Hoje — métricas vêm do sync (read-only); cache curto no isolate. */
+export const maxDuration = 30
 
-function metricsAreFresh(updatedAt: string | null | undefined): boolean {
-  if (!updatedAt) return false
-  const t = new Date(updatedAt).getTime()
-  if (!Number.isFinite(t)) return false
-  return Date.now() - t < METRICS_FRESH_MS
-}
+const HOJE_CACHE_TTL_MS = 30_000
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,25 +32,31 @@ export async function GET(req: NextRequest) {
     const canViewRevenue = auth.session.can_view_revenue
     const day = todayIso()
 
-    const payload = await cachedFetch(
-      `hoje:v2:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+    const payload = await ttlGetOrSet(
+      `hoje:v3:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      HOJE_CACHE_TTL_MS,
       async () => {
-        const existing = await getSalonMetrics(day)
-        if (!metricsAreFresh(existing?.updated_at)) {
-          await recomputeSalonMetricsFromRom(day).catch(() => {})
-        }
-
         const sql = getSql()
 
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
         const salonRaw = await getSalonMetrics(day)
         const playbookAll = await listActionItems({ limit: 60 })
-        const scheduleRaw = await listUpcomingSchedules(7, 150)
+        const scheduleRaw = await listTodaySchedules(day, 200)
         const leadRows = (await sql`
           select
-            count(*) filter (where status = 'novo')::int as novos,
-            count(*) filter (where status = 'novo' and channel = 'whatsapp')::int as whatsapp_novos
+            count(*) filter (
+              where status <> 'importado'
+                and coalesce(source, '') not like 'avec_sync_clients%'
+                and coalesce(source, '') not like 'avec_backfill%'
+                and coalesce(source, '') not like 'avec_lake%'
+            )::int as novos,
+            count(*) filter (
+              where channel = 'whatsapp' and status = 'novo'
+            )::int as whatsapp_novos
           from contacts
+          where anonymized_at is null
+            and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+            and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         `) as { novos: number; whatsapp_novos: number }[]
         const avecLast = await getLastAvecSync()
         const reactivation = await getReactivationKpis().catch(() => ({
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
         const playbook = playbookSlice.items
 
         const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
-        const leads = leadRows[0]
+        const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
         const salonBase = salonRaw ?? {
           day,
           revenue: 0,
@@ -127,7 +127,6 @@ export async function GET(req: NextRequest) {
           },
         }
       },
-      HOJE_CACHE_TTL_SEC,
     )
 
     return ok(payload)

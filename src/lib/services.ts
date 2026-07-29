@@ -1,6 +1,5 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
-import { toSalonDateIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -315,6 +314,31 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
     marked.push(s.name)
   }
   return marked
+}
+
+/** Agendamentos abertos só do dia (painel Hoje / alinhado ao Pipeline). */
+export async function listTodaySchedules(
+  day: string,
+  limit = 150,
+): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and c.anonymized_at is null
+      and cs.scheduled_at is not null
+      and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and (
+        cs.last_done_at is null
+        or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      )
+    order by cs.scheduled_at asc
+    limit ${limit}
+  `) as ScheduledServiceRow[]
 }
 
 /** Agenda do dia de um profissional específico — usado pelo bot Telegram de funcionários. */

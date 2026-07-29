@@ -17,10 +17,18 @@ export interface ListContactsWithSummaryOpts {
   limit?: number
   /** Busca server-side por nome (ilike) ou telefone (dígitos). */
   query?: string | null
-  /** Só contatos com pending_actions > 0 (calcula sobre toda a base de serviços). */
+  /** Só contatos com pending_actions > 0 (calcula sobre urgência de cadência/agenda). */
   pendingOnly?: boolean
-  /** Filtro de status do funil (ex.: novo, importado) — server-side, não só no top urgente. */
+  /** Filtro de status do funil (ex.: novo, importado) — server-side. */
   status?: string | null
+  /** Canal (whatsapp/avec/manual/…). */
+  channel?: string | null
+}
+
+export interface ContactListResult {
+  items: ContactListItem[]
+  /** Total na base que casa o filtro (antes do limit da página). */
+  total: number
 }
 
 function withUrgency(
@@ -47,7 +55,9 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   const sql = getSql()
   // postgres.js exige o helper sql(ids) para expandir IN (...).
   return (await sql`
-    select * from contacts where id in ${sql(ids)}
+    select * from contacts
+    where id in ${sql(ids)}
+      and anonymized_at is null
   `) as ContactRow[]
 }
 
@@ -73,6 +83,13 @@ function parseStatus(raw: string | null | undefined): ContactStatus | null {
   return (CONTACT_STATUSES as readonly string[]).includes(raw) ? (raw as ContactStatus) : null
 }
 
+const CONTACT_CHANNELS = ['whatsapp', 'telegram', 'avec', 'instagram', 'manual'] as const
+
+function parseChannel(raw: string | null | undefined): string | null {
+  if (!raw || raw === 'all') return null
+  return (CONTACT_CHANNELS as readonly string[]).includes(raw) ? raw : null
+}
+
 async function orderContactsByUrgency(
   ids: string[],
   byContact: Map<string, ClientService[]>,
@@ -95,8 +112,12 @@ async function orderContactsByUrgency(
  * Contatos com sinal de urgência (atraso / vencendo / agendado em 7d),
  * ranqueados no SQL — sem carregar a tabela inteira de serviços.
  */
-async function rankUrgentContactIds(limit: number): Promise<string[]> {
+async function rankUrgentContactIds(
+  limit: number,
+  opts: { channel?: string | null } = {},
+): Promise<string[]> {
   const sql = getSql()
+  const channel = opts.channel ?? null
   const rows = (await sql`
     with svc as (
       select
@@ -135,10 +156,13 @@ async function rankUrgentContactIds(limit: number): Promise<string[]> {
       from svc
       group by contact_id
     )
-    select contact_id
-    from per_contact
-    where overdue + due_soon + scheduled_soon > 0
-    order by max_overdue_days desc, overdue desc, due_soon desc, scheduled_soon desc
+    select pc.contact_id
+    from per_contact pc
+    join contacts c on c.id = pc.contact_id
+    where pc.overdue + pc.due_soon + pc.scheduled_soon > 0
+      and c.anonymized_at is null
+      and (${channel}::text is null or c.channel = ${channel})
+    order by pc.max_overdue_days desc, pc.overdue desc, pc.due_soon desc, pc.scheduled_soon desc
     limit ${limit}
   `) as { contact_id: string }[]
   return rows.map((r) => r.contact_id)
@@ -146,14 +170,13 @@ async function rankUrgentContactIds(limit: number): Promise<string[]> {
 
 /**
  * Lista contatos com resumo de urgência.
- * Sem busca: prioriza quem tem atraso/ação pendente (não corta overdue
- * só porque o contato é antigo e caiu fora do top-N por created_at).
+ * Sem busca: prioriza quem tem atraso/ação pendente via ranking SQL.
  * Com busca: filtra no servidor por nome/telefone em toda a base.
- * Com status: lista o funil real (ex.: Novo lead / Importado), não só o top urgente.
+ * Com status/channel: filtra server-side; retorna total antes do limit.
  */
 export async function listContactsWithSummary(
   limitOrOpts: number | ListContactsWithSummaryOpts = 100,
-): Promise<ContactListItem[]> {
+): Promise<ContactListResult> {
   const opts: ListContactsWithSummaryOpts =
     typeof limitOrOpts === 'number' ? { limit: limitOrOpts } : limitOrOpts
   const limit = Math.min(Math.max(1, opts.limit ?? 100), 2000)
@@ -162,38 +185,33 @@ export async function listContactsWithSummary(
   const qDigits = rawQuery.replace(/\D/g, '')
   const pendingOnly = opts.pendingOnly === true
   const status = parseStatus(opts.status)
+  const channel = parseChannel(opts.channel)
 
   const sql = getSql()
 
-  // Status do funil (Novo lead / Importado / …): busca na base inteira, não no top urgente.
-  if (status && !(q || qDigits.length >= 3)) {
-    const contacts = (await sql`
-      select * from contacts
-      where status = ${status}
-      order by created_at desc
-      limit ${Math.min(limit * (pendingOnly ? 4 : 1), 2000)}
-    `) as ContactRow[]
-    const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
-    let items = withUrgency(contacts, byContact)
-    if (pendingOnly) items = items.filter((c) => c.pending_actions > 0)
-    items.sort(compareByOverdueThenName)
-    return items.slice(0, limit)
-  }
-
-  if (pendingOnly && !(q || qDigits.length >= 3)) {
-    const pendingIds = await rankUrgentContactIds(limit)
-    const byContact = await loadServicesByContactIds(pendingIds)
-    const ordered = await orderContactsByUrgency(pendingIds, byContact)
-    return withUrgency(ordered, byContact)
-  }
-
+  // Busca por nome/telefone — SQL limit + serviços só dos hits.
   if (q || qDigits.length >= 3) {
     const namePattern = q ? `%${q}%` : null
     const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
     const contacts = (await sql`
       select * from contacts
-      where
-        (${status}::text is null or status = ${status})
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
         and (
           (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
           or (
@@ -206,33 +224,96 @@ export async function listContactsWithSummary(
     `) as ContactRow[]
     const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
     const withU = withUrgency(contacts, byContact)
-    return pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
+    if (!pendingOnly) return { items: withU, total }
+    const items = withU.filter((c) => c.pending_actions > 0)
+    return { items, total: contacts.length < limit ? items.length : total }
   }
 
-  // Contatos com urgência > 0 — ranking no SQL, serviços só dos IDs retornados.
-  const urgentIds = await rankUrgentContactIds(limit)
+  // Status do funil: página por created_at (não ranqueia a base inteira).
+  if (status) {
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where status = ${status}
+        and anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
+
+    if (pendingOnly) {
+      const pendingIds = await rankUrgentContactIds(Math.min(limit * 4, 2000), { channel })
+      if (pendingIds.length === 0) return { items: [], total: 0 }
+      const contacts = (await sql`
+        select * from contacts
+        where status = ${status}
+          and anonymized_at is null
+          and (${channel}::text is null or channel = ${channel})
+          and id in ${sql(pendingIds)}
+      `) as ContactRow[]
+      const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+      const items = withUrgency(contacts, byContact)
+      items.sort(compareByOverdueThenName)
+      return { items: items.slice(0, limit), total: items.length }
+    }
+
+    const contacts = (await sql`
+      select * from contacts
+      where status = ${status}
+        and anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
+      order by created_at desc
+      limit ${limit}
+    `) as ContactRow[]
+    const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+    return { items: withUrgency(contacts, byContact), total }
+  }
+
+  // Pending: ranking SQL de urgência (atraso / vencendo / agendado).
+  if (pendingOnly) {
+    const pendingIds = await rankUrgentContactIds(limit, { channel })
+    const byContact = await loadServicesByContactIds(pendingIds)
+    const ordered = await orderContactsByUrgency(pendingIds, byContact)
+    const items = withUrgency(ordered, byContact)
+    return { items, total: items.length }
+  }
+
+  // Default: urgentes via ranking SQL, depois recentes para completar a página.
+  const urgentIds = await rankUrgentContactIds(limit, { channel })
   const byContact = await loadServicesByContactIds(urgentIds)
   const orderedUrgent = await orderContactsByUrgency(urgentIds, byContact)
 
-  if (orderedUrgent.length >= limit) {
-    return withUrgency(orderedUrgent.slice(0, limit), byContact)
+  let items =
+    orderedUrgent.length >= limit
+      ? withUrgency(orderedUrgent.slice(0, limit), byContact)
+      : withUrgency(orderedUrgent, byContact)
+
+  if (items.length < limit) {
+    const remaining = limit - items.length
+    const recent =
+      urgentIds.length === 0
+        ? ((await sql`
+            select * from contacts
+            where anonymized_at is null
+              and (${channel}::text is null or channel = ${channel})
+            order by created_at desc
+            limit ${remaining}
+          `) as ContactRow[])
+        : ((await sql`
+            select * from contacts
+            where anonymized_at is null
+              and (${channel}::text is null or channel = ${channel})
+              and id not in ${sql(urgentIds)}
+            order by created_at desc
+            limit ${remaining}
+          `) as ContactRow[])
+    const recentByContact = await loadServicesByContactIds(recent.map((c) => c.id))
+    for (const [id, list] of recentByContact) byContact.set(id, list)
+    items = [...items, ...withUrgency(recent, byContact)]
   }
 
-  const remaining = limit - orderedUrgent.length
-  const recent =
-    urgentIds.length === 0
-      ? ((await sql`
-          select * from contacts order by created_at desc limit ${remaining}
-        `) as ContactRow[])
-      : ((await sql`
-          select * from contacts
-          where id not in ${sql(urgentIds)}
-          order by created_at desc
-          limit ${remaining}
-        `) as ContactRow[])
-
-  const recentByContact = await loadServicesByContactIds(recent.map((c) => c.id))
-  for (const [id, list] of recentByContact) byContact.set(id, list)
-
-  return withUrgency([...orderedUrgent, ...recent], byContact)
+  const totalRows = (await sql`
+    select count(*)::int as n from contacts
+    where anonymized_at is null
+      and (${channel}::text is null or channel = ${channel})
+  `) as { n: number }[]
+  return { items, total: totalRows[0]?.n ?? items.length }
 }
