@@ -3,6 +3,7 @@ import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
 import { isDbPoolExhaustedError } from '@/lib/db'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('API')
 
@@ -25,6 +26,12 @@ export function handleError(e: unknown) {
       stack: e.stack,
       name: e.name,
     })
+    if (isDbQuotaError(e)) {
+      logger.error('DB quota blocked request', {
+        message: e.message,
+      })
+      return err(dbQuotaUserMessage(e), 503)
+    }
     if (isDbPoolExhaustedError(e)) {
       return err(
         isProduction()

@@ -2,7 +2,7 @@
 /**
  * Guard against regressing ROM Brasil to Neon HTTP.
  * neon() (@neondatabase/serverless) cannot talk to *.supabase.com / pooler hosts —
- * production BR uses Supabase + postgres.js. Iguatemi stays on Neon separately.
+ * production BR/IG use Supabase + postgres.js. Only Cérebro uses Neon.
  */
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'

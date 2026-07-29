@@ -1,37 +1,31 @@
-# Vercel — Brasil → Supabase only (checklist)
+# Vercel — Brasil & Iguatemi em Supabase
 
-Brasil must not use the dead Neon project (`ep-long-sun-*.neon.tech`).
-Iguatemi stays on Neon — do not change IG URLs.
+Brasil e Iguatemi usam **Supabase**. Apenas o Cérebro (painel interno da Waltter) usa Neon.
+Confirme que nenhuma das duas unidades ROM aponta para neon.tech.
 
-## rom-brasil (Production)
+## ROM Brasil (Vercel project)
 
-| Variable | Expected | Notes |
-|----------|----------|-------|
-| `DATABASE_URL` | Supabase pooler `*.pooler.supabase.com:5432` (session) or `:6543` (tx) | App reads this. `sslmode=require`. postgres.js: `prepare:false`. |
+| Var | Valor | Notas |
+|-----|-------|-------|
+| `DATABASE_URL` | Supabase pooler BR | `*.pooler.supabase.com` session `:5432` ou tx `:6543` |
 | `DATABASE_URL_UNPOOLED` | **unused** by app | Neon-era leftover. Safe to remove in Vercel UI after health check. |
 | Neon integration | none | Disconnect Neon from the Vercel project if still linked. |
 
-Verify:
+## ROM Iguatemi (Vercel project)
 
-```bash
-# host only — never paste full passwords into chat/PR
-npx vercel env run -e production -- node -e \
-  "const u=process.env.DATABASE_URL||''; const m=u.match(/@([^/:?]+)/); console.log(m&&m[1])"
-# expect: aws-*-pooler.supabase.com
-ROM_PANEL=brasil DATABASE_URL="$DATABASE_URL" npm run check:brasil-db-host
-```
+| Var | Valor | Notas |
+|-----|-------|-------|
+| `DATABASE_URL` | Supabase pooler IG | Mesmo padrão — projeto Supabase dedicado Iguatemi |
+| Neon integration | none | Disconnect Neon from the IG Vercel project if still linked. |
 
-## cerebro-rom (Production)
+## Cérebro (referência)
 
-| Variable | Expected | Notes |
-|----------|----------|-------|
-| `NEON_BRASIL_DATABASE_URL` | Supabase pooler (same BR DB) | Name kept for compat; value must be Supabase, not Neon BR. |
-| `NEON_IGUATEMI_DATABASE_URL` | Neon Iguatemi | Leave alone. |
-| `CEREBRO_DATABASE_URL` | Cérebro Neon (own) | Leave alone. |
-| `DATABASE_URL` / `UNPOOLED` | Cérebro Neon (`ep-small-poetry-…`) | Not the Brasil unit DB — leave alone. |
+> Cérebro mantém Neon — não altere os valores abaixo.
 
-## Local helpers (not in git)
-
-- `/tmp/rom-dbs/supabase-brasil.env` — canonical BR Supabase SESSION + TX
-- `/tmp/rom-dbs/env` — `DATABASE_URL_BRASIL` = SESSION; IG/RomSales = Neon
-- `/tmp/rom-dbs/brasil-supabase.env.note` — ops notes
+| Var | Valor | Notas |
+|-----|-------|-------|
+| `NEON_BRASIL_DATABASE_URL` | Supabase pooler (BR DB) | Nome mantido por compatibilidade; valor deve ser Supabase, não Neon BR. |
+| `NEON_IGUATEMI_DATABASE_URL` | Supabase pooler (IG DB) | Nome mantido por compatibilidade; valor deve ser Supabase IG, não Neon. |
+| `UNIT_BRASIL_DATABASE_URL` / `UNIT_IGUATEMI_DATABASE_URL` | opcional | Preferidos quando presentes (aliases sem “Neon” no nome). |
+| `CEREBRO_DATABASE_URL` | Neon (banco próprio do Cérebro) | Deixe como está — Cérebro usa Neon para seus dados internos. |
+| `DATABASE_URL` / `UNPOOLED` | Neon Cérebro | Não é o banco das unidades ROM — deixe como está. |

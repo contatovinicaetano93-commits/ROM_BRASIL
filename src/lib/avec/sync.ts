@@ -817,7 +817,7 @@ async function syncDurationFrom0223(
 }
 
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
-  // Fast e full compartilham o mesmo lease — evita overlap no Neon entre cron/webhook.
+  // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
   return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
     ttlMs: 6 * 60 * 1000,
     owner: `avec-${mode}`,

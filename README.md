@@ -7,7 +7,7 @@ KPIs.
 
 Stack: Next.js (App Router) + TypeScript + Tailwind + Postgres (Supabase via
 `postgres.js`), API-first (front-end só fala com `/api/*`). Acesso ao banco por
-SQL direto. (Iguatemi continua em Neon — ver `deploy/SETUP-IGUATEMI.md`.)
+SQL direto. Brasil e Iguatemi usam Supabase; apenas o Cérebro usa Neon.
 
 **Interface adaptativa:** mobile-first no celular (bottom bar, drawer) e layout
 desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
@@ -41,7 +41,8 @@ ou investigar depois.
    `DATABASE_URL` (pooler Session `:5432` ou Transaction `:6543`, `sslmode=require`)
    pro `.env.local`. Client: `ssl:'require'` + `prepare:false`.
 2. **Rodar `db/schema.sql`** no SQL Editor do Supabase (ou `psql`).
-   Iguatemi: Neon — ver `deploy/SETUP-IGUATEMI.md`.3. **Claude (Anthropic)** — `ANTHROPIC_API_KEY` em [console.anthropic.com](https://console.anthropic.com)
+   Iguatemi: Supabase — ver `deploy/SETUP-IGUATEMI.md`.
+3. **Claude (Anthropic)** — `ANTHROPIC_API_KEY` em [console.anthropic.com](https://console.anthropic.com)
    para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).

@@ -67,7 +67,7 @@ interface HealthStatus {
   ok: boolean
   deployment?: { panel: string; display_name: string; host: string | null; vercel_env: string | null }
   validation?: { ok: boolean; warnings: string[] }
-  database: { configured: boolean; connected: boolean; error: string | null }
+  database: { configured: boolean; connected: boolean; error: string | null; db_quota?: boolean }
   claude: { configured: boolean; model?: string }
   avec: {
     configured: boolean
@@ -332,6 +332,13 @@ export default function AdminPage() {
           {health?.database ? (
             <div className="space-y-2 text-sm">
               <HealthRow label="Banco de dados" ok={health.database.connected} detail={health.database.error ?? undefined} />
+              {health.database.db_quota && (
+                <p className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-foreground/90">
+                  Banco sem cota (transferência/tamanho). Esta unidade usa Supabase — confira
+                  DATABASE_URL no pooler (*.pooler.supabase.com), pause crons agressivos ou faça
+                  upgrade do plano Supabase.
+                </p>
+              )}
               <HealthRow
                 label="Claude (Anthropic)"
                 ok={health.claude.configured}
