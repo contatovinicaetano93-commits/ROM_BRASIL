@@ -173,7 +173,7 @@ export default function ContatosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, debouncedQuery, queue])
 
-  const visible = mode === 'search' ? contacts : contacts
+  const visible = contacts
 
   const countLabel =
     mode === 'search'
