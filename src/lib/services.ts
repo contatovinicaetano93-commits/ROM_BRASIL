@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
+import { toSalonDateIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -141,17 +142,34 @@ export interface MarkServiceDoneOpts {
   lastPrice?: number | null
 }
 
-// Marca o serviço como realizado — reinicia o ciclo e limpa agendamento.
+// Marca o serviço como realizado — reinicia o ciclo.
+// Só limpa scheduled_at do mesmo dia SP do doneAt (não apaga remarcação futura).
+// Não regride last_done_at (greatest) — preserva histórico / backfill 0002.
 export async function markServiceDone(
   serviceId: string,
   opts: MarkServiceDoneOpts = {}
 ): Promise<ClientService | null> {
   const sql = getSql()
   const doneAt = opts.doneAt ?? new Date().toISOString()
+  const before = (await sql`
+    select last_done_at from client_services where id = ${serviceId} limit 1
+  `) as { last_done_at: string | null }[]
+  const prevDone = before[0]?.last_done_at ?? null
+
   const rows = (await sql`
     update client_services set
-      last_done_at = ${doneAt}::timestamptz,
-      scheduled_at = null,
+      last_done_at = case
+        when last_done_at is null then ${doneAt}::timestamptz
+        when ${doneAt}::timestamptz > last_done_at then ${doneAt}::timestamptz
+        else last_done_at
+      end,
+      scheduled_at = case
+        when scheduled_at is null then null
+        when (scheduled_at at time zone 'America/Sao_Paulo')::date
+          = (${doneAt}::timestamptz at time zone 'America/Sao_Paulo')::date
+          then null
+        else scheduled_at
+      end,
       professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
       last_price = coalesce(${opts.lastPrice ?? null}, last_price)
     where id = ${serviceId}
@@ -159,8 +177,11 @@ export async function markServiceDone(
   `) as ClientService[]
   const service = rows[0] ?? null
   if (service) {
-    // WhatsApp pós-visita (2h) — nunca falha a conclusão se a fila falhar.
-    await enqueueAftercare(service).catch(() => undefined)
+    const prevDay = prevDone ? toSalonDateIso(prevDone) : null
+    const newDay = toSalonDateIso(service.last_done_at)
+    if (prevDay !== newDay) {
+      await enqueueAftercare(service).catch(() => undefined)
+    }
   }
   return service
 }
