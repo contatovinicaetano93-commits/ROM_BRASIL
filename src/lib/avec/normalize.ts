@@ -87,6 +87,10 @@ export interface NormalizedAvecAppointment {
   email: string | null
   serviceName: string | null
   scheduledAt: string | null
+  /** Dia civil da agenda (YYYY-MM-DD), mesmo quando o horário veio vazio. */
+  appointmentDay: string | null
+  /** true se a Avec mandou hora (hora_ini / horário) — false = encaixe/comanda sem clock. */
+  hasClockTime: boolean
   professional: string | null
   price: number | null
   status: string | null
@@ -147,8 +151,13 @@ export function parseAvecDateTime(datePart: string | null, timePart?: string | n
   const t = timePart?.trim()
 
   if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
-    const iso = t ? `${d.split('T')[0]}T${t}` : d
-    const parsed = new Date(iso)
+    const ymd = d.slice(0, 10)
+    if (!t && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      // Meio-dia SP — evita UTC midnight virar dia anterior no salão.
+      return new Date(`${ymd}T12:00:00-03:00`).toISOString()
+    }
+    const iso = t ? `${ymd}T${t}` : d
+    const parsed = new Date(iso.includes('+') || iso.endsWith('Z') || /T\d{2}:\d{2}/.test(iso) ? iso : `${iso}-03:00`)
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
   }
 
@@ -158,9 +167,9 @@ export function parseAvecDateTime(datePart: string | null, timePart?: string | n
     const month = Number(m[2]) - 1
     let year = Number(m[3])
     if (year < 100) year += 2000
-    const time = t ?? m[4] ?? '10:00'
+    const time = t ?? m[4] ?? '12:00'
     const [hh, mm, ss] = time.split(':').map(Number)
-    const parsed = new Date(year, month, day, hh || 10, mm || 0, ss || 0)
+    const parsed = new Date(year, month, day, hh || 12, mm || 0, ss || 0)
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
   }
 
@@ -248,7 +257,25 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
   ])
   const datePart = pick(row, ['data', 'data_agendamento', 'agendamento', 'dia', 'date'])
   const timePart = pickAppointmentTimePart(row)
-  const scheduledAt = parseAvecDateTime(datePart, timePart)
+  const hasClockTime = Boolean(timePart)
+  const appointmentDay = (() => {
+    if (!datePart) return null
+    const d = datePart.trim()
+    const iso = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const br = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+    if (br) {
+      let year = Number(br[3])
+      if (year < 100) year += 2000
+      return `${year}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`
+    }
+    return null
+  })()
+  let scheduledAt = parseAvecDateTime(datePart, timePart)
+  // Data sem horário (encaixe/comanda) → ancora meio-dia SP para entrar em Agendados do dia.
+  if (!scheduledAt && appointmentDay) {
+    scheduledAt = new Date(`${appointmentDay}T12:00:00-03:00`).toISOString()
+  }
   const professional = pick(row, [
     'profissional',
     'profissional_nome',
@@ -262,7 +289,19 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
 
   if (!avecClientId && !clientName && !phone) return null
 
-  return { avecClientId, clientName, phone, email, serviceName, scheduledAt, professional, price, status }
+  return {
+    avecClientId,
+    clientName,
+    phone,
+    email,
+    serviceName,
+    scheduledAt,
+    appointmentDay,
+    hasClockTime,
+    professional,
+    price,
+    status,
+  }
 }
 
 export function normalizeAttendanceRow(row: Record<string, unknown>): NormalizedAvecAttendance | null {

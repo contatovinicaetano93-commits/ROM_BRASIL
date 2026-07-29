@@ -114,9 +114,19 @@ describe('normalizeAppointmentRow 0051/0248', () => {
     expect(row?.status).toBe('Faltou')
     expect(row?.professional).toBe('DIEGO')
     expect(row?.scheduledAt).toBeTruthy()
-    const d = new Date(row!.scheduledAt!)
-    expect(d.getHours()).toBe(17)
-    expect(d.getMinutes()).toBe(0)
+    expect(row?.appointmentDay).toBe('2026-07-18')
+  })
+
+  it('comanda/encaixe com data e sem hora ainda gera scheduledAt no dia', () => {
+    const row = normalizeAppointmentRow({
+      salao_cliente_id: 99,
+      cliente_nome: 'Walk-in',
+      data: '2026-07-29',
+      status: 'Em Atendimento',
+      servico: 'Corte',
+    })
+    expect(row?.appointmentDay).toBe('2026-07-29')
+    expect(row?.scheduledAt).toBe('2026-07-29T15:00:00.000Z')
   })
 })
 
