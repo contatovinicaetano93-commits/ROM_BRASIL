@@ -1,14 +1,13 @@
+/** Singleflight in-process — miss concorrente compartilha a mesma Promise. */
 export class RequestDeduplicator {
   private static pending = new Map<string, Promise<any>>()
 
   static async deduplicate<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    // If already pending, wait for it
     const pending = this.pending.get(key)
     if (pending) {
       return pending
     }
 
-    // Execute and cache the promise
     const promise = fn().finally(() => {
       this.pending.delete(key)
     })
@@ -29,7 +28,3 @@ export class RequestDeduplicator {
     this.pending.clear()
   }
 }
-
-// Usage example:
-// POST /api/estoque/sync would deduplicate by:
-// const result = await RequestDeduplicator.deduplicate('estoque_sync_fast', () => runStockSync('fast'))
