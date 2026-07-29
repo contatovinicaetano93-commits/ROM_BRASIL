@@ -26,6 +26,24 @@ export function toSalonDateIso(
   }).format(d)
 }
 
+export function salonDateAtLocalIso(
+  ymd: string,
+  hour = 12,
+  minute = 0,
+  timeZone = SALON_TIMEZONE,
+): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  if (!m) return new Date().toISOString()
+  // America/Sao_Paulo sem DST desde 2019 → offset fixo -03:00.
+  if (timeZone === 'America/Sao_Paulo') {
+    const hh = String(hour).padStart(2, '0')
+    const mm = String(minute).padStart(2, '0')
+    return new Date(`${ymd}T${hh}:${mm}:00-03:00`).toISOString()
+  }
+  const probe = new Date(`${ymd}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`)
+  return Number.isNaN(probe.getTime()) ? new Date().toISOString() : probe.toISOString()
+}
+
 export function fmtSchedule(iso: string) {
   const d = new Date(iso)
   const today = new Date()
