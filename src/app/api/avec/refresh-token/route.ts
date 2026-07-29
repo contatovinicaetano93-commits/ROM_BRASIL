@@ -34,7 +34,7 @@ async function execute(req: NextRequest) {
   const runtime = await loadRuntimeAvecApiToken()
   const current = runtime ?? process.env.AVEC_API_TOKEN ?? null
 
-  // Cron 6h: se ainda restam ≥4h, não renova (evita churn).
+  // Cron 3h: se ainda restam ≥4h, não renova (evita churn).
   const minted = await mintAvecApiToken({
     force,
     currentToken: current,
