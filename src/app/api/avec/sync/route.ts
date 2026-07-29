@@ -7,7 +7,7 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 
 /** Sync Avec pode demorar (vários relatórios). */
@@ -88,16 +88,16 @@ async function executeSync(
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch (purgeErr) {
-        if (isNeonQuotaError(purgeErr)) {
+        if (isDbQuotaError(purgeErr)) {
           if (opts?.cron) {
             return ok({
               skipped: true,
               reason: 'db_quota',
               mode: effectiveMode,
-              note: neonQuotaUserMessage(purgeErr),
+              note: dbQuotaUserMessage(purgeErr),
             })
           }
-          return err(neonQuotaUserMessage(purgeErr), 503)
+          return err(dbQuotaUserMessage(purgeErr), 503)
         }
         throw purgeErr
       }
@@ -125,16 +125,16 @@ async function executeSync(
         note: 'Outro sync Avec já está em execução (lock distribuído)',
       })
     }
-    if (isNeonQuotaError(e)) {
+    if (isDbQuotaError(e)) {
       if (opts?.cron) {
         return ok({
           skipped: true,
           reason: 'db_quota',
           mode: effectiveMode,
-          note: neonQuotaUserMessage(e),
+          note: dbQuotaUserMessage(e),
         })
       }
-      return err(neonQuotaUserMessage(e), 503)
+      return err(dbQuotaUserMessage(e), 503)
     }
     throw e
   }

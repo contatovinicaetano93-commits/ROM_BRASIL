@@ -9,6 +9,7 @@ export const AVEC_TOKEN_EXPIRED_MESSAGE =
 /** Último sync bem-sucedido há mais que isto → badge "stale". */
 export const AVEC_SYNC_STALE_MS = 2.5 * 60 * 60 * 1000
 
+
 export type AvecSyncUiStatus = 'ok' | 'partial' | 'error' | 'stale' | 'never' | 'off'
 
 export type AvecSyncUiTone = 'success' | 'gold' | 'danger'
@@ -45,6 +46,13 @@ export function formatAvecUserMessage(raw: string | null | undefined): string | 
   if (!raw) return null
   if (isAvecTokenExpiredError(raw)) return AVEC_TOKEN_EXPIRED_MESSAGE
 
+  // WAF/edge devolve HTML 403 (não JSON) — comum em egress serverless.
+  if (/\bHTTP\s*403\b/i.test(raw) && /<html|403 Forbidden/i.test(raw)) {
+    const report = raw.match(/Avec\s+(\d{4})/i)?.[1]
+    const prefix = report ? `Avec ${report}` : 'Avec'
+    return `${prefix} bloqueado pelo WAF (403) — retry automático; se persistir, rode sync fora da Vercel ou aguarde`
+  }
+
   // HTTP 403 com corpo JSON — manter contexto, sem despejar JSON longo
   const http = raw.match(/\bHTTP\s*(\d+)\b/i)
   if (http && raw.includes('{')) {
@@ -60,6 +68,33 @@ export function formatAvecUserMessage(raw: string | null | undefined): string | 
 
 export function formatAvecErrorList(errors: string[]): string[] {
   return errors.map((e) => formatAvecUserMessage(e) ?? e)
+}
+
+/**
+ * Avisos informativos que NÃO devem sozinhos marcar o sync como partial.
+ * Truncamento / unit id ausente ainda aparecem em stats.warnings na UI.
+ */
+export function isSoftAvecSyncWarning(warning: string): boolean {
+  if (/AVEC_SYNC_MAX_PAGES/i.test(warning)) return true
+  if (/atingiu o limite de \d+ páginas/i.test(warning)) return true
+  if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
+  // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
+  if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
+  // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
+  if (/TM 0223:/i.test(warning)) return true
+  // Truncamento com skip de métricas (não zerar) — informativo.
+  if (/truncado/i.test(warning)) return true
+  // Catálogo 0004 adiado de propósito (ritmo leve).
+  if (/Catálogo 0004 adiado/i.test(warning)) return true
+  // P3 sem taxa explícita — informativo.
+  if (/sem retorno|retorno local indisponível/i.test(warning)) return true
+  // Estoque: paginação parcial limpa por orçamento.
+  if (/fetch parcial/i.test(warning)) return true
+  return false
+}
+
+export function hardAvecSyncWarnings(warnings: string[]): string[] {
+  return warnings.filter((w) => !isSoftAvecSyncWarning(w))
 }
 
 function asStringArray(value: unknown): string[] {

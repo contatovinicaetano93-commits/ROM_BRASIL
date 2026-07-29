@@ -148,23 +148,27 @@ export default function RelatorioDiretoriaPage() {
     loadAbortRef.current = controller
     setLoading(true)
     setError(null)
-    // Servidor usa budget ~70s; 100s cobre rede + parse sem orphan falso.
-    const timer = window.setTimeout(() => controller.abort(), 100_000)
+    // Servidor teto 55s + budget ~45s; 90s cobre rede + parse sem orphan falso.
+    const timer = window.setTimeout(() => controller.abort(), 90_000)
     try {
       const stage = tab
       const q = new URLSearchParams({
+        stage,
+        slim: '1',
         month,
         quarter_0021: quarter0021,
         compare_0021: compareQuarter0021,
         compare_months: compareMonths ? '1' : '0',
         quarter,
         compare,
-        stage,
       })
       if (forceDemo) q.set('mock', '1')
+      if (stage === '0011' && proId0011) q.set('professional_id', proId0011)
+      if (stage === '0021' && proId0021) q.set('professional_id', proId0021)
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
         signal: controller.signal,
+        timeoutMs: 90_000,
       })
       if (controller.signal.aborted) return
       const json = await res.json()
@@ -195,7 +199,7 @@ export default function RelatorioDiretoriaPage() {
         return
       }
       if (e instanceof DOMException && e.name === 'AbortError') {
-        setError('Relatório demorou demais (>100s). Tente de novo ou marque “forçar demo”.')
+        setError('Relatório demorou demais (>90s). Tente de novo ou marque “Forçar demo”.')
       } else {
         setError(String(e))
       }
@@ -214,6 +218,8 @@ export default function RelatorioDiretoriaPage() {
     compare,
     forceDemo,
     tab,
+    proId0011,
+    proId0021,
   ])
 
   useEffect(() => {
@@ -364,6 +370,7 @@ export default function RelatorioDiretoriaPage() {
           professional_id: proId0011 || undefined,
           mock: forceDemo || undefined,
         }),
+        timeoutMs: 60_000,
       })
       const json = await res.json()
       alert(json.error ?? json.data?.note ?? 'Enviado')
@@ -387,6 +394,7 @@ export default function RelatorioDiretoriaPage() {
           professional_id: proId0021 || undefined,
           mock: forceDemo || undefined,
         }),
+        timeoutMs: 60_000,
       })
       const json = await res.json()
       alert(json.error ?? json.data?.note ?? 'Enviado')
@@ -634,17 +642,30 @@ export default function RelatorioDiretoriaPage() {
                 para a recepção reaquecer o lead (WhatsApp). Na tela mostramos uma amostra (até 12 por
                 profissional); a lista completa vai no CSV / e-mail.
               </p>
-              {data?.source === 'avec' && (
-                <p className="text-muted">
-                  Fonte Avec live (0011) no trimestre selecionado.
-                </p>
-              )}
-              {data?.source === 'mock' && (
-                <p className="text-warning">
-                  Dados de demonstração (mock / fallback). Com token Avec e sync OK, a lista 0011 vem
-                  ao vivo; sem isso, fixture (Dani) + síntese.
-                </p>
-              )}
+              {data?.source === 'avec' &&
+                /0011 local/i.test(data.schedule_note ?? '') && (
+                  <p className="text-muted">
+                    Fonte 0011 local (0002+0007 por profissional) — fallback quando Avec 0011 falha.
+                  </p>
+                )}
+              {data?.source === 'avec' &&
+                !/0011 local/i.test(data.schedule_note ?? '') && (
+                  <p className="text-muted">
+                    Fonte Avec live (0011) no trimestre selecionado.
+                  </p>
+                )}
+              {data?.source === 'mock' &&
+                (data.return_blocks?.some((b) => b.reactivation.length > 0) ? (
+                  <p className="text-muted">
+                    Lista disponível em modo demo/parcial — toque Atualizar para tentar Avec/local de
+                    novo.
+                  </p>
+                ) : (
+                  <p className="text-warning">
+                    Dados de demonstração (mock / fallback). Com token Avec e sync OK, a lista 0011
+                    vem ao vivo; sem isso, fixture (Dani) + síntese.
+                  </p>
+                ))}
             </div>
             <div className="space-y-4">
               {(proId0011 ? selectedReturn : selectedReturn.slice(0, 3)).map(

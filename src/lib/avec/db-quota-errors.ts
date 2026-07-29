@@ -1,6 +1,11 @@
-/** Detecta bloqueio de cota Postgres (transferência / tamanho) — sync deve skipar, não 500. */
+/**
+ * Detecta bloqueio de cota Postgres (transferência / tamanho) — sync deve skipar, não 500.
+ * BR e IG usam Supabase; só o Cérebro usa Neon.
+ * Mantém detecção de strings legacy do Neon (402, "data transfer quota") —
+ * e mensagens genéricas de quota/disco.
+ */
 
-export function isNeonQuotaError(e: unknown): boolean {
+export function isDbQuotaError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
   const lower = msg.toLowerCase()
   if (
@@ -26,7 +31,7 @@ export function isNeonQuotaError(e: unknown): boolean {
   return false
 }
 
-export function neonQuotaUserMessage(e?: unknown): string {
+export function dbQuotaUserMessage(e?: unknown): string {
   const msg = e instanceof Error ? e.message : e ? String(e) : ''
   const lower = msg.toLowerCase()
   if (
@@ -35,7 +40,7 @@ export function neonQuotaUserMessage(e?: unknown): string {
     lower.includes('disk full') ||
     lower.includes('no space left')
   ) {
-    return 'Banco sem espaço (limite de tamanho). Purgue snapshots em /api/avec/purge-snapshots ou faça upgrade do plano.'
+    return 'Banco sem espaço (limite de tamanho). Purgue snapshots em /api/avec/purge-snapshots ou faça upgrade do plano Supabase.'
   }
-  return 'Banco sem cota de transferência (HTTP 402). Pare crons agressivos, purge snapshots ou faça upgrade.'
+  return 'Banco sem cota de transferência (HTTP 402). Pare crons agressivos, purge snapshots ou faça upgrade do plano Supabase.'
 }

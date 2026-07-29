@@ -1,14 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import {
+  avecReportHeaders,
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
   isAvecFetchAbortError,
+  isAvecWafForbiddenError,
+  normalizeAvecApiToken,
   periodRangeEndingOn,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
   type AvecReportFetchResult,
 } from '@/lib/avec/client'
+
+describe('normalizeAvecApiToken / WAF helpers', () => {
+  it('remove prefixo Bearer', () => {
+    expect(normalizeAvecApiToken('Bearer abc.def.ghi')).toBe('abc.def.ghi')
+    expect(normalizeAvecApiToken('abc.def.ghi')).toBe('abc.def.ghi')
+  })
+
+  it('monta headers com Origin/User-Agent do admin Avec', () => {
+    const h = avecReportHeaders('Bearer tok')
+    expect(h.Authorization).toBe('tok')
+    expect(h.Origin).toBe('https://admin.avec.beauty')
+    expect(h['User-Agent']).toMatch(/Safari/)
+  })
+
+  it('detecta 403 HTML de WAF', () => {
+    const err = new Error('Avec 0004 HTTP 403: <html><title>403 Forbidden</title></html>')
+    ;(err as Error & { status?: number }).status = 403
+    expect(isAvecWafForbiddenError(err)).toBe(true)
+    const json = new Error('Avec 0004 HTTP 403: {"error":"forbidden"}')
+    ;(json as Error & { status?: number }).status = 403
+    expect(isAvecWafForbiddenError(json)).toBe(false)
+  })
+})
 
 describe('extractRows', () => {
   it('extrai array direto', () => {
@@ -149,10 +175,10 @@ describe('pagination truncation', () => {
     expect(formatTruncationWarning('0149', result)).toContain('posição de estoque')
   })
 
-  it('usa padrão 200 páginas e respeita env', () => {
+  it('usa padrão 80 páginas e respeita env', () => {
     const env = process.env
     delete process.env.AVEC_SYNC_MAX_PAGES
-    expect(getAvecSyncMaxPages()).toBe(200)
+    expect(getAvecSyncMaxPages()).toBe(80)
     process.env.AVEC_SYNC_MAX_PAGES = '350'
     expect(getAvecSyncMaxPages()).toBe(350)
     process.env.AVEC_SYNC_MAX_PAGES = '9999'

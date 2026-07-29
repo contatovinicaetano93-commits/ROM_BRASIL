@@ -1,6 +1,5 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
-import { toSalonDateIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -235,6 +234,21 @@ export async function patchServiceVisitMeta(
   return rows[0] ?? null
 }
 
+/** Preenche cadence_days só se ainda estiver null (não sobrescreve cadência manual). */
+export async function ensureServiceCadence(
+  serviceId: string,
+  cadenceDays: number,
+): Promise<ClientService | null> {
+  if (!Number.isFinite(cadenceDays) || cadenceDays <= 0) return null
+  const sql = getSql()
+  const rows = (await sql`
+    update client_services set cadence_days = ${Math.floor(cadenceDays)}
+    where id = ${serviceId} and cadence_days is null
+    returning *
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
 export async function clearServiceSchedule(serviceId: string): Promise<ClientService | null> {
   const sql = getSql()
   const rows = (await sql`
@@ -243,6 +257,47 @@ export async function clearServiceSchedule(serviceId: string): Promise<ClientSer
     returning *
   `) as ClientService[]
   return rows[0] ?? null
+}
+
+/**
+ * Remove agendamentos órfãos do dia — serviços ainda com scheduled_at hoje
+ * que não estão na agenda aberta da Avec (0051). Paridade Iguatemi.
+ *
+ * Só toca contatos ligados à Avec (`avec_client_id`). Caller não deve invocar
+ * se 0051 veio truncado.
+ */
+export async function clearOrphanSchedulesForDay(
+  day: string,
+  keepServiceIds: string[],
+): Promise<number> {
+  const sql = getSql()
+  if (keepServiceIds.length === 0) {
+    const rows = (await sql`
+      update client_services cs
+      set scheduled_at = null
+      from contacts c
+      where cs.contact_id = c.id
+        and c.avec_client_id is not null
+        and c.anonymized_at is null
+        and cs.scheduled_at is not null
+        and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      returning cs.id
+    `) as { id: string }[]
+    return rows.length
+  }
+  const rows = (await sql`
+    update client_services cs
+    set scheduled_at = null
+    from contacts c
+    where cs.contact_id = c.id
+      and c.avec_client_id is not null
+      and c.anonymized_at is null
+      and cs.scheduled_at is not null
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      and not (cs.id = any(${keepServiceIds}::uuid[]))
+    returning cs.id
+  `) as { id: string }[]
+  return rows.length
 }
 
 export async function deactivateService(serviceId: string): Promise<ClientService | null> {
@@ -274,6 +329,31 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
     marked.push(s.name)
   }
   return marked
+}
+
+/** Agendamentos abertos só do dia (painel Hoje / alinhado ao Pipeline). */
+export async function listTodaySchedules(
+  day: string,
+  limit = 150,
+): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and c.anonymized_at is null
+      and cs.scheduled_at is not null
+      and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and (
+        cs.last_done_at is null
+        or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      )
+    order by cs.scheduled_at asc
+    limit ${limit}
+  `) as ScheduledServiceRow[]
 }
 
 /** Agenda do dia de um profissional específico — usado pelo bot Telegram de funcionários. */

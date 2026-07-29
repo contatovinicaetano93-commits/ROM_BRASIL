@@ -1,29 +1,32 @@
 # ROM CLUB IGUATEMI — deploy independente
 
-Instância **100% isolada** do ROM CLUB BRASIL. Mesmo repositório GitHub, projeto Vercel e Neon próprios.
+Instância **100% isolada** do ROM CLUB BRASIL. Repositório, projeto Vercel e banco Supabase próprios.
 
 ## Isolamento garantido
 
 | Recurso | Brasil | Iguatemi |
 |---------|--------|----------|
-| Repositório Git | `ROM` (compartilhado) | `ROM` (compartilhado) |
-| Projeto Vercel | `rom-club-brasil` / `rom-brasil` | `rom-club-iguatemi` / `rom-iguatemi` |
-| Banco | **Supabase** (pooler) | **Neon** `rom-club-iguatemi` |
-| `DATABASE_URL` | exclusivo (Supabase) | exclusivo (Neon) |
+| Repositório Git | `ROM` / `rom_brasil` | `ROM-iguatemi` |
+| Projeto Vercel | `rom-club` / `rom-brasil` | `rom-iguatemi` |
+| Banco | **Supabase** (pooler) | **Supabase** (pooler dedicado) |
+| `DATABASE_URL` | exclusivo (Supabase BR) | exclusivo (Supabase IG) |
 | `AVEC_API_TOKEN` | loja Brasil | loja Iguatemi |
 | WhatsApp / Telegram | instância/bot Brasil | instância/bot Iguatemi |
 
-## Passo 1 — Neon
+> **Ambas as unidades usam Supabase.** Apenas o Cérebro (painel interno da Waltter) usa Neon.
 
-1. [console.neon.tech](https://console.neon.tech) → **New Project** → `rom-club-iguatemi`
+## Passo 1 — Supabase
+
+1. [supabase.com](https://supabase.com) → **New Project** → dedicado Iguatemi
 2. SQL Editor → executar `db/schema.sql`
-3. Copiar connection string → `DATABASE_URL`
+3. Connection string (Transaction pooler `:6543`) → `DATABASE_URL`
+4. Session pooler (`:5432`) → `DATABASE_URL_UNPOOLED` (scripts)
 
 ## Passo 2 — Vercel
 
 1. [vercel.com](https://vercel.com) → **Add New → Project**
-2. Importar repositório `ROM`
-3. Nome: `rom-club-iguatemi`
+2. Importar repositório `ROM-iguatemi`
+3. Nome: `rom-iguatemi`
 4. **Environment Variables (Production)** — usar `deploy/vercel-rom-club-iguatemi.env`
 5. Deploy
 

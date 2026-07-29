@@ -34,4 +34,4 @@ Deve listar `src/`, `package.json`, `deploy/`, etc.
 
 ## Próximo passo
 
-Neon + Vercel — ver `deploy/SETUP-IGUATEMI.md`
+Supabase + Vercel — ver `deploy/SETUP-IGUATEMI.md`

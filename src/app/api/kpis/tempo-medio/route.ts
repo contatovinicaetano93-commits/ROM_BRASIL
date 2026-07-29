@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { okCached, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { fetchTmComparison } from '@/lib/salon/tm-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { todayIso } from '@/lib/salon/format'
@@ -16,11 +17,15 @@ export async function GET(req: NextRequest) {
     const month = req.nextUrl.searchParams.get('month')?.trim()
     const referenceDay =
       month && /^\d{4}-\d{2}$/.test(month) ? monthToDateRange(month).to : todayIso()
-    const data = await fetchTmComparison(referenceDay)
-    return ok({
-      ...data,
-      note: 'Média do tempo cadastrado no Avec (0223) — não é duração cronometrada do atendimento.',
-    })
+    const cacheKey = `kpis:tm:v1:${referenceDay}`
+    const data = await ttlGetOrSet(cacheKey, 120_000, () => fetchTmComparison(referenceDay))
+    return okCached(
+      {
+        ...data,
+        note: 'Média do tempo cadastrado no Avec (0223) — não é duração cronometrada do atendimento.',
+      },
+      60,
+    )
   } catch (e) {
     return handleError(e)
   }

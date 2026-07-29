@@ -14,7 +14,7 @@ try {
  *
  * Do NOT switch back to neon() from @neondatabase/serverless:
  * neon() is HTTP-only and fails against *.supabase.com / pooler hosts.
- * Iguatemi remains on Neon in its own repo.
+ * BR e IG usam Supabase; só o Cérebro usa Neon.
  */
 export type Sql = {
   // Tagged template + helper sql(ids) para IN (...)
@@ -100,7 +100,7 @@ function wrap(sql: PostgresSql): Sql {
 }
 
 /**
- * Cliente Postgres (Supabase pooler / Neon TCP) — só em route handlers (server-side).
+ * Cliente Postgres (Supabase pooler) — só em route handlers (server-side).
  * DATABASE_URL: Session pooler (5432) é reescrito para Transaction (6543) quando Supabase.
  */
 export function getSql(databaseUrl?: string): Sql {

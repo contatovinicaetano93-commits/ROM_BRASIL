@@ -7,6 +7,7 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('Health')
 
@@ -17,14 +18,17 @@ function envOk(name: string) {
 async function probeDatabase() {
   let connected = false
   let error: string | null = null
+  let db_quota = false
   try {
     const sql = getSql()
     await sql`select 1 as ok`
     connected = true
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
+    db_quota = isDbQuotaError(e)
+    if (db_quota) error = dbQuotaUserMessage(e)
   }
-  return { connected, error }
+  return { connected, error, db_quota }
 }
 
 async function probeKpiLayers() {
@@ -44,12 +48,12 @@ async function probeKpiLayers() {
 
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
-  const { connected } = await probeDatabase()
-  return { ok: connected }
+  const { connected, db_quota } = await probeDatabase()
+  return { ok: connected, db_quota }
 }
 
 export async function getHealthStatus() {
-  const { connected, error } = await probeDatabase()
+  const { connected, error, db_quota } = await probeDatabase()
 
   const brand = getBrand()
   const deployment = getDeploymentContext()
@@ -105,7 +109,7 @@ export async function getHealthStatus() {
       display_name: brand.displayName,
       seed_preset: process.env.ROM_SEED_PRESET?.trim() || getRomPanelId(),
     },
-    database: { configured: envOk('DATABASE_URL'), connected, error },
+    database: { configured: envOk('DATABASE_URL'), connected, error, db_quota },
     claude: {
       configured: isAiConfigured(),
       model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6',

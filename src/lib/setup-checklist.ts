@@ -18,7 +18,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Use DOIS projetos Vercel (Brasil e Iguatemi) — nunca um banco compartilhado',
       'ROM_PANEL e NEXT_PUBLIC_ROM_PANEL com o MESMO valor (brasil ou iguatemi)',
-      'DATABASE_URL = Postgres dedicado só desta unidade (Brasil: Supabase pooler; Iguatemi: Neon)',
+      'DATABASE_URL = Postgres dedicado só desta unidade (Brasil e Iguatemi: Supabase pooler)',
       'Redeploy após alterar NEXT_PUBLIC_ROM_PANEL (valor vai no build)',
       'Admin → Diagnóstico: confira deployment.display_name e validation.warnings',
     ],
@@ -86,10 +86,10 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Pedir token ao suporte Avec (relatórios 0004, 0051, 0002) — um token por unidade',
       'Vercel → AVEC_API_TOKEN = token recebido (sem Bearer)',
-      'Opcional: AVEC_SYNC_MAX_PAGES (padrão 200 páginas ≈ 50 mil clientes)',
+      'Opcional: AVEC_SYNC_MAX_PAGES (padrão 80 páginas ≈ 20 mil clientes)',
       'Remova AVEC_MOCK da Vercel (se existir)',
       'Redeploy → Admin → Testar conexão → Rodar sync full',
-      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o Neon',
+      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o banco',
     ],
     link: {
       href: 'https://documenter.getpostman.com/view/12527228/2sA2xmUWJo',

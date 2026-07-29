@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { okCached, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { computeStockKpis } from '@/lib/stock'
 
 export async function GET(req: NextRequest) {
@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
     const auth = await requireStock(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    const kpis = await cachedFetch('stock:kpis:v1', () => computeStockKpis(), 60)
-    return ok(kpis)
+    const kpis = await ttlGetOrSet('estoque:kpis:v1', 45_000, () => computeStockKpis())
+    return okCached(kpis, 30)
   } catch (e) {
     return handleError(e)
   }

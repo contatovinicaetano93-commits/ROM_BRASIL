@@ -15,6 +15,7 @@ import {
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -256,7 +257,7 @@ async function syncAlerts(
     stats.aborted = true
     return
   }
-  const params = { limit: opts.pageLimit }
+  const params = { site: avecSiteParam(), limit: opts.pageLimit }
   try {
     const result = await fetchAllAvecReport(id, params, opts.maxPages, {
       deadlineAt: opts.deadlineAt,
@@ -307,7 +308,7 @@ async function syncMovements(stats: StockSyncStats, syncRunId: string) {
   // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
   // produto+tipo+quantidade+data+origem em applyStockMovement).
   const { inicio, fim } = periodRange(3, 0)
-  const params = { inicio, fim, limit: 250 }
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
@@ -329,7 +330,7 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
   const id = reportId('stock_purchase')
   if (!id) return
   const { inicio, fim } = periodRange(3, 0)
-  const params = { inicio, fim, limit: 250 }
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
@@ -348,11 +349,12 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
 
 /** Valorização (0045/0242/0243/0142) — só snapshot bruto; normalização acontece na leitura (stock.ts). */
 async function syncValuation(stats: StockSyncStats, syncRunId: string) {
+  const site = avecSiteParam()
   const jobs: { mapper: string; params: AvecReportParams }[] = [
-    { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', limit: 250 } },
-    { mapper: 'stock_valuation_category', params: { limit: 250 } },
-    { mapper: 'stock_valuation_brand', params: { limit: 250 } },
-    { mapper: 'stock_valuation_category_pct', params: { ...periodRange(30, 0), limit: 250 } },
+    { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', site, limit: 250 } },
+    { mapper: 'stock_valuation_category', params: { site, limit: 250 } },
+    { mapper: 'stock_valuation_brand', params: { site, limit: 250 } },
+    { mapper: 'stock_valuation_category_pct', params: { ...periodRange(30, 0), site, limit: 250 } },
   ]
   for (const job of jobs) {
     const id = reportId(job.mapper)
@@ -410,8 +412,9 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   }
 
   try {
-    await syncPositions(stats, run.id, pageOpts)
+    // Alertas (0046) antes de 0149 — posição é pesada e não pode matar o ciclo antes. (paridade IG)
     await syncAlerts(stats, run.id, pageOpts)
+    await syncPositions(stats, run.id, pageOpts)
 
     if (mode === 'full') {
       await syncMovements(stats, run.id)
@@ -426,11 +429,12 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     stats.errors = formatAvecErrorList(stats.errors)
 
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
     const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0 || stats.aborted
+        : stats.errors.length > 0 || hardWarnings.length > 0 || stats.aborted
           ? 'partial'
           : 'ok'
 
