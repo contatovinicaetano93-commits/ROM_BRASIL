@@ -42,7 +42,7 @@ import {
   isHairService,
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
-import { pruneAvecSyncHistory, saveReportSnapshot } from '@/lib/avec/snapshots'
+import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   getSalonMetrics,
@@ -211,7 +211,7 @@ async function snapshotReport(
   syncRunId?: string
 ) {
   try {
-    await saveReportSnapshot(reportId, params, rows, syncRunId)
+    await saveReportSnapshot(reportId, params, rows, syncRunId, { keepPayload: false, retain: 1 })
     stats.snapshots_saved++
   } catch (e) {
     stats.warnings.push(`snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`)
@@ -913,7 +913,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     if (mode === 'full') {
       // Limpeza silenciosa — não vira warning (senão full ok marca "partial").
       try {
-        await pruneAvecSyncHistory()
+        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch {
         /* ignore */
       }

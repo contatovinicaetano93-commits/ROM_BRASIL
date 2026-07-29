@@ -7,6 +7,8 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
+import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 
 /** Sync Avec pode demorar (vários relatórios). */
 export const maxDuration = 300
@@ -81,6 +83,26 @@ async function executeSync(
   }
 
   try {
+    // Purge só em admin force ou cron full — nunca em cada webhook.
+    if ((opts?.force || (opts?.cron && effectiveMode === 'full')) && !opts?.webhook) {
+      try {
+        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
+      } catch (purgeErr) {
+        if (isNeonQuotaError(purgeErr)) {
+          if (opts?.cron) {
+            return ok({
+              skipped: true,
+              reason: 'db_quota',
+              mode: effectiveMode,
+              note: neonQuotaUserMessage(purgeErr),
+            })
+          }
+          return err(neonQuotaUserMessage(purgeErr), 503)
+        }
+        throw purgeErr
+      }
+    }
+
     const run = await runAvecSync(effectiveMode)
     return ok({
       ...run,
@@ -102,6 +124,17 @@ async function executeSync(
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
       })
+    }
+    if (isNeonQuotaError(e)) {
+      if (opts?.cron) {
+        return ok({
+          skipped: true,
+          reason: 'db_quota',
+          mode: effectiveMode,
+          note: neonQuotaUserMessage(e),
+        })
+      }
+      return err(neonQuotaUserMessage(e), 503)
     }
     throw e
   }
@@ -142,8 +175,13 @@ export async function GET(req: NextRequest) {
       cron: {
         fast: { schedule: '*/20 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: { schedule: '20 10,22 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
+        purge: {
+          schedule: '10 7 * * *',
+          path: '/api/avec/purge-snapshots',
+          note: '04:10 America/Sao_Paulo — mantém 1 snapshot/report + limpa payloads legados',
+        },
         cadence:
-          'fast a cada 20 min · full 2×/dia (UTC 10:20 e 22:20 ≈ 07:20/19:20 BRT) — webhook só fast',
+          'fast a cada 20 min · full 2×/dia · purge diário — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

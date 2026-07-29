@@ -75,6 +75,7 @@ function isAdminOnlyPath(pathname: string) {
     pathname === '/dashboard' ||
     pathname.startsWith('/api/kpis') ||
     pathname === '/api/avec/sync' ||
+    pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
     pathname === '/api/seed' ||
     (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
@@ -132,6 +133,7 @@ export async function middleware(req: NextRequest) {
 
   const allowHeaderTokens =
     pathname === '/api/avec/sync' ||
+    pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
     pathname === '/api/estoque/sync' ||
     pathname === '/api/director-report' ||
