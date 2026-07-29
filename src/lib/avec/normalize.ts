@@ -89,6 +89,8 @@ export interface NormalizedAvecAppointment {
   scheduledAt: string | null
   /** Dia civil da agenda (YYYY-MM-DD), mesmo quando o horário veio vazio. */
   appointmentDay: string | null
+  /** true se a Avec mandou hora (hora_ini / horário) — false = encaixe/comanda sem clock. */
+  hasClockTime: boolean
   professional: string | null
   price: number | null
   status: string | null
@@ -255,6 +257,7 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
   ])
   const datePart = pick(row, ['data', 'data_agendamento', 'agendamento', 'dia', 'date'])
   const timePart = pickAppointmentTimePart(row)
+  const hasClockTime = Boolean(timePart)
   const appointmentDay = (() => {
     if (!datePart) return null
     const d = datePart.trim()
@@ -294,6 +297,7 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
     serviceName,
     scheduledAt,
     appointmentDay,
+    hasClockTime,
     professional,
     price,
     status,

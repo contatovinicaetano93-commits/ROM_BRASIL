@@ -13,17 +13,19 @@ export async function GET(req: NextRequest) {
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
     const payload = await cachedFetch(
-      `pipeline:v1:${day}`,
+      `pipeline:v2:${day}`,
       async () => {
-        const { scheduled, completed } = await listTodayPipeline(day)
+        const { scheduled, walkIn, completed } = await listTodayPipeline(day)
         return {
           day,
           scheduled,
+          walkIn,
           completed,
           counts: {
             scheduled: scheduled.length,
+            walkIn: walkIn.length,
             completed: completed.length,
-            total: scheduled.length + completed.length,
+            total: scheduled.length + walkIn.length + completed.length,
           },
         }
       },

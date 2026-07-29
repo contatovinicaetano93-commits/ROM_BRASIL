@@ -1,6 +1,11 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
 import { toSalonDateIso } from '@/lib/salon/format'
+import {
+  isComandaOrigin,
+  notesWithScheduleOrigin,
+  type ScheduleOrigin,
+} from '@/lib/salon/schedule-origin'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -193,22 +198,46 @@ export async function scheduleService(
   serviceId: string,
   scheduledAt: string,
   professionalName?: string | null,
-  _quotedPrice?: number | null
+  opts?: { quotedPrice?: number | null; origin?: ScheduleOrigin },
 ): Promise<ClientService | null> {
-  void _quotedPrice
+  void opts?.quotedPrice
   const sql = getSql()
-  const rows = (await sql`
-    update client_services set
-      scheduled_at = ${scheduledAt}::timestamptz,
-      professional_name = coalesce(${professionalName ?? null}, professional_name)
-    where id = ${serviceId}
-      and (
-        last_done_at is null
-        or (last_done_at at time zone 'America/Sao_Paulo')::date
-          <> (coalesce(${scheduledAt}::timestamptz, now()) at time zone 'America/Sao_Paulo')::date
-      )
-    returning *
-  `) as ClientService[]
+  const origin = opts?.origin
+  let nextNotes: string | null | undefined
+  if (origin != null) {
+    const current = (
+      await sql`select notes from client_services where id = ${serviceId} limit 1`
+    )[0] as { notes: string | null } | undefined
+    nextNotes = notesWithScheduleOrigin(current?.notes, origin)
+  }
+
+  const rows =
+    nextNotes !== undefined
+      ? ((await sql`
+          update client_services set
+            scheduled_at = ${scheduledAt}::timestamptz,
+            professional_name = coalesce(${professionalName ?? null}, professional_name),
+            notes = ${nextNotes}
+          where id = ${serviceId}
+            and (
+              last_done_at is null
+              or (last_done_at at time zone 'America/Sao_Paulo')::date
+                <> (coalesce(${scheduledAt}::timestamptz, now()) at time zone 'America/Sao_Paulo')::date
+            )
+          returning *
+        `) as ClientService[])
+      : ((await sql`
+          update client_services set
+            scheduled_at = ${scheduledAt}::timestamptz,
+            professional_name = coalesce(${professionalName ?? null}, professional_name)
+          where id = ${serviceId}
+            and (
+              last_done_at is null
+              or (last_done_at at time zone 'America/Sao_Paulo')::date
+                <> (coalesce(${scheduledAt}::timestamptz, now()) at time zone 'America/Sao_Paulo')::date
+            )
+          returning *
+        `) as ClientService[])
   return rows[0] ?? null
 }
 
@@ -409,13 +438,14 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
   `) as ScheduledServiceRow[]
 }
 
-/** Pipeline do dia: agendados ainda abertos + concluídos (last_done_at no dia). */
+/** Pipeline do dia: agenda marcada | no salão/encaixe | concluídos. */
 export async function listTodayPipeline(day: string): Promise<{
   scheduled: ScheduledServiceRow[]
+  walkIn: ScheduledServiceRow[]
   completed: ScheduledServiceRow[]
 }> {
   const sql = getSql()
-  const [scheduled, completed] = await Promise.all([
+  const [openRows, completed] = await Promise.all([
     sql`
       select cs.*, c.name as contact_name
       from client_services cs
@@ -423,7 +453,6 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and cs.scheduled_at is not null
         and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-        -- Já concluídos no dia saem de Agendados (ficam só em Concluídos).
         and (
           cs.last_done_at is null
           or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
@@ -440,8 +469,17 @@ export async function listTodayPipeline(day: string): Promise<{
       order by cs.last_done_at asc
     `,
   ])
+
+  const scheduled: ScheduledServiceRow[] = []
+  const walkIn: ScheduledServiceRow[] = []
+  for (const row of openRows as ScheduledServiceRow[]) {
+    if (isComandaOrigin(row)) walkIn.push(row)
+    else scheduled.push(row)
+  }
+
   return {
-    scheduled: scheduled as ScheduledServiceRow[],
+    scheduled,
+    walkIn,
     completed: completed as ScheduledServiceRow[],
   }
 }
