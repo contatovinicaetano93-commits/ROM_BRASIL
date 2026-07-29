@@ -250,6 +250,24 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** Extrai totais do JSON de relatório (ex.: taxa do salão no 0007). */
+export function extractReportTotals(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+  const obj = payload as Record<string, unknown>
+  const dig = (node: unknown): Record<string, unknown>[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    const n = node as Record<string, unknown>
+    if (Array.isArray(n.total)) return n.total as Record<string, unknown>[]
+    if (n.report && typeof n.report === 'object' && !Array.isArray(n.report)) {
+      const rep = n.report as Record<string, unknown>
+      if (Array.isArray(rep.total)) return rep.total as Record<string, unknown>[]
+    }
+    if (n.data) return dig(n.data)
+    return []
+  }
+  return dig(obj)
+}
+
 /** Timeout/abort de página Avec — não vale retry (só queima o orçamento do cron). */
 export function isAvecFetchAbortError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
@@ -263,7 +281,11 @@ export function isAvecFetchAbortError(e: unknown): boolean {
   )
 }
 
-export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+export async function fetchAvecReport(
+  reportId: string,
+  params: AvecReportParams = {},
+  opts?: { timeoutMs?: number },
+) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
   if (isAvecMock()) {
@@ -280,6 +302,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
 
   const { baseUrl, token: initialToken } = await getAvecConfig()
   const url = `${baseUrl}/reports/${reportId}?${qs}`
+  const timeoutMs = opts?.timeoutMs ?? 30_000
 
   let token = initialToken
   let refreshedOnce = false
@@ -289,7 +312,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       const res = await fetch(url, {
         headers: { Authorization: token, Accept: 'application/json' },
         cache: 'no-store',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(timeoutMs),
       })
 
       if (res.status === 401 && !refreshedOnce && isAvecLoginConfigured()) {
@@ -300,7 +323,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
         const retry = await fetch(url, {
           headers: { Authorization: token, Accept: 'application/json' },
           cache: 'no-store',
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(timeoutMs),
         })
         if (retry.ok) return retry.json()
         const text = await retry.text().catch(() => '')

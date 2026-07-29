@@ -191,6 +191,48 @@ export async function getLastAvecSync(
   return rows[0] ?? null
 }
 
+/** Catálogo 0004 é pesado (~50k upserts) — no máximo 1×/dia no cron. */
+const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
+
+export async function shouldSyncClientCatalog(): Promise<boolean> {
+  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
+    return true
+  }
+  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
+    return false
+  }
+  const sql = getSql()
+  const rows = (await sql`
+    select created_at, stats
+    from avec_sync_runs
+    where kind = 'full'
+      and status in ('ok', 'partial')
+      and coalesce((stats->>'clients_upserted')::int, 0) > 0
+    order by created_at desc
+    limit 1
+  `) as { created_at: string; stats: AvecSyncStats | string }[]
+  const last = rows[0]
+  if (!last?.created_at) return true
+  const age = Date.now() - new Date(last.created_at).getTime()
+  return age >= CLIENT_DUMP_MIN_GAP_MS
+}
+
+/** Contacts com canal avec presos em 'novo' → importado (≠ lead WhatsApp). */
+async function healImportadoStatus(stats: AvecSyncStats) {
+  try {
+    const sql = getSql()
+    await sql`
+      update contacts
+      set status = 'importado'
+      where status = 'novo'
+        and channel = 'avec'
+        and anonymized_at is null
+    `
+  } catch (e) {
+    stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 async function findOrCreateService(contactId: string, serviceName: string) {
   const services = await listServices(contactId)
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
@@ -248,6 +290,8 @@ function createBatchContactUpserter() {
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
+    await healImportadoStatus(stats)
+
     const params = { limit: 250, site: avecSiteParam() }
     const result = await fetchAllAvecReport('0004', params)
     warnIfTruncated(stats, '0004', result)
@@ -862,9 +906,17 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   const syncRunId = run.id
 
   try {
-    // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
+    // Fast: agenda/caixa do dia. Full: + catálogo (1×/dia) + P1/P2/P3.
     if (mode === 'full') {
-      await syncClients(stats, syncRunId)
+      await healImportadoStatus(stats)
+      const dumpClients = await shouldSyncClientCatalog()
+      if (dumpClients) {
+        await syncClients(stats, syncRunId)
+      } else {
+        stats.warnings.push(
+          'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
+        )
+      }
     }
     if (mode === 'fast') {
       // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
