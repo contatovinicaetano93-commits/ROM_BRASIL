@@ -24,6 +24,9 @@ export interface FinanceExpense {
   notes: string | null
   receipt_url: string | null
   created_at: string
+  source: 'manual' | 'omie' | string
+  external_id: string | null
+  omie_status: string | null
 }
 
 export async function listCategories(activeOnly = true): Promise<FinanceCategory[]> {
@@ -67,15 +70,35 @@ export interface CreateExpenseInput {
 
 export async function listExpenses(from: string, to: string): Promise<FinanceExpense[]> {
   const sql = getSql()
-  const rows = await sql`
-    select
-      id, category_id, description, amount::float as amount,
-      expense_date::text as expense_date, notes, receipt_url, created_at
-    from finance_expenses
-    where expense_date >= ${from}::date and expense_date <= ${to}::date
-    order by expense_date desc, created_at desc
-  `
-  return rows as FinanceExpense[]
+  // Colunas Omie podem ainda não existir antes da migration/ensure — fallback seguro.
+  try {
+    const rows = await sql`
+      select
+        id, category_id, description, amount::float as amount,
+        expense_date::text as expense_date, notes, receipt_url, created_at,
+        coalesce(source, 'manual') as source,
+        external_id, omie_status
+      from finance_expenses
+      where expense_date >= ${from}::date and expense_date <= ${to}::date
+      order by expense_date desc, created_at desc
+    `
+    return rows as FinanceExpense[]
+  } catch {
+    const rows = await sql`
+      select
+        id, category_id, description, amount::float as amount,
+        expense_date::text as expense_date, notes, receipt_url, created_at
+      from finance_expenses
+      where expense_date >= ${from}::date and expense_date <= ${to}::date
+      order by expense_date desc, created_at desc
+    `
+    return (rows as Omit<FinanceExpense, 'source' | 'external_id' | 'omie_status'>[]).map((r) => ({
+      ...r,
+      source: 'manual',
+      external_id: null,
+      omie_status: null,
+    }))
+  }
 }
 
 export async function createExpense(input: CreateExpenseInput): Promise<FinanceExpense> {
@@ -94,11 +117,28 @@ export async function createExpense(input: CreateExpenseInput): Promise<FinanceE
       id, category_id, description, amount::float as amount,
       expense_date::text as expense_date, notes, receipt_url, created_at
   `) as FinanceExpense[]
-  return rows[0]
+  const row = rows[0]!
+  return {
+    ...row,
+    source: row.source ?? 'manual',
+    external_id: row.external_id ?? null,
+    omie_status: row.omie_status ?? null,
+  }
 }
 
 export async function deleteExpense(id: string): Promise<void> {
   const sql = getSql()
+  try {
+    const rows = (await sql`
+      select coalesce(source, 'manual') as source from finance_expenses where id = ${id} limit 1
+    `) as { source: string }[]
+    if (rows[0]?.source === 'omie') {
+      throw new Error('Despesa Omie não pode ser excluída aqui — cancele no Omie e rode o sync.')
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('Despesa Omie')) throw e
+    // Coluna source ainda não existe — segue com delete simples.
+  }
   await sql`delete from finance_expenses where id = ${id}`
 }
 
