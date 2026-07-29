@@ -103,7 +103,11 @@ export default function HojePage() {
     if (!silent) setLoading(true)
     try {
       if (silent) clearApiClientCache('/api/hoje')
-      const r = await apiFetch('/api/hoje', { cache: 'no-store', clientCache: !silent })
+      const r = await apiFetch('/api/hoje', {
+        cache: 'no-store',
+        clientCache: !silent,
+        timeoutMs: 25_000,
+      })
       const json = await r.json()
       if (json.error) {
         if (!silent) setError(json.error)
@@ -301,7 +305,7 @@ export default function HojePage() {
         <ChevronRight size={16} className="shrink-0 text-muted" />
       </Link>
 
-      {/* Agenda — hoje e próximos, por data/hora */}
+      {/* Agenda — abertos hoje (1 linha por serviço) */}
       <section className="flex flex-col gap-2">
         <button
           type="button"
@@ -310,7 +314,7 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Agendamentos
+            <Calendar size={15} className="text-sky-300" /> Agendamentos abertos hoje
           </h2>
           <span className="flex items-center gap-2">
             <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
@@ -334,7 +338,7 @@ export default function HojePage() {
 
             {!loading && data?.scheduleToday.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-                Nenhum agendamento próximo.
+                Nenhum agendamento aberto hoje.
               </div>
             )}
 
