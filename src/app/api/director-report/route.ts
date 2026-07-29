@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin, requireSession } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { MemoryCache } from '@/lib/cache'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { buildDirectorReport, type BuildDirectorReportOptions } from '@/lib/director-report/build'
 import {
@@ -26,9 +26,9 @@ const DIRECTOR_UI_HARD_MS = 55_000
 
 async function buildForUi(
   opts: Parameters<typeof buildDirectorReport>[0],
-): Promise<DirectorReport> {
+): Promise<{ report: DirectorReport; cacheable: boolean }> {
   try {
-    return await Promise.race([
+    const report = await Promise.race([
       buildDirectorReport({ ...opts, interactive: true }),
       new Promise<never>((_, reject) => {
         setTimeout(
@@ -37,14 +37,19 @@ async function buildForUi(
         )
       }),
     ])
+    return { report, cacheable: !opts.forceMock }
   } catch (e) {
     const code = e && typeof e === 'object' && 'code' in e ? (e as { code?: string }).code : null
     if (code === 'UI_DEADLINE' || (e instanceof Error && e.message === 'UI_DEADLINE')) {
       const mock = await buildDirectorReport({ ...opts, forceMock: true, interactive: true })
       const note = 'Avec demorou demais — mostrando demo. Toque Atualizar ou "Forçar demo".'
       return {
-        ...mock,
-        schedule_note: [mock.schedule_note, note].filter(Boolean).join(' · '),
+        report: {
+          ...mock,
+          schedule_note: [mock.schedule_note, note].filter(Boolean).join(' · '),
+        },
+        // UI_DEADLINE é degradado — não envenenar o cache compartilhado.
+        cacheable: false,
       }
     }
     throw e
@@ -197,25 +202,31 @@ export async function GET(req: NextRequest) {
     // JSON da UI: cache + budget Avec curto (race 55s → demo). CSV/cron: full sem cache.
     // Demo mock não deve ficar em cache: UI_DEADLINE é estado degradado;
     // manter por 60s haria o próximo usuário ver demo mesmo após Avec recuperar.
-    const report =
-      format === 'json'
-        ? await cachedFetch(
-            [
-              'director:json:v4-local0011',
-              stage,
-              `m=${selectedMonth ?? ''}`,
-              `q21=${selectedQuarter0021 ?? ''}`,
-              `c21=${compareQuarter0021 ?? ''}`,
-              `cm=${compareMonths ? 1 : 0}`,
-              `q=${selectedQuarter ?? ''}`,
-              `c=${compareQuarter ?? ''}`,
-              `pro=${professionalId ?? ''}`,
-              `mock=${forceMock ? 1 : 0}`,
-            ].join(':'),
-            () => buildForUi(buildOpts),
-            forceMock ? 0 : 180,
-          )
-        : await buildDirectorReport({ ...buildOpts, interactive: false })
+    let report: DirectorReport
+    if (format === 'json') {
+      const cacheKey = [
+        'director:json:v4-local0011',
+        stage,
+        `m=${selectedMonth ?? ''}`,
+        `q21=${selectedQuarter0021 ?? ''}`,
+        `c21=${compareQuarter0021 ?? ''}`,
+        `cm=${compareMonths ? 1 : 0}`,
+        `q=${selectedQuarter ?? ''}`,
+        `c=${compareQuarter ?? ''}`,
+        `pro=${professionalId ?? ''}`,
+        `mock=${forceMock ? 1 : 0}`,
+      ].join(':')
+      const hit = forceMock ? null : MemoryCache.get<DirectorReport>(cacheKey)
+      if (hit) {
+        report = hit
+      } else {
+        const built = await buildForUi(buildOpts)
+        report = built.report
+        if (built.cacheable) MemoryCache.set(cacheKey, report, 180)
+      }
+    } else {
+      report = await buildDirectorReport({ ...buildOpts, interactive: false })
+    }
 
     if (format === 'json') {
       return ok({

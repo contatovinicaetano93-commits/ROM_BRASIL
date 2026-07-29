@@ -123,7 +123,7 @@ export type DirectorFetchBudget = {
   maxPages: number
 }
 
-export function directorUiBudget(now = Date.now(), maxPages = DIRECTOR_UI_MAX_PAGES): DirectorFetchBudget {
+export function directorUiBudget(now = Date.now(), maxPages = DIRECTOR_UI_SLIM_MAX_PAGES): DirectorFetchBudget {
   return {
     deadlineAt: now + DIRECTOR_UI_BUDGET_MS,
     maxPages,

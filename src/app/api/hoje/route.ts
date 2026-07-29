@@ -34,23 +34,26 @@ export async function GET(req: NextRequest) {
       getSalonMetrics(day),
       listActionItems({ limit: 60 }),
       listUpcomingSchedules(7, 150),
-      // Range em timestamptz (usa índice) em vez de cast ::date na coluna inteira.
-      // Exclui ruído de sync Avec (importados via cron não são leads do funil).
+      // Mesma janela/filtro do funil (kpis): first_contact_at, status novo, sem ruído Avec.
       sql`
         select
           count(*) filter (
-            where status <> 'importado'
+            where status = 'novo'
               and coalesce(source, '') not like 'avec_sync_clients%'
               and coalesce(source, '') not like 'avec_backfill%'
               and coalesce(source, '') not like 'avec_lake%'
           )::int as novos,
           count(*) filter (
-            where channel = 'whatsapp' and status = 'novo'
+            where channel = 'whatsapp'
+              and status = 'novo'
+              and coalesce(source, '') not like 'avec_sync_clients%'
+              and coalesce(source, '') not like 'avec_backfill%'
+              and coalesce(source, '') not like 'avec_lake%'
           )::int as whatsapp_novos
         from contacts
         where anonymized_at is null
-          and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
-          and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+          and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+            = ${day}::date
       ` as unknown as Promise<{ novos: number; whatsapp_novos: number }[]>,
       getLastAvecSync(),
       getReactivationKpis().catch(() => ({

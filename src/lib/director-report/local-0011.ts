@@ -18,7 +18,11 @@ import {
   fetchAvecReport,
   fmtAvecDate,
 } from '@/lib/avec/client'
-import { normalizeAttendanceRow, normalizeP3ReturnRateRow } from '@/lib/avec/normalize'
+import {
+  isP3NonReturnerRow,
+  normalizeAttendanceRow,
+  normalizeP3ReturnRateRow,
+} from '@/lib/avec/normalize'
 import { matchDirectorProfessional } from './match-pro'
 import { labelQuarter } from './period'
 import type {
@@ -183,16 +187,20 @@ async function fetch0007SalonAndNonReturners(
   quarter: QuarterKey,
   budget: Local0011Budget,
   maxPages = 3,
-): Promise<{ rate: number | null; nonReturnerKeys: Set<string> }> {
+): Promise<{ rate: number | null; nonReturnerKeys: Set<string>; truncated: boolean }> {
   const nonReturnerKeys = new Set<string>()
   let rate: number | null = null
+  let truncated = false
   if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) {
-    return { rate, nonReturnerKeys }
+    return { rate, nonReturnerKeys, truncated: true }
   }
   const { inicio, fim } = quarterRangeBr(quarter)
   try {
     for (let page = 1; page <= maxPages; page++) {
-      if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) break
+      if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) {
+        truncated = true
+        break
+      }
       const payload = await fetchAvecReport(
         '0007',
         { inicio, fim, limit: 250, page },
@@ -210,6 +218,8 @@ async function fetch0007SalonAndNonReturners(
       const rows = extractRows(payload)
       if (rows.length === 0) break
       for (const row of rows) {
+        // Totais/taxa do 0007 não são linhas de cliente não-retornado.
+        if (!isP3NonReturnerRow(row)) continue
         const att = normalizeAttendanceRow(row)
         const name =
           att?.clientName ??
@@ -221,11 +231,22 @@ async function fetch0007SalonAndNonReturners(
         if (key) nonReturnerKeys.add(key)
       }
       if (rows.length < 250) break
+      if (page === maxPages) truncated = true
     }
   } catch {
-    // opcional
+    // opcional — lista incompleta não deve marcar cohort como retornada
+    truncated = true
   }
-  return { rate, nonReturnerKeys }
+  return { rate, nonReturnerKeys, truncated }
+}
+
+/** Só usa 0007 como lista de não-retornados quando a paginação completou. */
+function usable0007NonReturnerKeys(r: {
+  nonReturnerKeys: Set<string>
+  truncated: boolean
+}): Set<string> | undefined {
+  if (r.truncated || r.nonReturnerKeys.size === 0) return undefined
+  return r.nonReturnerKeys
 }
 
 /**
@@ -353,7 +374,7 @@ export async function fetchLocal0011Quarter(
     p2Result,
     r7.rate,
     professionals,
-    r7.nonReturnerKeys,
+    usable0007NonReturnerKeys(r7),
   )
 }
 
@@ -396,9 +417,10 @@ export async function fetchLocal0011QuarterPair(
 
   // 0007 do foco primeiro (taxa + não-retornados); compare só taxa se sobrar tempo.
   const sel7 = await fetch0007SalonAndNonReturners(selectedQuarter, budget, 3)
-  let cmp7: { rate: number | null; nonReturnerKeys: Set<string> } = {
+  let cmp7: { rate: number | null; nonReturnerKeys: Set<string>; truncated: boolean } = {
     rate: null,
     nonReturnerKeys: new Set(),
+    truncated: true,
   }
   const left7 =
     budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
@@ -414,7 +436,7 @@ export async function fetchLocal0011QuarterPair(
       byQuarter.get(selectedQuarter) ?? empty,
       sel7.rate,
       professionals,
-      sel7.nonReturnerKeys,
+      usable0007NonReturnerKeys(sel7),
     ),
     compare: buildQuarterResult(
       compareQuarter,
@@ -423,7 +445,7 @@ export async function fetchLocal0011QuarterPair(
       byQuarter.get(compareQuarter) ?? empty,
       cmp7.rate,
       professionals,
-      cmp7.nonReturnerKeys.size > 0 ? cmp7.nonReturnerKeys : undefined,
+      usable0007NonReturnerKeys(cmp7),
     ),
   }
 }
