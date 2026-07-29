@@ -175,10 +175,10 @@ describe('pagination truncation', () => {
     expect(formatTruncationWarning('0149', result)).toContain('posição de estoque')
   })
 
-  it('usa padrão 200 páginas e respeita env', () => {
+  it('usa padrão 80 páginas e respeita env', () => {
     const env = process.env
     delete process.env.AVEC_SYNC_MAX_PAGES
-    expect(getAvecSyncMaxPages()).toBe(200)
+    expect(getAvecSyncMaxPages()).toBe(80)
     process.env.AVEC_SYNC_MAX_PAGES = '350'
     expect(getAvecSyncMaxPages()).toBe(350)
     process.env.AVEC_SYNC_MAX_PAGES = '9999'
