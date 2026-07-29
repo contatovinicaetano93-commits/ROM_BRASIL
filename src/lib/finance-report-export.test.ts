@@ -11,6 +11,7 @@ function bucket(partial: Partial<FinanceKpis['current']> = {}): FinanceKpis['cur
     revenue: 1000,
     revenue_source: 'metrics',
     expenses: 100,
+    expenses_by_cnpj: { total: 100, servicos: 100, comercio: 0, manual: 0 },
     attended: 10,
     ticket_avg: 100,
     daily: [{ day: '2026-07-01', revenue: 1000, attended: 10, ticket_avg: 100 }],
