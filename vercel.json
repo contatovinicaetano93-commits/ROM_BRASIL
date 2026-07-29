@@ -21,6 +21,10 @@
       "schedule": "40 11 * * *"
     },
     {
+      "path": "/api/avec/purge-snapshots",
+      "schedule": "10 7 * * *"
+    },
+    {
       "path": "/api/director-report",
       "schedule": "0 11 * * 2"
     },

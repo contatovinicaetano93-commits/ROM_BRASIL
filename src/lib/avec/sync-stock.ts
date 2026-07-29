@@ -24,7 +24,7 @@ import {
   normalizeStockPurchaseRow,
 } from '@/lib/avec/normalize'
 import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib/avec/registry'
-import { saveReportSnapshot, pruneAvecSyncHistory } from '@/lib/avec/snapshots'
+import { saveReportSnapshot, purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 import {
   upsertStockProductFromPosition,
   createStockDimCache,
@@ -135,10 +135,10 @@ async function snapshotSafe(
   rows: Record<string, unknown>[],
   stats: StockSyncStats,
   syncRunId: string,
-  opts?: { keepFullPayload?: boolean }
+  keepPayload = false
 ) {
   try {
-    await saveReportSnapshot(id, params, rows, syncRunId, opts)
+    await saveReportSnapshot(id, params, rows, syncRunId, { keepPayload, retain: 1 })
     stats.snapshots_saved++
   } catch (e) {
     stats.warnings.push(`snapshot ${id}: ${e instanceof Error ? e.message : String(e)}`)
@@ -360,9 +360,7 @@ async function syncValuation(stats: StockSyncStats, syncRunId: string) {
     try {
       const result = await fetchAllAvecReport(id, job.params)
       if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-      await snapshotSafe(id, job.params, result.rows, stats, syncRunId, {
-        keepFullPayload: true,
-      })
+      await snapshotSafe(id, job.params, result.rows, stats, syncRunId, true)
     } catch (e) {
       stats.errors.push(`${id} (valorização): ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -420,7 +418,7 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
       await syncPurchaseOrigin(stats, run.id)
       await syncValuation(stats, run.id)
       try {
-        await pruneAvecSyncHistory()
+        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch {
         /* ignore */
       }
