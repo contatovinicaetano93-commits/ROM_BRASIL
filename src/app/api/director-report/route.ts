@@ -37,7 +37,7 @@ async function buildForUi(
   } catch (e) {
     const code = e && typeof e === 'object' && 'code' in e ? (e as { code?: string }).code : null
     if (code === 'UI_DEADLINE' || (e instanceof Error && e.message === 'UI_DEADLINE')) {
-      // Sem mock automático: devolve estrutura vazia (source=error). Demo só com ?mock=1.
+      // Skeleton rápido via mock interno, mas a resposta zera blocos (nada inventado na UI).
       const note =
         'Avec demorou demais — sem dados inventados. Toque Atualizar. Use “Forçar demo” só para treino.'
       const skeleton = await buildDirectorReport({ ...opts, forceMock: true, interactive: true })

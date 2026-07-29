@@ -118,7 +118,10 @@ export function reportReferenceDate(report: DirectorReport): string {
 }
 
 function subjectPrefix(report: DirectorReport) {
-  return report.source === 'mock' ? '[DEMO] ' : ''
+  if (report.source === 'mock') return '[DEMO] '
+  if (report.source === 'partial') return '[PARCIAL] '
+  if (report.source === 'error') return '[SEM DADOS] '
+  return ''
 }
 
 export function reportSubject0011(report: DirectorReport): string {
