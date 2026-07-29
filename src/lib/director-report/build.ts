@@ -2,6 +2,7 @@ import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
 import {
   directorFullBudget,
   directorUiBudget,
+  DIRECTOR_UI_SLIM_MAX_PAGES,
   fetchLiveDirectorBlocks,
 } from './avec-live'
 import {
@@ -25,7 +26,18 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 /** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
 function shortenAvecWarning(w: string): string {
-  if (/salao_id/i.test(w)) {
+  if (/0011 local via 0002/i.test(w)) {
+    return '0011 local (0002+0007 por profissional)'
+  }
+  if (
+    /n[aã]o suportado/i.test(w) ||
+    /usando taxa\/lista/i.test(w) ||
+    /via 0007/i.test(w) ||
+    /n[aã]o dispon[ií]vel neste sal[aã]o/i.test(w)
+  ) {
+    return '0011 via 0007 (taxa do salão Avec)'
+  }
+  if (/salao_id/i.test(w) && !/99801|AVEC_UNIT_ID já/i.test(w)) {
     return '0011: Avec exige salao_id — confira AVEC_UNIT_ID'
   }
   if (/HTTP 400/i.test(w)) {
@@ -52,6 +64,13 @@ export interface BuildDirectorReportOptions {
    * true = budget Avec curto (UI JSON). false/omit = full (cron, CSV, e-mail).
    */
   interactive?: boolean
+  /** Cap de páginas Avec 0011 na UI (slim). */
+  maxPages0011?: number
+  /**
+   * Limita clientes de reativação por profissional na resposta JSON (UI).
+   * null/undefined = sem corte (CSV/e-mail).
+   */
+  reactivationLimit?: number | null
 }
 
 function comparisonMonthSet(
@@ -110,7 +129,12 @@ export async function buildDirectorReport(
         {
           includeReturn: need0011,
           includeRevenue: need0021,
-          budget: opts.interactive ? directorUiBudget() : directorFullBudget(),
+          budget: opts.interactive
+            ? directorUiBudget(
+                Date.now(),
+                opts.maxPages0011 ?? DIRECTOR_UI_SLIM_MAX_PAGES,
+              )
+            : directorFullBudget(),
         },
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
@@ -135,6 +159,19 @@ export async function buildDirectorReport(
       liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`
       console.warn('[director-report]', liveNote)
     }
+  }
+
+  const reactivationLimit = opts.reactivationLimit
+  if (
+    need0011 &&
+    reactivationLimit != null &&
+    Number.isFinite(reactivationLimit) &&
+    reactivationLimit >= 0
+  ) {
+    return_blocks = return_blocks.map((b) => ({
+      ...b,
+      reactivation: b.reactivation.slice(0, reactivationLimit),
+    }))
   }
 
   if (need0021 && compareMonths && compareQuarter0021) {
