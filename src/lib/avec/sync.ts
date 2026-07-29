@@ -47,6 +47,7 @@ import {
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
+import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   getSalonMetrics,
@@ -873,30 +874,51 @@ async function syncReturningFrom0002(
         returningByDay.set(day, (returningByDay.get(day) ?? 0) + 1)
       }
 
-      // Backfill last_done_at só p/ quem veio hoje (evita reescrever milhares no cron).
-      if (att.lastVisitDay === today) {
-        try {
-          const contact = await upsertContact({
-            avecClientId: att.avecClientId ?? undefined,
-            name: att.clientName,
-            phone: att.phone,
-            channel: 'avec',
-            source: 'avec_sync_returning_0002',
-          })
-          if (contact.anonymized_at) continue
-          const serviceName = att.serviceName || 'Atendimento'
-          const service = await findOrCreateService(contact.id, serviceName)
-          const doneAt = parseAvecDateTime(att.lastVisitDay, '12:00')
+      // last_done_at: data real de ultima_visita (0002). Hoje prefere hora real;
+      // histórico / sem hora → applyVisitDayToService (só preenche null ou dia mais antigo).
+      try {
+        const contact = await upsertContact({
+          avecClientId: att.avecClientId ?? undefined,
+          name: att.clientName,
+          phone: att.phone,
+          channel: 'avec',
+          source: 'avec_sync_returning_0002',
+        })
+        if (contact.anonymized_at) continue
+        const serviceName = att.serviceName || 'Atendimento'
+        const service = await findOrCreateService(contact.id, serviceName)
+
+        if (att.lastVisitDay === today) {
+          const doneAt = att.endedAt ?? att.startedAt ?? null
           if (doneAt) {
             await markServiceDone(service.id, {
               doneAt,
               professionalName: att.professional,
               lastPrice: att.price,
             })
+          } else if (
+            service.scheduled_at &&
+            toSalonDateIso(service.scheduled_at) === today
+          ) {
+            await markServiceDone(service.id, {
+              doneAt: service.scheduled_at,
+              professionalName: att.professional,
+              lastPrice: att.price,
+            })
+          } else {
+            await applyVisitDayToService(service.id, day, {
+              professionalName: att.professional,
+              lastPrice: att.price,
+            })
           }
-        } catch (e) {
-          stats.errors.push(`retorno contact: ${e instanceof Error ? e.message : String(e)}`)
+        } else {
+          await applyVisitDayToService(service.id, day, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
         }
+      } catch (e) {
+        stats.errors.push(`retorno contact: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
 
@@ -1060,13 +1082,11 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       }
     }
     await recomputeSalonMetricsFromRom()
-    // Recorrentes 0002 (MTD/90d) só no full — no fast evita puxar o mês inteiro a cada 15 min.
-    if (mode === 'full') {
-      try {
-        await syncReturningFrom0002(stats, mode, syncRunId)
-      } catch (e) {
-        stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
-      }
+    // Recorrentes 0002: no full (90d) preenche last_done histórico; no fast (MTD) só reforça.
+    try {
+      await syncReturningFrom0002(stats, mode, syncRunId)
+    } catch (e) {
+      stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
     }
 
     if (mode === 'full') {
