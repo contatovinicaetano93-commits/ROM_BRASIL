@@ -16,6 +16,7 @@ import {
   markServiceDone,
   patchServiceVisitMeta,
   clearServiceSchedule,
+  clearOrphanSchedulesForDay,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -27,6 +28,7 @@ import {
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -246,6 +248,32 @@ function createBatchContactUpserter() {
   }
 }
 
+/** Catálogo 0004 é pesado — no máximo 1×/20h no cron (paridade Iguatemi). */
+const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
+
+async function shouldSyncClientCatalog(): Promise<boolean> {
+  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
+    return true
+  }
+  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
+    return false
+  }
+  const sql = getSql()
+  const rows = (await sql`
+    select created_at, stats
+    from avec_sync_runs
+    where kind = 'full'
+      and status in ('ok', 'partial')
+      and coalesce((stats->>'clients_upserted')::int, 0) > 0
+    order by created_at desc
+    limit 1
+  `) as { created_at: string; stats: AvecSyncStats | string }[]
+  const last = rows[0]
+  if (!last?.created_at) return true
+  const age = Date.now() - new Date(last.created_at).getTime()
+  return age >= CLIENT_DUMP_MIN_GAP_MS
+}
+
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
     const params = { limit: 250, site: avecSiteParam() }
@@ -289,6 +317,10 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   const today = todayIso()
   const noShowsByDay = new Map<string, number>()
   const upsertInBatch = createBatchContactUpserter()
+  /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
+  const todayOpenServiceIds: string[] = []
+  let todayBooked = 0
+  let todayRows = 0
 
   for (const row of result.rows) {
     try {
@@ -306,6 +338,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const isPaid = isAvecPaidStatus(status)
       const isCancelled = isAvecCancelledStatus(status)
       const isLostOutcome = isCancelled || isNoShow || isNegativeOutcome
+
+      if (apptDay === today) {
+        todayRows++
+        if (!isCancelled && !isNoShow && !isNegativeOutcome) todayBooked++
+      }
 
       if (isNoShow && appt.scheduledAt) {
         const day = toSalonDateIso(appt.scheduledAt)
@@ -362,6 +399,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
               professionalName: appt.professional,
             })
           }
+          if (apptDay === today) todayOpenServiceIds.push(service.id)
         }
 
         if (appt.professional && isNailService(appt.serviceName)) {
@@ -387,6 +425,25 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       await upsertSalonMetrics(day, { no_shows })
     } catch (e) {
       stats.errors.push(`no-show ${day}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // Reconcilia órfãos + KPI Agendados (paridade IG). Truncado: keep-set incompleto — não limpar.
+  if (todayRows > 0) {
+    try {
+      if (result.truncated) {
+        stats.warnings.push(
+          'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
+        )
+      } else {
+        const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
+        if (cleared > 0) {
+          stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
+        }
+        await upsertSalonMetrics(today, { appointments: todayBooked })
+      }
+    } catch (e) {
+      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 }
@@ -862,9 +919,16 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   const syncRunId = run.id
 
   try {
-    // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
+    // Fast: agenda/caixa do dia. Full: + catálogo (1×/20h) + P1/P2/P3.
     if (mode === 'full') {
-      await syncClients(stats, syncRunId)
+      const dumpClients = await shouldSyncClientCatalog()
+      if (dumpClients) {
+        await syncClients(stats, syncRunId)
+      } else {
+        stats.warnings.push(
+          'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
+        )
+      }
     }
     if (mode === 'fast') {
       // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
@@ -921,16 +985,19 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
     stats.errors = formatAvecErrorList(stats.errors)
 
-    const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 &&
+    // Truncamento / unit-id / órfãos ficam em warnings (UI), mas não impedem status ok.
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadCoreRows =
       stats.clients_upserted +
         stats.appointments_synced +
         stats.attendances_synced +
         stats.revenue_rows +
-        stats.cancellation_rows ===
-        0
+        stats.cancellation_rows >
+      0
+    const status: AvecSyncRun['status'] =
+      stats.errors.length > 0 && !hadCoreRows
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || hardWarnings.length > 0
           ? 'partial'
           : 'ok'
 
