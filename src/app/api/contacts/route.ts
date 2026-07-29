@@ -9,6 +9,8 @@ import { compareByOverdueThenName } from '@/lib/salon/urgency'
 import { requireAuth } from '@/lib/auth'
 import { z } from 'zod'
 
+export const maxDuration = 25
+
 const serviceSchema = z.object({
   name: z.string().min(1),
   category: z.enum(SERVICE_CATEGORIES),
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
     const channel = searchParams.get('channel')
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 2000) : 100
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
     const cacheKey = [
       'contacts:list:v2',
