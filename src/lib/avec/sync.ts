@@ -161,6 +161,18 @@ async function finishAvecSyncRun(
   return rows[0]!
 }
 
+/** Checkpoint mid-flight — se o cron matar a lambda, abandonStale vê progresso e marca ok. */
+async function checkpointAvecSyncRun(id: string, stats: AvecSyncStats): Promise<void> {
+  const sql = getSql()
+  const mid: AvecSyncStats = { ...stats, running: true }
+  await sql`
+    update avec_sync_runs
+    set stats = ${mid}
+    where id = ${id}::uuid
+      and coalesce(stats->>'running', 'false') = 'true'
+  `
+}
+
 export async function getLastAvecSync(
   kind?: string,
   opts?: { finishedOnly?: boolean },
@@ -466,10 +478,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       }
 
       if (serviceName && scheduledAt) {
-        const existing = await listServices(contact.id)
-        const had = existing.some((s) => s.name.toLowerCase() === serviceName.toLowerCase())
         const service = await findOrCreateService(contact.id, serviceName)
-        if (!had) stats.services_created++
+        const isNew = servicesCreatedRecently(service)
+        if (isNew) stats.services_created++
 
         // 0051 status Pago = comanda fechada → Concluídos no Pipeline (paridade IG).
         if (isPaid) {
@@ -513,6 +524,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       }
 
       stats.appointments_synced++
+      if (syncRunId && stats.appointments_synced % 50 === 0) {
+        await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+      }
     } catch (e) {
       stats.errors.push(`agendamento: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -1084,13 +1098,16 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
       // o faturamento de Hoje já está gravado (antes ficava 0 com sync morto).
       await syncRevenue(stats, mode, syncRunId)
+      await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
       await Promise.all([
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
+      await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
       // Sequencial: agenda e atendidos compartilham phones — Promise.all
       // gerava corrida em contacts_phone_idx (partial com duplicate key).
       await syncAppointments(stats, mode, syncRunId)
+      await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
       await syncAttendances(stats, mode, syncRunId)
       // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido)
       // e o cron seguinte não atualizava o caixa a tempo.
