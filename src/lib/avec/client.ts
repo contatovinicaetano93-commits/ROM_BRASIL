@@ -35,10 +35,37 @@ export interface AvecReportParams {
   [key: string]: string | number | undefined
 }
 
+/** Token puro — Avec rejeita "Bearer …" com 401; prefixo sobra em alguns envs. */
+export function normalizeAvecApiToken(raw: string): string {
+  return raw.trim().replace(/^Bearer\s+/i, '').trim()
+}
+
+/**
+ * Headers no estilo do admin.avec.beauty.
+ * Sem User-Agent/Origin o WAF da Avec às vezes devolve HTML 403 (não JSON 401).
+ */
+export function avecReportHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: normalizeAvecApiToken(token),
+    Accept: 'application/json',
+    Origin: 'https://admin.avec.beauty',
+    Referer: 'https://admin.avec.beauty/',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15',
+  }
+}
+
+/** 403 com corpo HTML = WAF/edge — vale retry; 403 JSON = permissão. */
+export function isAvecWafForbiddenError(error: Error): boolean {
+  const status = (error as Error & { status?: number }).status
+  if (status !== 403) return false
+  return /<html|403 Forbidden|cloudflare|just a moment/i.test(error.message)
+}
+
 async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
   // Renova sozinho se o JWT (~12h) estiver perto do fim — não cai no env Vercel expirado.
-  const token = await ensureFreshAvecApiToken({ minHoursLeft: 1 })
+  const token = normalizeAvecApiToken(await ensureFreshAvecApiToken({ minHoursLeft: 1 }))
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
@@ -287,7 +314,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   return retryWithBackoff(
     async () => {
       const res = await fetch(url, {
-        headers: { Authorization: token, Accept: 'application/json' },
+        headers: avecReportHeaders(token),
         cache: 'no-store',
         signal: AbortSignal.timeout(30_000),
       })
@@ -296,9 +323,11 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
         refreshedOnce = true
         // Descarta body 401 para liberar conexão antes do mint.
         await res.text().catch(() => '')
-        token = await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 })
+        token = normalizeAvecApiToken(
+          await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 }),
+        )
         const retry = await fetch(url, {
-          headers: { Authorization: token, Accept: 'application/json' },
+          headers: avecReportHeaders(token),
           cache: 'no-store',
           signal: AbortSignal.timeout(30_000),
         })
@@ -328,14 +357,14 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       return res.json()
     },
     {
-      maxAttempts: 3,
-      initialDelayMs: 1000,
-      // 4xx é erro de request (token/params) — repetir não resolve.
-      // Timeout/abort também não: 3×30s queima stock_fast / sync antes do deadline.
+      maxAttempts: 4,
+      initialDelayMs: 1500,
+      // Rede/5xx e WAF HTML 403 — retry. Timeout/abort e 4xx JSON não.
       shouldRetry: (e) => {
         if (isAvecFetchAbortError(e)) return false
         const status = (e as Error & { status?: number }).status
-        return status === undefined || status >= 500
+        if (status === undefined || status >= 500) return true
+        return isAvecWafForbiddenError(e)
       },
     },
   )
