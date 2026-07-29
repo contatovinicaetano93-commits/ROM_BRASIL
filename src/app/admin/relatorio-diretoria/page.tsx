@@ -601,7 +601,7 @@ export default function RelatorioDiretoriaPage() {
                         </td>
                         <td
                           className={`py-3 pr-3 tabular-nums ${
-                            delta != null && delta < 0 ? 'text-danger' : 'text-success'
+                            delta == null ? 'text-muted' : 'text-gold'
                           }`}
                         >
                           {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
@@ -934,7 +934,7 @@ export default function RelatorioDiretoriaPage() {
                             </td>
                             <td
                               className={`py-3 tabular-nums ${
-                                delta < 0 ? 'text-danger' : 'text-success'
+                                delta == null ? 'text-muted' : 'text-gold'
                               }`}
                             >
                               {formatCurrency(delta)}
