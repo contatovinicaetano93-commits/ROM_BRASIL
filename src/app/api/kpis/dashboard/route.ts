@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { okCached, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { monthToDateRange, computePeriodAnalytics } from '@/lib/salon/period-analytics'
 import { eachDayInclusive } from '@/lib/salon/contact-kpi-chart'
@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
     const monthRaw = req.nextUrl.searchParams.get('month')?.trim()
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
 
-    const data = await cachedFetch(
+    const data = await ttlGetOrSet(
       `kpis:dashboard:v1:${month ?? 'latest'}`,
+      45_000,
       async () => {
         // 1) Contact KPIs
         let kpis
@@ -127,10 +128,9 @@ export async function GET(req: NextRequest) {
 
         return { kpis, tm, performance, period }
       },
-      45,
     )
 
-    return ok(data)
+    return okCached(data, 45)
   } catch (e) {
     return handleError(e)
   }

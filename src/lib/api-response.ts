@@ -3,11 +3,38 @@ import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
 import { isDbPoolExhaustedError } from '@/lib/db'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('API')
 
-export function ok<T>(data: T, meta?: Record<string, unknown>, status = 200) {
-  return NextResponse.json({ data, meta: meta ?? null }, { status })
+export function ok<T>(
+  data: T,
+  meta?: Record<string, unknown>,
+  status = 200,
+  headers?: HeadersInit,
+) {
+  return NextResponse.json(
+    { data, meta: meta ?? null },
+    {
+      status,
+      headers: {
+        ...(headers ?? {}),
+      },
+    },
+  )
+}
+
+/** Resposta JSON com cache privado curto (browser / edge do usuário). */
+export function okCached<T>(
+  data: T,
+  maxAgeSec: number,
+  meta?: Record<string, unknown>,
+  status = 200,
+) {
+  const age = Math.max(0, Math.min(300, Math.floor(maxAgeSec)))
+  return ok(data, meta, status, {
+    'Cache-Control': `private, max-age=${age}, stale-while-revalidate=${age * 2}`,
+  })
 }
 
 export function err(message: string, status = 400) {
@@ -25,6 +52,12 @@ export function handleError(e: unknown) {
       stack: e.stack,
       name: e.name,
     })
+    if (isDbQuotaError(e)) {
+      logger.error('DB quota blocked request', {
+        message: e.message,
+      })
+      return err(dbQuotaUserMessage(e), 503)
+    }
     if (isDbPoolExhaustedError(e)) {
       return err(
         isProduction()

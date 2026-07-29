@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fail if ROM_PANEL=brasil but DATABASE_URL points at Neon (dead BR Neon).
+ * Fail if ROM_PANEL=brasil but DATABASE_URL points at Neon (unidades usam Supabase).
  * Brasil must use Supabase pooler (*.supabase.com). Iguatemi may stay on neon.tech.
  *
  * Usage:

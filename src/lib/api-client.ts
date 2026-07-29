@@ -6,6 +6,8 @@ type ApiFetchInit = RequestInit & {
    * false = forçar rede (botão Atualizar).
    */
   clientCache?: boolean
+  /** Aborta a request após N ms (AbortError). */
+  timeoutMs?: number
 }
 
 const CLIENT_GET_TTL_SEC = 45
@@ -68,8 +70,28 @@ function invalidateForMutation(url: string) {
   for (const root of uniq) clearApiClientCache(root)
 }
 
+function doFetch(input: string, init: RequestInit & { timeoutMs?: number }): Promise<Response> {
+  const { timeoutMs, ...rest } = init
+  if (timeoutMs == null || timeoutMs <= 0) {
+    return fetch(input, { ...rest, credentials: 'include' })
+  }
+
+  const controller = new AbortController()
+  const external = rest.signal
+  if (external) {
+    if (external.aborted) controller.abort(external.reason)
+    else {
+      external.addEventListener('abort', () => controller.abort(external.reason), { once: true })
+    }
+  }
+  const timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'AbortError')), timeoutMs)
+  return fetch(input, { ...rest, credentials: 'include', signal: controller.signal }).finally(() =>
+    clearTimeout(timer),
+  )
+}
+
 export function apiFetch(input: string, init?: ApiFetchInit) {
-  const { clientCache, ...rest } = init ?? {}
+  const { clientCache, timeoutMs, ...rest } = init ?? {}
   const method = (rest.method ?? 'GET').toUpperCase()
   const allowCache = method === 'GET' && clientCache !== false
   const key = cacheKey(input, method)
@@ -82,7 +104,7 @@ export function apiFetch(input: string, init?: ApiFetchInit) {
     }
   }
 
-  return fetch(input, { ...rest, credentials: 'include' }).then(async (res) => {
+  return doFetch(input, { ...rest, timeoutMs }).then(async (res) => {
     if (method !== 'GET' && res.ok) {
       invalidateForMutation(input)
     }

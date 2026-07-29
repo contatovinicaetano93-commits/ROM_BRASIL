@@ -18,7 +18,7 @@ export function isAvecMock() {
   return v === '1' || v === 'true'
 }
 
-/** Mock nunca em produção — evita sujar o Neon real. */
+/** Mock nunca em produção — evita sujar o Postgres real. */
 export function assertAvecMockAllowed() {
   if (isAvecMock() && isProduction()) {
     throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')
@@ -35,10 +35,37 @@ export interface AvecReportParams {
   [key: string]: string | number | undefined
 }
 
+/** Token puro — Avec rejeita "Bearer …" com 401; prefixo sobra em alguns envs. */
+export function normalizeAvecApiToken(raw: string): string {
+  return raw.trim().replace(/^Bearer\s+/i, '').trim()
+}
+
+/**
+ * Headers no estilo do admin.avec.beauty.
+ * Sem User-Agent/Origin o WAF da Avec às vezes devolve HTML 403 (não JSON 401).
+ */
+export function avecReportHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: normalizeAvecApiToken(token),
+    Accept: 'application/json',
+    Origin: 'https://admin.avec.beauty',
+    Referer: 'https://admin.avec.beauty/',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15',
+  }
+}
+
+/** 403 com corpo HTML = WAF/edge — vale retry; 403 JSON = permissão. */
+export function isAvecWafForbiddenError(error: Error): boolean {
+  const status = (error as Error & { status?: number }).status
+  if (status !== 403) return false
+  return /<html|403 Forbidden|cloudflare|just a moment/i.test(error.message)
+}
+
 async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
   // Renova sozinho se o JWT (~12h) estiver perto do fim — não cai no env Vercel expirado.
-  const token = await ensureFreshAvecApiToken({ minHoursLeft: 1 })
+  const token = normalizeAvecApiToken(await ensureFreshAvecApiToken({ minHoursLeft: 1 }))
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
@@ -250,6 +277,24 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** Totais agregados do payload Avec (`total` / `report.total`) — usado no 0011 local. */
+export function extractReportTotals(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+  const obj = payload as Record<string, unknown>
+  const dig = (node: unknown): Record<string, unknown>[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    const n = node as Record<string, unknown>
+    if (Array.isArray(n.total)) return n.total as Record<string, unknown>[]
+    if (n.report && typeof n.report === 'object' && !Array.isArray(n.report)) {
+      const rep = n.report as Record<string, unknown>
+      if (Array.isArray(rep.total)) return rep.total as Record<string, unknown>[]
+    }
+    if (n.data) return dig(n.data)
+    return []
+  }
+  return dig(obj)
+}
+
 /** Timeout/abort de página Avec — não vale retry (só queima o orçamento do cron). */
 export function isAvecFetchAbortError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
@@ -263,13 +308,18 @@ export function isAvecFetchAbortError(e: unknown): boolean {
   )
 }
 
-export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+export async function fetchAvecReport(
+  reportId: string,
+  params: AvecReportParams = {},
+  opts?: { timeoutMs?: number },
+) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
   if (isAvecMock()) {
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
+  const pageTimeoutMs = opts?.timeoutMs ?? 30_000
   const qs = new URLSearchParams()
   qs.set('page', String(effectiveParams.page ?? 1))
   qs.set('limit', String(effectiveParams.limit ?? 250))
@@ -287,20 +337,22 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   return retryWithBackoff(
     async () => {
       const res = await fetch(url, {
-        headers: { Authorization: token, Accept: 'application/json' },
+        headers: avecReportHeaders(token),
         cache: 'no-store',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(pageTimeoutMs),
       })
 
       if (res.status === 401 && !refreshedOnce && isAvecLoginConfigured()) {
         refreshedOnce = true
         // Descarta body 401 para liberar conexão antes do mint.
         await res.text().catch(() => '')
-        token = await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 })
+        token = normalizeAvecApiToken(
+          await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 }),
+        )
         const retry = await fetch(url, {
-          headers: { Authorization: token, Accept: 'application/json' },
+          headers: avecReportHeaders(token),
           cache: 'no-store',
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(pageTimeoutMs),
         })
         if (retry.ok) return retry.json()
         const text = await retry.text().catch(() => '')
@@ -328,14 +380,14 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       return res.json()
     },
     {
-      maxAttempts: 3,
-      initialDelayMs: 1000,
-      // 4xx é erro de request (token/params) — repetir não resolve.
-      // Timeout/abort também não: 3×30s queima stock_fast / sync antes do deadline.
+      maxAttempts: 4,
+      initialDelayMs: 1500,
+      // Rede/5xx e WAF HTML 403 — retry. Timeout/abort e 4xx JSON não.
       shouldRetry: (e) => {
         if (isAvecFetchAbortError(e)) return false
         const status = (e as Error & { status?: number }).status
-        return status === undefined || status >= 500
+        if (status === undefined || status >= 500) return true
+        return isAvecWafForbiddenError(e)
       },
     },
   )
@@ -351,8 +403,8 @@ export interface AvecReportFetchResult {
 }
 
 export const AVEC_PAGE_LIMIT = 250
-/** Padrão: 200 páginas × 250 linhas = até 50.000 registros por relatório. */
-export const AVEC_SYNC_MAX_PAGES_DEFAULT = 200
+/** Padrão leve: 80 páginas × 250 = até 20.000 regs — evita estourar tempo/DB no full. (paridade IG) */
+export const AVEC_SYNC_MAX_PAGES_DEFAULT = 80
 
 export function getAvecSyncMaxPages() {
   const raw = process.env.AVEC_SYNC_MAX_PAGES?.trim()

@@ -1,4 +1,4 @@
--- Lock distribuído de sync (Avec / estoque) — compatível com Neon HTTP serverless.
+-- Lock distribuído de sync (Avec / estoque) — Postgres (Supabase pooler).
 -- Substitui advisory lock de sessão (não funciona entre requests HTTP do neon()).
 
 create table if not exists sync_locks (

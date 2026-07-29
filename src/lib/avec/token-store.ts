@@ -10,7 +10,7 @@ const TOKEN_KEY = 'avec_api_token'
 /** Evita N mint Cognito em paralelo no mesmo isolate (várias queries 401). */
 let refreshInFlight: Promise<string> | null = null
 
-/** Token fresco em memória — evita hit no Neon a cada getAvecConfig. */
+/** Token fresco em memória — evita hit no Postgres a cada getAvecConfig. */
 let memToken: { token: string; expiresAtMs: number } | null = null
 const MEM_TOKEN_TTL_MS = 60_000
 
@@ -46,7 +46,7 @@ export function hoursLeftInToken(token: string): number {
   return (exp - Date.now() / 1000) / 3600
 }
 
-/** Persiste JWT Avec no Neon — sync lê daqui sem precisar redeploy. */
+/** Persiste JWT Avec no Postgres — sync lê daqui sem precisar redeploy. */
 export async function saveAvecApiToken(token: string): Promise<void> {
   await ensureTokenStore()
   const sql = getSql()
@@ -63,7 +63,7 @@ export async function saveAvecApiToken(token: string): Promise<void> {
 }
 
 /**
- * Token runtime (Neon) se ainda válido (>30 min); senão null.
+ * Token runtime (Postgres) se ainda válido (>30 min); senão null.
  * Env AVEC_API_TOKEN continua como fallback em getAvecApiToken().
  */
 export async function loadRuntimeAvecApiToken(): Promise<string | null> {
@@ -89,7 +89,7 @@ export async function loadRuntimeAvecApiToken(): Promise<string | null> {
 /**
  * Garante JWT Avec válido para sync.
  * - Se runtime/env ainda tem ≥ minHoursLeft → usa.
- * - Senão, se login configurado → mint Cognito + grava no Neon.
+ * - Senão, se login configurado → mint Cognito + grava no Postgres.
  * - Nunca cai num env expirado sem tentar renovar (era a causa do 401 em Estoque/Hoje).
  */
 export async function ensureFreshAvecApiToken(opts?: {

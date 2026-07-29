@@ -3,7 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 /** Purge pode varrer muitas linhas de snapshot legado. */
 export const maxDuration = 300
@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
     })
     return ok(result)
   } catch (e) {
-    if (isNeonQuotaError(e)) {
-      return err(neonQuotaUserMessage(e), 503)
+    if (isDbQuotaError(e)) {
+      return err(dbQuotaUserMessage(e), 503)
     }
     return handleError(e)
   }
