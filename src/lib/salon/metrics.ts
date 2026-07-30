@@ -111,27 +111,43 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * Retornos (`returning_clients`) vêm do relatório 0002 no sync Avec — não sobrescreve
  * aqui para não zerar o KPI quando `contacts.created_at` é recente (import/sync).
  *
- * Novos do dia = contatos **orgânicos** criados no ROM naquele dia
- * (WhatsApp, manual, webhook). Dump Avec NÃO conta:
- * - 0004 / lake / backfill (`importado`, `avec_sync_clients*`, …)
- * - `avec_last_done_backfill` (reimport em massa com created_at = hoje)
- * - agenda 0051 (`avec_sync_appointments*`) — senão new_clients ≈ agendamentos
- * - atendidos / retorno 0002 (`avec_sync_attended*`, `avec_sync_returning*`)
+ * Agendados do dia = abertos (scheduled_at) + concluídos no dia (last_done_at).
+ * Alinha ao KPI Avec — não contar só leftovers após markServiceDone (paridade IG).
+ *
+ * Novos do dia = contatos **orgânicos** (WhatsApp/manual/webhook). Dump Avec NÃO conta:
+ * - 0004 / lake / backfill / last_done
+ * - agenda 0051 / atendidos / retorno 0002
  */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
 
   const [apptRows, newRows] = await Promise.all([
     sql`
-      select count(*)::int as n from client_services
-      where active = true
-        and scheduled_at is not null
-        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      select count(*)::int as n
+      from client_services cs
+      join contacts c on c.id = cs.contact_id
+      where cs.active = true
+        and c.anonymized_at is null
+        and (
+          (
+            cs.scheduled_at is not null
+            and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+            and (
+              cs.last_done_at is null
+              or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+            )
+          )
+          or (
+            cs.last_done_at is not null
+            and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+          )
+        )
     ` as unknown as Promise<{ n: number }[]>,
     sql`
       select count(*)::int as n from contacts
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
         and status <> 'importado'
+        and anonymized_at is null
         and coalesce(source, '') not like 'avec_sync_clients%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
