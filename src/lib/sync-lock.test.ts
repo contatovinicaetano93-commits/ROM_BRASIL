@@ -12,10 +12,9 @@ describe('withSyncLock', () => {
     vi.resetModules()
   })
 
-  it('adquire lock, executa fn e libera', async () => {
+  it('adquire lock, executa fn e libera (tabela já existe)', async () => {
     sqlMock
-      .mockResolvedValueOnce(undefined) // create table
-      .mockResolvedValueOnce(undefined) // create index
+      .mockResolvedValueOnce([{ ok: true }]) // to_regclass exists → skip DDL
       .mockResolvedValueOnce([{ key: 'avec_sync' }]) // acquire
       .mockResolvedValueOnce(undefined) // release
 
@@ -28,8 +27,7 @@ describe('withSyncLock', () => {
 
   it('lança SyncLockBusyError quando lock está ativo', async () => {
     sqlMock
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([{ ok: true }])
       .mockResolvedValueOnce([]) // acquire failed
       .mockResolvedValueOnce([{ owner: 'other', expires_at: '2026-07-17T21:00:00Z' }])
 
@@ -53,8 +51,7 @@ describe('withSyncLock', () => {
 
   it('libera lock mesmo se fn falhar', async () => {
     sqlMock
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([{ ok: true }])
       .mockResolvedValueOnce([{ key: 'stock_sync' }])
       .mockResolvedValueOnce(undefined)
 
@@ -70,7 +67,7 @@ describe('withSyncLock', () => {
       ),
     ).rejects.toThrow('boom')
 
-    // create + index + acquire + release
-    expect(sqlMock.mock.calls.length).toBeGreaterThanOrEqual(4)
+    // exists check + acquire + release
+    expect(sqlMock.mock.calls.length).toBeGreaterThanOrEqual(3)
   })
 })
