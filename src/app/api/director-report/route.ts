@@ -213,6 +213,8 @@ export async function GET(req: NextRequest) {
       compare: compareQuarter,
       quarter0021: selectedQuarter0021,
       compare0021: compareQuarter0021,
+      stage,
+      compareMonths,
     })
     // Histórico: nunca slim — precisa do walk Avec completo ou o relatório fica zerado.
     const slim = historical ? false : searchParams.get('slim') === '1'
@@ -239,7 +241,7 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v6-hist',
+              'director:json:v7-hist-stage',
               stage,
               `slim=${slim ? 1 : 0}`,
               `hist=${historical ? 1 : 0}`,
@@ -253,7 +255,8 @@ export async function GET(req: NextRequest) {
               `mock=${forceMock ? 1 : 0}`,
             ].join(':'),
             () => (historical ? buildForHistorical(buildOpts) : buildForUi(buildOpts)),
-            forceMock ? 60 : historical ? 300 : 180,
+            // Mock não cacheia; corrente curto; histórico um pouco mais longo.
+            forceMock ? 0 : historical ? 300 : 45,
             { shouldCache: shouldCacheDirectorReport },
           )
         : await buildDirectorReport({ ...buildOpts, interactive: false })

@@ -162,13 +162,16 @@ export default function RelatorioDiretoriaPage() {
     loadAbortRef.current = controller
     setLoading(true)
     setError(null)
-    const historical = isHistoricalSelection([
-      month,
-      quarter,
-      compare,
-      quarter0021,
-      compareQuarter0021,
-    ])
+    const historical =
+      tab === '0011'
+        ? isHistoricalSelection([quarter, compare])
+        : tab === '0021'
+          ? isHistoricalSelection([
+              month,
+              quarter0021,
+              compareMonths ? compareQuarter0021 : null,
+            ])
+          : false
     // Corrente: 90s (servidor teto 55s). Histórico: até ~270s (budget Avec full).
     const fetchMs = historical ? HISTORICAL_FETCH_MS : CURRENT_FETCH_MS
     const timer = window.setTimeout(() => controller.abort(), fetchMs)
@@ -190,6 +193,7 @@ export default function RelatorioDiretoriaPage() {
       if (stage === '0021' && proId0021) q.set('professional_id', proId0021)
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
+        clientCache: false,
         signal: controller.signal,
         timeoutMs: fetchMs,
       })
@@ -448,14 +452,28 @@ export default function RelatorioDiretoriaPage() {
           </p>
           <p className="mt-2 text-xs text-muted">
             Fonte:{' '}
-            <span className={data?.source === 'avec' ? 'text-foreground' : 'text-warning'}>
+            <span
+              className={
+                data?.source === 'avec'
+                  ? 'text-foreground'
+                  : data?.source === 'partial'
+                    ? 'text-warning'
+                    : data?.source === 'error'
+                      ? 'text-danger'
+                      : 'text-warning'
+              }
+            >
               {loading && !data
                 ? '…'
                 : !data
                   ? '—'
                   : data.source === 'avec'
                     ? 'Avec live'
-                    : 'demo / fixture'}
+                    : data.source === 'partial'
+                      ? 'parcial'
+                      : data.source === 'error'
+                        ? 'sem dados / timeout'
+                        : 'demo / fixture'}
             </span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
