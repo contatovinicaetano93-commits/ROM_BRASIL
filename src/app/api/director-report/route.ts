@@ -16,12 +16,13 @@ import {
   getDirectorReportRecipients,
   isDirectorEmailConfigured,
 } from '@/lib/director-report/email'
+import { isHistoricalDirectorPeriod } from '@/lib/director-report/period'
 import type { DirectorReport, DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
 import { buildProfessionalProfileWorkbook } from '@/lib/director-report/xlsx-profile'
 
 export const maxDuration = 300
 
-/** Teto duro da UI — se Avec travar, devolve demo em vez de “Carregando…” infinito. */
+/** Teto duro da UI (mês/ano corrente) — se Avec travar, devolve vazio em vez de spinner infinito. */
 const DIRECTOR_UI_HARD_MS = 55_000
 
 async function buildForUi(
@@ -57,6 +58,23 @@ async function buildForUi(
     }
     throw e
   }
+}
+
+/** Anos históricos (ex. 2025): budget Avec completo, sem teto de 55s. */
+async function buildForHistorical(
+  opts: Parameters<typeof buildDirectorReport>[0],
+): Promise<DirectorReport> {
+  return buildDirectorReport({
+    ...opts,
+    interactive: false,
+    maxPages0011: undefined,
+    reactivationLimit: null,
+  })
+}
+
+function shouldCacheDirectorReport(report: DirectorReport): boolean {
+  // Não cachear casca vazia de timeout — gruda “2025 zerado” por minutos.
+  return report.source !== 'error'
 }
 
 function asMonth(v: string | null): MonthKey | undefined {
@@ -181,7 +199,6 @@ export async function GET(req: NextRequest) {
       stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
         ? stageParam
         : 'all'
-    const slim = searchParams.get('slim') === '1'
     const professionalId = searchParams.get('professional_id') ?? undefined
     const forceMock = searchParams.get('mock') === '1'
     const selectedMonth = asMonth(searchParams.get('month'))
@@ -190,6 +207,15 @@ export async function GET(req: NextRequest) {
     const compareMonths = compareMonthsParam === null ? false : compareMonthsParam !== '0'
     const selectedQuarter = asQuarter(searchParams.get('quarter'))
     const compareQuarter = asQuarter(searchParams.get('compare'))
+    const historical = isHistoricalDirectorPeriod({
+      month: selectedMonth,
+      quarter: selectedQuarter,
+      compare: compareQuarter,
+      quarter0021: selectedQuarter0021,
+      compare0021: compareQuarter0021,
+    })
+    // Histórico: nunca slim — precisa do walk Avec completo ou o relatório fica zerado.
+    const slim = historical ? false : searchParams.get('slim') === '1'
 
     const buildOpts = {
       selectedMonth,
@@ -206,14 +232,17 @@ export async function GET(req: NextRequest) {
         format === 'json' && slim ? (professionalId ? 80 : 8) : null,
     }
 
-    // JSON da UI: cache + budget Avec curto + teto duro. CSV/cron: full sem cache.
+    // JSON corrente: cache + budget curto + teto 55s.
+    // JSON histórico (ex. 2025): budget full, sem race — evita “zerado” cacheado.
+    // CSV/cron: full sem cache.
     const report =
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v5-local0011',
+              'director:json:v6-hist',
               stage,
               `slim=${slim ? 1 : 0}`,
+              `hist=${historical ? 1 : 0}`,
               `m=${selectedMonth ?? ''}`,
               `q21=${selectedQuarter0021 ?? ''}`,
               `c21=${compareQuarter0021 ?? ''}`,
@@ -223,8 +252,9 @@ export async function GET(req: NextRequest) {
               `pro=${professionalId ?? ''}`,
               `mock=${forceMock ? 1 : 0}`,
             ].join(':'),
-            () => buildForUi(buildOpts),
-            forceMock ? 60 : 180,
+            () => (historical ? buildForHistorical(buildOpts) : buildForUi(buildOpts)),
+            forceMock ? 60 : historical ? 300 : 180,
+            { shouldCache: shouldCacheDirectorReport },
           )
         : await buildDirectorReport({ ...buildOpts, interactive: false })
 

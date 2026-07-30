@@ -105,8 +105,22 @@ function previousQuarterKey(key: string) {
   return `${year}-Q${q - 1}`
 }
 
+/** Período com ano < ano civil atual (SP) — precisa de fetch Avec completo. */
+function isHistoricalSelection(keys: Array<string | null | undefined>): boolean {
+  const { year } = spNowParts()
+  for (const key of keys) {
+    if (!key) continue
+    const y = Number(String(key).slice(0, 4))
+    if (Number.isFinite(y) && y < year) return true
+  }
+  return false
+}
+
 const QUARTERS = buildQuarterOptions()
 const MONTHS = buildMonthOptions()
+/** Timeout do browser para anos históricos (servidor maxDuration 300s). */
+const HISTORICAL_FETCH_MS = 270_000
+const CURRENT_FETCH_MS = 90_000
 
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
@@ -148,13 +162,22 @@ export default function RelatorioDiretoriaPage() {
     loadAbortRef.current = controller
     setLoading(true)
     setError(null)
-    // Servidor teto 55s + budget ~45s; 90s cobre rede + parse sem orphan falso.
-    const timer = window.setTimeout(() => controller.abort(), 90_000)
+    const historical = isHistoricalSelection([
+      month,
+      quarter,
+      compare,
+      quarter0021,
+      compareQuarter0021,
+    ])
+    // Corrente: 90s (servidor teto 55s). Histórico: até ~270s (budget Avec full).
+    const fetchMs = historical ? HISTORICAL_FETCH_MS : CURRENT_FETCH_MS
+    const timer = window.setTimeout(() => controller.abort(), fetchMs)
     try {
       const stage = tab
       const q = new URLSearchParams({
         stage,
-        slim: '1',
+        // Histórico: slim=0 — paginação Avec completa.
+        slim: historical ? '0' : '1',
         month,
         quarter_0021: quarter0021,
         compare_0021: compareQuarter0021,
@@ -168,7 +191,7 @@ export default function RelatorioDiretoriaPage() {
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
         signal: controller.signal,
-        timeoutMs: 90_000,
+        timeoutMs: fetchMs,
       })
       if (controller.signal.aborted) return
       const json = await res.json()
@@ -199,7 +222,12 @@ export default function RelatorioDiretoriaPage() {
         return
       }
       if (e instanceof DOMException && e.name === 'AbortError') {
-        setError('Relatório demorou demais (>90s). Tente de novo ou marque “Forçar demo”.')
+        const secs = Math.round(fetchMs / 1000)
+        setError(
+          historical
+            ? `Relatório histórico demorou demais (>${secs}s). Toque Atualizar — a Avec pode estar lenta para 2025.`
+            : `Relatório demorou demais (>${secs}s). Tente de novo ou marque “Forçar demo”.`,
+        )
       } else {
         setError(String(e))
       }
