@@ -405,9 +405,9 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  // Fast: hoje + amanhã (cabe nos 300s Vercel). Semana completa no full (2×/dia).
-  // Janela +7d no fast gerava 504 eterno (Sync interrompido a cada cron).
-  const range = mode === 'fast' ? periodRange(0, 1) : periodRange(1, 21)
+  // Fast: hoje + 2d (Contatos próximo) — cabe no teto com cache/lean path.
+  // Semana completa (+21d) só no full (2×/dia). +7d no fast gerava 504 eterno.
+  const range = mode === 'fast' ? periodRange(0, 2) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchAllAvecReport('0051', params)
@@ -1136,17 +1136,18 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido)
       // e o cron seguinte não atualizava o caixa a tempo.
     } else {
-      // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
+      // Full: P1/P2/P3 primeiro (paridade IG) — Visão não morre se agenda estourar o teto.
+      // Cada etapa isolada — 403/WAF num relatório não derruba o resto.
       for (const [label, fn] of [
+        ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['P2', () => syncP2Kpis(stats, syncRunId)],
+        ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
-        ['P1', () => syncP1Kpis(stats, syncRunId)],
-        ['P2', () => syncP2Kpis(stats, syncRunId)],
-        ['P3', () => syncP3Kpis(stats, syncRunId)],
       ] as const) {
         try {
           await fn()

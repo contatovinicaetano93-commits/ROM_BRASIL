@@ -390,7 +390,7 @@ function emptyStats(): StockSyncStats {
  */
 export async function runStockSync(mode: StockSyncMode = 'fast'): Promise<StockSyncRun> {
   return withSyncLock(SYNC_LOCK_KEYS.stock, () => runStockSyncUnlocked(mode), {
-    ttlMs: 6 * 60 * 1000,
+    ttlMs: 10 * 60 * 1000,
     owner: `stock-${mode}`,
   })
 }
