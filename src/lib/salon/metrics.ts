@@ -114,6 +114,7 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * Novos do dia = contatos **orgânicos** criados no ROM naquele dia
  * (WhatsApp, manual, webhook). Dump Avec NÃO conta:
  * - 0004 / lake / backfill (`importado`, `avec_sync_clients*`, …)
+ * - `avec_last_done_backfill` (reimport em massa com created_at = hoje)
  * - agenda 0051 (`avec_sync_appointments*`) — senão new_clients ≈ agendamentos
  * - atendidos / retorno 0002 (`avec_sync_attended*`, `avec_sync_returning*`)
  */
@@ -134,6 +135,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
         and coalesce(source, '') not like 'avec_sync_clients%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
+        and coalesce(source, '') not like 'avec_last_done%'
         and coalesce(source, '') not like 'avec_sync_appointments%'
         and coalesce(source, '') not like 'avec_sync_attended%'
         and coalesce(source, '') not like 'avec_sync_returning%'
