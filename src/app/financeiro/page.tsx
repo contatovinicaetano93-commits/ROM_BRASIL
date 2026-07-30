@@ -75,8 +75,8 @@ interface FinanceKpiBucket {
     revenue: number
     attended: number
     ticket_avg: number | null
-    expenses_servicos?: number
-    expenses_comercio?: number
+    expenses_servicos: number
+    expenses_comercio: number
   }[]
   cmv: number
   cmv_coverage: CmvCoverage
