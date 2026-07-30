@@ -3,12 +3,12 @@ import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
 import { listExpenses, createExpense } from '@/lib/finance'
+import { omieFullMonthRange } from '@/lib/omie/dates'
 import { todayIso } from '@/lib/salon/format'
 
+/** Lista de despesas = mês calendário completo (alinha ao sync Omie por vencimento). */
 function monthRangeFromKey(month: string): { from: string; to: string } {
-  const [y, m] = month.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, '0')}` }
+  return omieFullMonthRange(month)
 }
 
 export async function GET(req: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     const { from, to } = monthRangeFromKey(month)
     const expenses = await listExpenses(from, to)
-    return ok({ month, expenses })
+    return ok({ month, expenses, from, to })
   } catch (e) {
     return handleError(e)
   }
