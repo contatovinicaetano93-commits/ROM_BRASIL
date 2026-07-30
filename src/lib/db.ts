@@ -1,3 +1,4 @@
+import 'server-only'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 
 // Prefer IPv4 (Supabase direct host is often IPv6-only; pooler is IPv4).
