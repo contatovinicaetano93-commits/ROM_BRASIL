@@ -29,6 +29,7 @@ function bucket(partial: {
     revenue,
     revenue_source: 'metrics' as const,
     expenses,
+    expenses_by_cnpj: { total: expenses, servicos: expenses, comercio: 0, manual: 0 },
     attended,
     ticket_avg: partial.ticket_avg ?? (attended > 0 ? revenue / attended : null),
     daily: partial.daily ?? [],
