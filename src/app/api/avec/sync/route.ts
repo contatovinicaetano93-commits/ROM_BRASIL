@@ -10,8 +10,8 @@ import { isSyncLockBusyError } from '@/lib/sync-lock'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 
-/** Sync Avec pode demorar (vários relatórios). */
-export const maxDuration = 300
+/** Sync Avec pode demorar (vários relatórios). Pro permite até 800s. */
+export const maxDuration = 500
 
 async function authorize(req: NextRequest) {
   if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
