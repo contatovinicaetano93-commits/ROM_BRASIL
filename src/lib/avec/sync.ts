@@ -242,7 +242,9 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
           + coalesce((stats->>'movements_synced')::int, 0) > 0
         then null
         else coalesce(error, 'abandoned_partial_timeout')
-      end
+      end,
+      -- Sem limpar running, beginAvecSyncRun regrava "Sync interrompido" em cima do ok.
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
     where status = 'partial'
       and created_at < ${cutoff}::timestamptz
     returning id
@@ -250,14 +252,34 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
   return rows.length
 }
 
+/** Cache por contato no decorrer de um sync — evita N+1 listServices por linha Avec. */
+let syncServiceCache: Map<string, Awaited<ReturnType<typeof listServices>>> | null = null
+
+function beginSyncServiceCache() {
+  syncServiceCache = new Map()
+}
+
+function endSyncServiceCache() {
+  syncServiceCache = null
+}
+
 async function findOrCreateService(contactId: string, serviceName: string) {
-  const services = await listServices(contactId)
+  const cache = syncServiceCache
+  let services = cache?.get(contactId)
+  if (!services) {
+    services = await listServices(contactId)
+    cache?.set(contactId, services)
+  }
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
   const cadenceDays = defaultCadenceDaysForServiceName(serviceName)
   if (match) {
     // Sync antigo criava serviços sem cadence — completa na próxima visita/agenda.
     if (match.cadence_days == null) {
       const patched = await ensureServiceCadence(match.id, cadenceDays)
+      if (patched && cache) {
+        const idx = services.findIndex((s) => s.id === patched.id)
+        if (idx >= 0) services[idx] = patched
+      }
       return patched ?? match
     }
     return match
@@ -268,6 +290,8 @@ async function findOrCreateService(contactId: string, serviceName: string) {
     category: guessServiceCategory(serviceName),
     cadenceDays,
   })
+  services.push(created)
+  cache?.set(contactId, services)
   return created
 }
 
@@ -892,8 +916,9 @@ async function syncReturningFrom0002(
   syncRunId?: string,
 ) {
   const today = todayIso()
-  const monthStart = `${today.slice(0, 7)}-01`
-  const from = mode === 'fast' ? monthStart : addCalendarDaysYmd(today, -90)
+  // Fast: só o dia (KPI Hoje). Full: 90d p/ last_done histórico.
+  // MTD no fast + upsert por linha estourava os 300s da Vercel.
+  const from = mode === 'fast' ? today : addCalendarDaysYmd(today, -90)
   const params = {
     inicio: isoToBr(from),
     fim: isoToBr(today),
@@ -903,7 +928,9 @@ async function syncReturningFrom0002(
   try {
     const result = await fetchAllAvecReport('0002', params)
     warnIfTruncated(stats, '0002', result)
-    await snapshotReport('0002-returning', params, result.rows, stats, syncRunId)
+    if (mode === 'full') {
+      await snapshotReport('0002-returning', params, result.rows, stats, syncRunId)
+    }
 
     if (result.truncated) {
       stats.warnings.push(
@@ -920,6 +947,9 @@ async function syncReturningFrom0002(
       if ((att.totalVisits ?? 0) > 1) {
         returningByDay.set(day, (returningByDay.get(day) ?? 0) + 1)
       }
+
+      // Fast: só métrica — last_done do dia vem de syncAttendances; histórico no full.
+      if (mode === 'fast') continue
 
       // last_done_at: data real de ultima_visita (0002). Hoje prefere hora real;
       // histórico / sem hora → applyVisitDayToService (só preenche null ou dia mais antigo).
@@ -1080,6 +1110,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
   const run = await beginAvecSyncRun(mode, stats)
   const syncRunId = run.id
+  beginSyncServiceCache()
 
   try {
     await healImportadoStatus(stats)
@@ -1132,7 +1163,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       }
     }
     await recomputeSalonMetricsFromRom()
-    // Recorrentes 0002: no full (90d) preenche last_done histórico; no fast (MTD) só reforça.
+    // Recorrentes 0002: full (90d) preenche last_done; fast só KPI do dia (sem upsert/linha).
     try {
       await syncReturningFrom0002(stats, mode, syncRunId)
     } catch (e) {
@@ -1189,5 +1220,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
     return finishAvecSyncRun(run.id, 'error', stats, msg)
+  } finally {
+    endSyncServiceCache()
   }
 }
