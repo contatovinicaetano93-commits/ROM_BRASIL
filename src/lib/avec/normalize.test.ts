@@ -8,6 +8,7 @@ import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
   normalizePhone,
+  normalizeStockMovementRow,
   parseOptionalMoney,
   parseServiceTempoMinutes,
 } from '@/lib/avec/normalize'
@@ -136,6 +137,29 @@ describe('parseServiceTempoMinutes', () => {
     expect(parseServiceTempoMinutes('1:30')).toBe(90)
     expect(parseServiceTempoMinutes(null)).toBeNull()
     expect(parseServiceTempoMinutes(0)).toBeNull()
+  })
+})
+
+describe('normalizeStockMovementRow', () => {
+  it('gera fingerprint estável e preserva distinções sem hora', () => {
+    const base = {
+      produto_id: 'sku-1',
+      produto: 'Shampoo',
+      data: '2026-07-30',
+      qtd_absoluta: -2,
+      motivo: 'Uso interno',
+      custo: 10,
+    }
+
+    const first = normalizeStockMovementRow(base)
+    const same = normalizeStockMovementRow(base)
+    const differentReason = normalizeStockMovementRow({ ...base, motivo: 'Venda' })
+    const differentTime = normalizeStockMovementRow({ ...base, hora: '09:00' })
+
+    expect(first?.dedupKey).toMatch(/^[a-f0-9]{24}$/)
+    expect(same?.dedupKey).toBe(first?.dedupKey)
+    expect(differentReason?.dedupKey).not.toBe(first?.dedupKey)
+    expect(differentTime?.dedupKey).not.toBe(first?.dedupKey)
   })
 })
 

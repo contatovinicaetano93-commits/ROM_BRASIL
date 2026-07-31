@@ -235,6 +235,7 @@ async function syncKindForMonth(
     const keepIds = new Set<string>()
     let page = 1
     let totalPages = 1
+    let capped = false
 
     while (page <= totalPages) {
       const res =
@@ -304,10 +305,18 @@ async function syncKindForMonth(
       }
 
       page += 1
-      if (mock || page > 200) break
+      if (mock) break
+      if (page > 200) {
+        capped = page - 1 < totalPages
+        break
+      }
     }
 
-    base.removed = await pruneOmieExpensesMissingFromSync(kind, range.from, range.to, keepIds)
+    if (!capped) {
+      base.removed = await pruneOmieExpensesMissingFromSync(kind, range.from, range.to, keepIds)
+    } else {
+      base.error = `Omie page cap reached (${base.pages}/${totalPages}); prune skipped`
+    }
     return base
   } catch (e) {
     return {

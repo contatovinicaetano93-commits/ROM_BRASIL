@@ -446,7 +446,7 @@ export async function acknowledgeAlert(id: string, user: string): Promise<void> 
 // fallback, sempre marcado como tal (nunca confundido com o dado oficial).
 // ---------------------------------------------------------------------------
 
-/** Aplica uma linha de 0044. Dedup por produto+tipo+quantidade+data+origem (idempotente entre syncs). */
+/** Aplica uma linha de 0044. Dedup por fingerprint Avec quando disponível (idempotente entre syncs). */
 export async function applyStockMovement(
   mv: NormalizedStockMovement,
   source: 'avec_0044'
@@ -455,12 +455,19 @@ export async function applyStockMovement(
   const sql = getSql()
   const productId = await ensureProductExists(mv.avecProductId, mv.name)
 
-  const existing = (await sql`
-    select id from stock_movements
-    where product_id = ${productId} and type = ${mv.type} and quantity = ${mv.quantity}
-      and occurred_at = ${mv.occurredAt}::timestamptz and source = ${source}
-    limit 1
-  `) as { id: string }[]
+  const existing = mv.dedupKey
+    ? ((await sql`
+        select id from stock_movements
+        where source = ${source} and created_by = ${mv.dedupKey}
+        limit 1
+      `) as { id: string }[])
+    : ((await sql`
+        select id from stock_movements
+        where product_id = ${productId} and type = ${mv.type} and quantity = ${mv.quantity}
+          and occurred_at = ${mv.occurredAt}::timestamptz and source = ${source}
+          and coalesce(reason, '') = ${mv.reason ?? ''}
+        limit 1
+      `) as { id: string }[])
   if (existing[0]) return false
 
   let cost = mv.cost
@@ -476,8 +483,8 @@ export async function applyStockMovement(
   }
 
   await sql`
-    insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at)
-    values (${productId}, ${mv.type}, ${mv.quantity}, ${cost}, ${mv.reason}, ${source}, ${mv.occurredAt}::timestamptz)
+    insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at, created_by)
+    values (${productId}, ${mv.type}, ${mv.quantity}, ${cost}, ${mv.reason}, ${source}, ${mv.occurredAt}::timestamptz, ${mv.dedupKey ?? null})
   `
   return true
 }

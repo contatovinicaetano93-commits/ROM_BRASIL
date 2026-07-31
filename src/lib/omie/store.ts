@@ -11,6 +11,16 @@ let ensurePromise: Promise<void> | null = null
 
 async function createOmieExpenseColumns(): Promise<void> {
   const sql = getSql()
+  const exists = (await sql`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'finance_expenses'
+        and column_name = 'omie_status'
+    ) as ok
+  `) as { ok: boolean }[]
+  if (exists[0]?.ok) return
+
   await sql`alter table finance_expenses add column if not exists source text not null default 'manual'`
   await sql`alter table finance_expenses add column if not exists external_id text`
   await sql`alter table finance_expenses add column if not exists omie_status text`

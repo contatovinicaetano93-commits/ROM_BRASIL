@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { logEvent } from '@/lib/contacts'
 import { enrichServices } from '@/lib/recommendations'
 import { toSalonDateIso } from '@/lib/salon/format'
 import {
@@ -185,7 +186,21 @@ export async function markServiceDone(
     const prevDay = prevDone ? toSalonDateIso(prevDone) : null
     const newDay = toSalonDateIso(service.last_done_at)
     if (prevDay !== newDay) {
-      await enqueueAftercare(service).catch(() => undefined)
+      await enqueueAftercare(service).catch(async (e) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[aftercare] enqueue failed', { serviceId: service.id, error: msg })
+        try {
+          await logEvent({
+            contactId: service.contact_id,
+            channel: 'whatsapp',
+            direction: 'out',
+            handledBy: 'system',
+            payload: { kind: 'aftercare_enqueue_failed', service_id: service.id, error: msg },
+          })
+        } catch {
+          // ignore
+        }
+      })
     }
   }
   return service
