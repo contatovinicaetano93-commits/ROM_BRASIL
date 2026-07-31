@@ -610,6 +610,8 @@ function servicesCreatedRecently(service: { created_at: string }) {
 
 /** True quando syncAttendances já gravou returning (+ last_done no full) — evita 2º fetch 0002. */
 let attendancesCoveredReturning = false
+/** True quando syncAttendances já buscou 0002 — truncado ou não, não refaz fallback. */
+let attendancesFetched0002 = false
 
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const today = todayIso()
@@ -625,6 +627,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     limit: 250,
   }
   const result = await fetchSyncReport('0002', params)
+  attendancesFetched0002 = true
   warnIfTruncated(stats, '0002', result)
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
@@ -1026,7 +1029,7 @@ async function syncReturningFrom0002(
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
-  if (attendancesCoveredReturning) return
+  if (attendancesFetched0002 || attendancesCoveredReturning) return
   if (syncBudgetExhausted()) {
     markSyncBudgetExhausted(stats, 'recorrentes 0002')
     return
@@ -1178,6 +1181,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   beginSyncServiceCache()
   activeSyncDeadlineAt = Date.now() + AVEC_SYNC_BUDGET_MS
   attendancesCoveredReturning = false
+  attendancesFetched0002 = false
 
   try {
     await healImportadoStatus(stats)

@@ -1,7 +1,9 @@
 import {
   fetchAllAvecReport,
+  formatTruncationWarning,
   periodRange,
   periodRangeEndingOn,
+  type AvecReportFetchResult,
   withRequiredAvecReportParams,
 } from '@/lib/avec/client'
 import type { SyncKpiAnchorOpts } from '@/lib/avec/sync-p1'
@@ -88,6 +90,17 @@ function asRows(result: unknown): Record<string, unknown>[] {
   return []
 }
 
+function warnIfTruncated(
+  stats: SyncStatsLike,
+  reportId: string,
+  result: AvecReportFetchResult,
+): boolean {
+  if (!result.truncated) return false
+  stats.warnings = stats.warnings ?? []
+  stats.warnings.push(formatTruncationWarning(reportId, result))
+  return true
+}
+
 async function snapshotSafe(
   reportId: string,
   params: Record<string, unknown>,
@@ -136,6 +149,7 @@ export async function syncP3Kpis(
 
   let return_rate = 0
   let returnRateOk = false
+  let returnRateTruncated = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
@@ -146,36 +160,40 @@ export async function syncP3Kpis(
           : {}),
         limit: 250,
       })
-      const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
+      const result = await fetchAllAvecReport(id0007, reportParams)
+      const rows = asRows(result)
+      returnRateTruncated = warnIfTruncated(stats, id0007, result)
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
-      let sum = 0
-      let n = 0
-      let nonReturners = 0
-      for (const row of rows) {
-        const r = normalizeP3ReturnRateRow(row)
-        if (r != null) {
-          stats.p3_rows = (stats.p3_rows ?? 0) + 1
-          sum += r
-          n++
-          continue
+      if (!returnRateTruncated) {
+        let sum = 0
+        let n = 0
+        let nonReturners = 0
+        for (const row of rows) {
+          const r = normalizeP3ReturnRateRow(row)
+          if (r != null) {
+            stats.p3_rows = (stats.p3_rows ?? 0) + 1
+            sum += r
+            n++
+            continue
+          }
+          if (isP3NonReturnerRow(row)) nonReturners++
         }
-        if (isP3NonReturnerRow(row)) nonReturners++
-      }
-      if (n > 0) {
-        return_rate = Math.round((sum / n) * 10000) / 10000
-        returnRateOk = true
-      } else if (nonReturners > 0) {
-        // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
-        // usando cohort local (visitas no período 1 implícito via ROM).
-        const local = await computeLocalReturnRate(day)
-        if (local != null) {
-          return_rate = local
+        if (n > 0) {
+          return_rate = Math.round((sum / n) * 10000) / 10000
           returnRateOk = true
-          stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
-        } else {
-          stats.warnings?.push(
-            `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno local indisponível`,
-          )
+        } else if (nonReturners > 0) {
+          // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
+          // usando cohort local (visitas no período 1 implícito via ROM).
+          const local = await computeLocalReturnRate(day)
+          if (local != null) {
+            return_rate = local
+            returnRateOk = true
+            stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
+          } else {
+            stats.warnings?.push(
+              `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno local indisponível`,
+            )
+          }
         }
       }
     } catch (e) {
@@ -184,7 +202,7 @@ export async function syncP3Kpis(
   }
 
   // Fallback ROM se 0007 falhou/vazio
-  if (!returnRateOk) {
+  if (!returnRateOk && !returnRateTruncated) {
     try {
       const local = await computeLocalReturnRate(day)
       if (local != null) {
@@ -202,20 +220,24 @@ export async function syncP3Kpis(
   const id0017 = resolveId('new_clients_period')
   if (id0017) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0017, params))
+      const result = await fetchAllAvecReport(id0017, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0017, result)
       await snapshotSafe(id0017, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const c = normalizeP3NewClientsRow(row)
-        if (c == null) continue
-        stats.p3_rows = (stats.p3_rows ?? 0) + 1
-        new_clients_period += c
+      if (!truncated) {
+        for (const row of rows) {
+          const c = normalizeP3NewClientsRow(row)
+          if (c == null) continue
+          stats.p3_rows = (stats.p3_rows ?? 0) + 1
+          new_clients_period += c
+        }
+        // Se o relatório for lista (1 linha = 1 cliente) e contagem veio 0, usa length
+        if (new_clients_period === 0 && rows.length > 0) {
+          new_clients_period = rows.length
+          stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
+        }
+        newClientsOk = true
       }
-      // Se o relatório for lista (1 linha = 1 cliente) e contagem veio 0, usa length
-      if (new_clients_period === 0 && rows.length > 0) {
-        new_clients_period = rows.length
-        stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
-      }
-      newClientsOk = true
     } catch (e) {
       stats.errors.push(`P3 0017: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -226,20 +248,24 @@ export async function syncP3Kpis(
   const id0088 = resolveId('revenue_curve')
   if (id0088) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0088, params))
+      const result = await fetchAllAvecReport(id0088, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0088, result)
       await snapshotSafe(id0088, params, rows, stats, syncRunId)
-      const byDay = new Map<string, number>()
-      for (const row of rows) {
-        const p = normalizeP3CurveRow(row)
-        if (!p) continue
-        stats.p3_rows = (stats.p3_rows ?? 0) + 1
-        byDay.set(p.day, (byDay.get(p.day) ?? 0) + p.revenue)
+      if (!truncated) {
+        const byDay = new Map<string, number>()
+        for (const row of rows) {
+          const p = normalizeP3CurveRow(row)
+          if (!p) continue
+          stats.p3_rows = (stats.p3_rows ?? 0) + 1
+          byDay.set(p.day, (byDay.get(p.day) ?? 0) + p.revenue)
+        }
+        for (const [d, revenue] of byDay) {
+          revenue_curve.push({ day: d, revenue: Math.round(revenue) })
+        }
+        revenue_curve.sort((a, b) => a.day.localeCompare(b.day))
+        revenueCurveOk = true
       }
-      for (const [d, revenue] of byDay) {
-        revenue_curve.push({ day: d, revenue: Math.round(revenue) })
-      }
-      revenue_curve.sort((a, b) => a.day.localeCompare(b.day))
-      revenueCurveOk = true
     } catch (e) {
       stats.errors.push(`P3 0088: ${e instanceof Error ? e.message : String(e)}`)
     }

@@ -80,10 +80,11 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/atingiu o limite de \d+ páginas/i.test(warning)) {
     return /\((0223|0004|0046|0149|0044)\)/.test(warning)
   }
+  if (/P1 0107 truncado/i.test(warning)) return true
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
-  // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
+  // BR usa 0223 para TM do dia; este aviso é ruído soft de paginação/cadastro.
   if (/TM 0223:/i.test(warning)) return true
   // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
   // Catálogo 0004 adiado de propósito (ritmo leve).
