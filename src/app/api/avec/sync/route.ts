@@ -36,6 +36,8 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
 /** Espaçamento mínimo mesmo se o cron Vercel for reconfigurado à força. */
 const FAST_MIN_GAP_MS = 12 * 60_000
 const FULL_MIN_GAP_MS = 5 * 60 * 60_000
+/** Full parcial/error: retry mais cedo (não esperar 5h). */
+const FULL_RETRY_AFTER_FAIL_MS = 45 * 60_000
 /** Webhook: gap curto — não flooda, mas atualiza caixa após evento. */
 const WEBHOOK_FAST_MIN_GAP_MS = 90_000
 
@@ -60,17 +62,18 @@ async function executeSync(
   // Webhook nunca roda full (P1–P3/catálogo) — só o cron 2×/dia.
   const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
 
-  const minGap =
-    opts?.webhook && effectiveMode === 'fast'
-      ? WEBHOOK_FAST_MIN_GAP_MS
-      : effectiveMode === 'full'
-        ? FULL_MIN_GAP_MS
-        : FAST_MIN_GAP_MS
-
   if (!opts?.force) {
     // Ignora runs órfãos (killed mid-flight com stats.running=true).
     const last = await getLastAvecSync(effectiveMode, { finishedOnly: true })
     if (last?.created_at) {
+      const minGap =
+        opts?.webhook && effectiveMode === 'fast'
+          ? WEBHOOK_FAST_MIN_GAP_MS
+          : effectiveMode === 'full'
+            ? last.status === 'partial' || last.status === 'error'
+              ? FULL_RETRY_AFTER_FAIL_MS
+              : FULL_MIN_GAP_MS
+            : FAST_MIN_GAP_MS
       const age = Date.now() - new Date(last.created_at).getTime()
       if (age >= 0 && age < minGap) {
         return ok({

@@ -8,6 +8,11 @@ import {
 } from '@/lib/avec/client'
 import type { SyncKpiAnchorOpts } from '@/lib/avec/sync-p1'
 import {
+  getActiveSyncDeadlineAt,
+  isSyncBudgetExhausted,
+  noteSyncBudgetExhausted,
+} from '@/lib/avec/sync-budget'
+import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
   normalizeP2PackageRow,
@@ -24,6 +29,17 @@ type SyncStatsLike = {
   errors: string[]
   warnings?: string[]
   p2_rows?: number
+  aborted?: boolean
+}
+
+function reportDeadline() {
+  return { deadlineAt: getActiveSyncDeadlineAt() }
+}
+
+function skipIfBudgetExhausted(stats: SyncStatsLike, stage: string): boolean {
+  if (!isSyncBudgetExhausted()) return false
+  noteSyncBudgetExhausted(stats, stage)
+  return true
 }
 
 function todayIsoLocal() {
@@ -137,6 +153,7 @@ export async function syncPaymentMixRecent(
   const days = listDaysInclusive(from, to)
 
   for (const day of days) {
+    if (skipIfBudgetExhausted(stats, 'P2 0081')) break
     const params = {
       inicio: isoToBr(day),
       fim: isoToBr(day),
@@ -144,7 +161,7 @@ export async function syncPaymentMixRecent(
       limit: 250,
     }
     try {
-      const result = await fetchAllAvecReport(id0081, params)
+      const result = await fetchAllAvecReport(id0081, params, undefined, reportDeadline())
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0081, result)
       await snapshotSafe(id0081, params, rows, stats, syncRunId)
@@ -184,9 +201,9 @@ export async function syncP2Kpis(
   const booking_channels: { channel: string; count: number }[] = []
   let bookingChannelsOk = false
   const id0056 = resolveId('booking_channels')
-  if (id0056) {
+  if (id0056 && !skipIfBudgetExhausted(stats, 'P2 antes de 0056')) {
     try {
-      const result = await fetchAllAvecReport(id0056, params)
+      const result = await fetchAllAvecReport(id0056, params, undefined, reportDeadline())
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0056, result)
       await snapshotSafe(id0056, params, rows, stats, syncRunId)
@@ -209,9 +226,9 @@ export async function syncP2Kpis(
   let packages_sold = 0
   let packagesOk = false
   const id0061 = resolveId('packages')
-  if (id0061) {
+  if (id0061 && !skipIfBudgetExhausted(stats, 'P2 antes de 0061')) {
     try {
-      const result = await fetchAllAvecReport(id0061, params)
+      const result = await fetchAllAvecReport(id0061, params, undefined, reportDeadline())
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0061, result)
       await snapshotSafe(id0061, params, rows, stats, syncRunId)
@@ -239,9 +256,9 @@ export async function syncP2Kpis(
   let ratings_count = 0
   let ratingsOk = false
   const id0104 = resolveId('ratings')
-  if (id0104) {
+  if (id0104 && !skipIfBudgetExhausted(stats, 'P2 antes de 0104')) {
     try {
-      const result = await fetchAllAvecReport(id0104, params)
+      const result = await fetchAllAvecReport(id0104, params, undefined, reportDeadline())
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0104, result)
       await snapshotSafe(id0104, params, rows, stats, syncRunId)
@@ -267,11 +284,11 @@ export async function syncP2Kpis(
   let birthday_count = 0
   let birthdaysOk = false
   const id0001 = resolveId('birthdays')
-  if (id0001) {
+  if (id0001 && !skipIfBudgetExhausted(stats, 'P2 antes de 0001')) {
     try {
       // Aniversariantes do mês do snapshot (histórico: mês da âncora)
       const reportParams = withRequiredAvecReportParams(id0001, birthdayParams)
-      const result = await fetchAllAvecReport(id0001, reportParams)
+      const result = await fetchAllAvecReport(id0001, reportParams, undefined, reportDeadline())
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0001, result)
       await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
