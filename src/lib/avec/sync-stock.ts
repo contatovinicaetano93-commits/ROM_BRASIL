@@ -488,7 +488,11 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     stats.errors = formatAvecErrorList(stats.errors)
 
     const hardWarnings = hardAvecSyncWarnings(stats.warnings)
-    const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
+    // Paridade IG: alertas 0046 também contam como progresso (não error se só 0046 ok).
+    const hadAnyData =
+      stats.positions_synced > 0 ||
+      stats.movements_synced > 0 ||
+      stats.alerts_active > 0
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
