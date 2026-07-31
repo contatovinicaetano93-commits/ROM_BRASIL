@@ -111,8 +111,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * Retornos (`returning_clients`) vêm do relatório 0002 no sync Avec — não sobrescreve
  * aqui para não zerar o KPI quando `contacts.created_at` é recente (import/sync).
  *
- * Agendados do dia = abertos (scheduled_at) + concluídos no dia (last_done_at).
- * Alinha ao KPI Avec — não contar só leftovers após markServiceDone (paridade IG).
+ * Agendados do dia = cabeças (DISTINCT contact_id) com aberto (scheduled_at)
+ * ou concluído (last_done_at) no dia — não linhas de serviço (paridade IG).
  *
  * Novos do dia = contatos **orgânicos** (WhatsApp/manual/webhook). Dump Avec NÃO conta:
  * - 0004 / lake / backfill / last_done
@@ -123,7 +123,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
 
   const [apptRows, newRows] = await Promise.all([
     sql`
-      select count(*)::int as n
+      select count(distinct cs.contact_id)::int as n
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
