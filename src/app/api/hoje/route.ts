@@ -58,7 +58,11 @@ export async function GET(req: NextRequest) {
             and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
             and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         `) as { novos: number; whatsapp_novos: number }[]
-        const avecLast = await getLastAvecSync()
+        // Hoje = caixa/agenda: badge pelo fast. Full só entra se não houver fast
+        // (evita full parcial em P1 0107 pintar KPIs "incompleto" por horas).
+        const avecLast =
+          (await getLastAvecSync('fast', { finishedOnly: true })) ??
+          (await getLastAvecSync('full', { finishedOnly: true }))
         const reactivation = await getReactivationKpis().catch(() => ({
           window_days: 21,
           contacted: 0,
