@@ -66,6 +66,8 @@ const STOCK_FAST_MAX_PAGES = 2
 const STOCK_FAST_PAGE_LIMIT = 100
 /** 200s: margem vs maxDuration 300s (upsert DB + 0046). */
 const STOCK_FAST_BUDGET_MS = 200_000
+/** 250s: margem vs maxDuration 300s e lock TTL 10min. */
+const STOCK_FULL_BUDGET_MS = 250_000
 
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
@@ -287,7 +289,11 @@ async function syncAlerts(
       active++
     }
     stats.alerts_active = active
-    if (active > 0 || result.rows.length === 0) {
+    if (result.truncated) {
+      stats.warnings.push(
+        '0046: truncado — alertas stale NÃO resolvidos (evita limpar alertas das páginas omitidas)',
+      )
+    } else if (active > 0 || result.rows.length === 0) {
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
   } catch (e) {
@@ -302,19 +308,36 @@ async function syncAlerts(
   }
 }
 
-async function syncMovements(stats: StockSyncStats, syncRunId: string) {
+async function syncMovements(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
   const id = reportId('stock_movement')
   if (!id) return
+  if (deadlineAt != null && Date.now() >= deadlineAt) {
+    stats.warnings.push('0044: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
   // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
   // produto+tipo+quantidade+data+origem em applyStockMovement).
   const { inicio, fim } = periodRange(3, 0)
   const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
-    const result = await fetchAllAvecReport(id, params)
+    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt })
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
+    if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
+      stats.aborted = true
+      stats.warnings.push('0044: orçamento esgotado durante fetch (abort limpo)')
+      return
+    }
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     for (const row of result.rows) {
+      if (deadlineAt != null && Date.now() >= deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0044: orçamento esgotado após ${stats.movements_synced} movimentos (abort limpo)`,
+        )
+        break
+      }
       const mv = normalizeStockMovementRow(row)
       if (!mv) continue
       const inserted = await applyStockMovement(mv, 'avec_0044')
@@ -326,17 +349,34 @@ async function syncMovements(stats: StockSyncStats, syncRunId: string) {
   }
 }
 
-async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
+async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
   const id = reportId('stock_purchase')
   if (!id) return
+  if (deadlineAt != null && Date.now() >= deadlineAt) {
+    stats.warnings.push('0323: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
   const { inicio, fim } = periodRange(3, 0)
   const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
-    const result = await fetchAllAvecReport(id, params)
+    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt })
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
+    if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
+      stats.aborted = true
+      stats.warnings.push('0323: orçamento esgotado durante fetch (abort limpo)')
+      return
+    }
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     for (const row of result.rows) {
+      if (deadlineAt != null && Date.now() >= deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0323: orçamento esgotado após ${stats.purchases_enriched} compras (abort limpo)`,
+        )
+        break
+      }
       const purchase = normalizeStockPurchaseRow(row)
       if (!purchase) continue
       const enriched = await enrichMovementWithPurchaseOrigin(purchase)
@@ -348,7 +388,7 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
 }
 
 /** Valorização (0045/0242/0243/0142) — só snapshot bruto; normalização acontece na leitura (stock.ts). */
-async function syncValuation(stats: StockSyncStats, syncRunId: string) {
+async function syncValuation(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
   const site = avecSiteParam()
   const jobs: { mapper: string; params: AvecReportParams }[] = [
     { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', site, limit: 250 } },
@@ -359,9 +399,19 @@ async function syncValuation(stats: StockSyncStats, syncRunId: string) {
   for (const job of jobs) {
     const id = reportId(job.mapper)
     if (!id) continue
+    if (deadlineAt != null && Date.now() >= deadlineAt) {
+      stats.warnings.push(`${id}: pulado — orçamento de tempo esgotado`)
+      stats.aborted = true
+      return
+    }
     try {
-      const result = await fetchAllAvecReport(id, job.params)
+      const result = await fetchAllAvecReport(id, job.params, undefined, { deadlineAt })
       if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
+      if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
+        stats.aborted = true
+        stats.warnings.push(`${id}: orçamento esgotado durante fetch (abort limpo)`)
+        return
+      }
       await snapshotSafe(id, job.params, result.rows, stats, syncRunId, true)
     } catch (e) {
       stats.errors.push(`${id} (valorização): ${e instanceof Error ? e.message : String(e)}`)
@@ -402,7 +452,8 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   })
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
-  const deadlineAt = mode === 'fast' ? Date.now() + STOCK_FAST_BUDGET_MS : null
+  const deadlineAt =
+    Date.now() + (mode === 'fast' ? STOCK_FAST_BUDGET_MS : STOCK_FULL_BUDGET_MS)
   const pageOpts = {
     maxPages: mode === 'fast' ? STOCK_FAST_MAX_PAGES : 40,
     pageLimit: mode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
@@ -417,9 +468,9 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     await syncPositions(stats, run.id, pageOpts)
 
     if (mode === 'full') {
-      await syncMovements(stats, run.id)
-      await syncPurchaseOrigin(stats, run.id)
-      await syncValuation(stats, run.id)
+      await syncMovements(stats, run.id, deadlineAt)
+      await syncPurchaseOrigin(stats, run.id, deadlineAt)
+      await syncValuation(stats, run.id, deadlineAt)
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch {

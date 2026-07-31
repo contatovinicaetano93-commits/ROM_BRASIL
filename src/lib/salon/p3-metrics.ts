@@ -19,6 +19,11 @@ export async function ensureSalonP3Table() {
   if (!p3TableReady) {
     p3TableReady = (async () => {
       const sql = getSql()
+      const exists = (await sql`
+        select to_regclass('public.salon_p3_daily') is not null as ok
+      `) as { ok: boolean }[]
+      if (exists[0]?.ok) return
+
       await sql`
         create table if not exists salon_p3_daily (
           day date primary key,
