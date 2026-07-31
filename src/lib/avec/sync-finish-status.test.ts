@@ -78,6 +78,14 @@ describe('resolveAvecFinishStatus', () => {
         hadCoreRows: true,
       }),
     ).toBe('partial')
+    expect(
+      resolveAvecFinishStatus({
+        errorCount: 1,
+        hardWarningCount: 0,
+        aborted: true,
+        hadCoreRows: false,
+      }),
+    ).toBe('partial')
   })
 
   it('catch: partial se teve progresso ou abort; senão error', () => {

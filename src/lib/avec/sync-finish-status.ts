@@ -40,7 +40,8 @@ export function resolveAvecFinishStatus(
   if (input.thrown) {
     return input.hadCoreRows || input.aborted ? 'partial' : 'error'
   }
-  if (input.errorCount > 0 && !input.hadCoreRows) return 'error'
+  // Abort limpo sem core ainda é partial (dados parciais / orçamento).
+  if (input.errorCount > 0 && !input.hadCoreRows && !input.aborted) return 'error'
   if (input.errorCount > 0 || input.hardWarningCount > 0 || input.aborted) {
     return 'partial'
   }
