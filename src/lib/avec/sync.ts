@@ -34,6 +34,22 @@ import {
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
+  avecHadCoreProgress,
+  resolveAvecFinishStatus,
+} from '@/lib/avec/sync-finish-status'
+import {
+  getActiveSyncDeadlineAt,
+  isSyncBudgetExhausted,
+  noteSyncBudgetExhausted,
+  setActiveSyncDeadlineAt,
+} from '@/lib/avec/sync-budget'
+
+export {
+  getActiveSyncDeadlineAt,
+  isSyncBudgetExhausted,
+  noteSyncBudgetExhausted,
+} from '@/lib/avec/sync-budget'
+import {
   normalizeClientRow,
   normalizeAppointmentRow,
   normalizeAttendanceRow,
@@ -266,17 +282,13 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
 const AVEC_SYNC_BUDGET_MS = 720_000
 
-/** Deadline do sync em voo — fetchAllAvecReport + loops checam isto. */
-let activeSyncDeadlineAt: number | null = null
-
+/** @deprecated use isSyncBudgetExhausted — alias interno legado */
 function syncBudgetExhausted(): boolean {
-  return activeSyncDeadlineAt != null && Date.now() >= activeSyncDeadlineAt
+  return isSyncBudgetExhausted()
 }
 
 function markSyncBudgetExhausted(stats: AvecSyncStats, stage: string) {
-  if (stats.aborted) return
-  stats.aborted = true
-  stats.warnings.push(`sync: orçamento esgotado em ${stage} (abort limpo)`)
+  noteSyncBudgetExhausted(stats, stage)
 }
 
 async function fetchSyncReport(
@@ -285,7 +297,7 @@ async function fetchSyncReport(
   maxPages?: number,
 ) {
   return fetchAllAvecReport(reportId, params, maxPages, {
-    deadlineAt: activeSyncDeadlineAt,
+    deadlineAt: getActiveSyncDeadlineAt(),
   })
 }
 
@@ -613,8 +625,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             ? 'agenda: reconcile de órfãos adiado — sync abortou no orçamento (keep-set incompleto)'
             : 'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
         )
-        // KPI de cabeças ainda é útil mesmo sem limpar órfãos.
-        await upsertSalonMetrics(today, { appointments: todayBookedHeads.size })
+        // Não grava appointments parcial — keep-set incompleto distorce o KPI (paridade IG).
       } else {
         const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
         if (cleared > 0) {
@@ -848,6 +859,10 @@ async function syncRevenue(
   const days = listDaysInclusive(from, today)
 
   for (const day of days) {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, 'revenue')
+      break
+    }
     const params = {
       inicio: isoToBr(day),
       fim: isoToBr(day),
@@ -921,7 +936,8 @@ export async function syncCancellationsRange(
   to: string,
   stats: AvecSyncStats,
   syncRunId?: string,
-  opts?: { zeroEmptyDays?: boolean },
+  // Mantido p/ callers de backfill — sync diário já grava cancelled=0 sempre (paridade IG).
+  _opts?: { zeroEmptyDays?: boolean },
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
@@ -936,6 +952,10 @@ export async function syncCancellationsRange(
   const days = listDaysInclusive(from, to)
 
   for (const day of days) {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, 'cancellations')
+      break
+    }
     const params = {
       inicio: isoToBr(day),
       fim: isoToBr(day),
@@ -965,12 +985,8 @@ export async function syncCancellationsRange(
         }
       }
 
-      // zeroEmptyDays: grava cancelled=0 nos dias sem evento (backfill limpa stale).
-      if (cancelled > 0 || opts?.zeroEmptyDays) {
-        await upsertSalonMetrics(day, {
-          cancelled: cancelled > 0 || opts?.zeroEmptyDays ? cancelled : undefined,
-        })
-      }
+      // Sempre grava cancelled (inclui 0) — paridade IG; evita KPI stale em dias vazios.
+      await upsertSalonMetrics(day, { cancelled })
     } catch (e) {
       stats.errors.push(`cancelamentos ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -989,19 +1005,25 @@ async function syncNoShows0248(
   const today = todayIso()
   const daysBack = mode === 'fast' ? 1 : 7
   const from = addCalendarDaysYmd(today, -daysBack)
-  await syncNoShows0248Range(from, today, stats, syncRunId, { zeroTodayIfEmpty: true })
+  await syncNoShows0248Range(from, today, stats, syncRunId)
 }
 
 /**
  * No-shows 0248 no intervalo [from, to].
+ * Zera no_shows em todo dia do intervalo sem falta (paridade IG).
  */
 export async function syncNoShows0248Range(
   from: string,
   to: string,
   stats: AvecSyncStats,
   syncRunId?: string,
-  opts?: { zeroTodayIfEmpty?: boolean; zeroEmptyDays?: boolean },
+  // Mantido p/ callers de backfill — sync diário já zera o range inteiro (paridade IG).
+  _opts?: { zeroTodayIfEmpty?: boolean; zeroEmptyDays?: boolean },
 ) {
+  if (syncBudgetExhausted()) {
+    markSyncBudgetExhausted(stats, 'no-shows-0248')
+    return
+  }
   const params = {
     inicio: isoToBr(from),
     fim: isoToBr(to),
@@ -1032,21 +1054,21 @@ export async function syncNoShows0248Range(
     }
 
     for (const [day, no_shows] of byDay) {
+      if (syncBudgetExhausted()) {
+        markSyncBudgetExhausted(stats, 'no-shows-0248 upsert')
+        break
+      }
       await upsertSalonMetrics(day, { no_shows })
     }
 
-    if (opts?.zeroEmptyDays) {
-      // Backfill: zera no_shows em todo dia do intervalo sem falta (limpa stale).
-      for (const day of listDaysInclusive(from, to)) {
-        if (!byDay.has(day)) {
-          await upsertSalonMetrics(day, { no_shows: 0 })
-        }
+    // Zera dias do intervalo sem falta (paridade IG; limpa stale após correção Avec).
+    for (const day of listDaysInclusive(from, to)) {
+      if (syncBudgetExhausted()) {
+        markSyncBudgetExhausted(stats, 'no-shows-0248 zero')
+        break
       }
-    } else {
-      // Sync diário: zera só o dia de hoje (evita manter stale do fast).
-      const today = todayIso()
-      if (opts?.zeroTodayIfEmpty && !byDay.has(today) && today >= from && today <= to) {
-        await upsertSalonMetrics(today, { no_shows: 0 })
+      if (!byDay.has(day)) {
+        await upsertSalonMetrics(day, { no_shows: 0 })
       }
     }
   } catch (e) {
@@ -1212,7 +1234,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   const run = await beginAvecSyncRun(mode, stats)
   const syncRunId = run.id
   beginSyncServiceCache()
-  activeSyncDeadlineAt = Date.now() + AVEC_SYNC_BUDGET_MS
+  setActiveSyncDeadlineAt(Date.now() + AVEC_SYNC_BUDGET_MS)
   attendancesCoveredReturning = false
   attendancesFetched0002 = false
 
@@ -1320,19 +1342,13 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
     // Truncamento / unit-id / órfãos ficam em warnings (UI), mas não impedem status ok.
     const hardWarnings = hardAvecSyncWarnings(stats.warnings)
-    const hadCoreRows =
-      stats.clients_upserted +
-        stats.appointments_synced +
-        stats.attendances_synced +
-        stats.revenue_rows +
-        stats.cancellation_rows >
-      0
-    const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 && !hadCoreRows
-        ? 'error'
-        : stats.errors.length > 0 || hardWarnings.length > 0 || Boolean(stats.aborted)
-          ? 'partial'
-          : 'ok'
+    const hadCoreRows = avecHadCoreProgress(stats)
+    const status = resolveAvecFinishStatus({
+      errorCount: stats.errors.length,
+      hardWarningCount: hardWarnings.length,
+      aborted: Boolean(stats.aborted),
+      hadCoreRows,
+    })
 
     // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
@@ -1356,9 +1372,16 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
-    return finishAvecSyncRun(run.id, 'error', stats, msg)
+    const status = resolveAvecFinishStatus({
+      errorCount: stats.errors.length,
+      hardWarningCount: 0,
+      aborted: Boolean(stats.aborted),
+      hadCoreRows: avecHadCoreProgress(stats),
+      thrown: true,
+    })
+    return finishAvecSyncRun(run.id, status, stats, msg)
   } finally {
-    activeSyncDeadlineAt = null
+    setActiveSyncDeadlineAt(null)
     endSyncServiceCache()
   }
 }

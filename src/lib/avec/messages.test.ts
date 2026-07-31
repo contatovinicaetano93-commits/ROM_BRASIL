@@ -160,6 +160,8 @@ describe('isSoftAvecSyncWarning', () => {
       ),
     ).toBe(true)
     expect(isSoftAvecSyncWarning('TM 0223: nenhum tempo cadastrado')).toBe(true)
+    expect(isSoftAvecSyncWarning('heal importado: timeout no update')).toBe(true)
+    expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
     expect(
       isSoftAvecPeripheralError('P1 0107: The operation was aborted due to timeout'),
@@ -178,6 +180,8 @@ describe('isSoftAvecSyncWarning', () => {
     expect(
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
+        'heal importado: falha',
+        'snapshot 0051: erro',
         'Falha ao gravar snapshot',
         'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
         'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
