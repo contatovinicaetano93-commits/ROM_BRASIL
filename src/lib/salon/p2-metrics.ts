@@ -247,3 +247,28 @@ export async function upsertSalonP2Daily(
       updated_at = now()
   `
 }
+
+/** Corrige jsonb legado gravado como string (JSON.stringify + postgres.js). */
+export async function repairSalonP2JsonbEncoding(): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    update salon_p2_daily set
+      booking_channels = case
+        when jsonb_typeof(booking_channels) = 'string' then (booking_channels #>> '{}')::jsonb
+        else booking_channels
+      end,
+      packages = case
+        when jsonb_typeof(packages) = 'string' then (packages #>> '{}')::jsonb
+        else packages
+      end,
+      payment_mix = case
+        when jsonb_typeof(payment_mix) = 'string' then (payment_mix #>> '{}')::jsonb
+        else payment_mix
+      end
+    where jsonb_typeof(booking_channels) = 'string'
+       or jsonb_typeof(packages) = 'string'
+       or jsonb_typeof(payment_mix) = 'string'
+    returning day
+  `) as { day: string }[]
+  return rows.length
+}

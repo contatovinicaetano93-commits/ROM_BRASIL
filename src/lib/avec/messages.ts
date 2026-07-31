@@ -75,15 +75,17 @@ export function formatAvecErrorList(errors: string[]): string[] {
  * Truncamento / unit id ausente ainda aparecem em stats.warnings na UI.
  */
 export function isSoftAvecSyncWarning(warning: string): boolean {
-  if (/AVEC_SYNC_MAX_PAGES/i.test(warning)) return true
-  if (/atingiu o limite de \d+ páginas/i.test(warning)) return true
+  // Truncamento de páginas: soft SÓ para catálogo/estoque/TM.
+  // Core (0002/0051/caixa/0248/…) incompleto → HARD (sync partial).
+  if (/atingiu o limite de \d+ páginas/i.test(warning)) {
+    return /\((0223|0004|0046|0149|0044)\)/.test(warning)
+  }
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
   // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
   if (/TM 0223:/i.test(warning)) return true
-  // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD — ver hardWarnings.
-  // Só soft: aviso genérico de paginação (AVEC_SYNC_MAX_PAGES) já coberto acima.
+  // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
   // Catálogo 0004 adiado de propósito (ritmo leve).
   if (/Catálogo 0004 adiado/i.test(warning)) return true
   // P3 sem taxa explícita — informativo.

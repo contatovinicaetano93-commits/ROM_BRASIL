@@ -195,3 +195,28 @@ export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
     return null
   }
 }
+
+/** Corrige jsonb legado gravado como string (JSON.stringify + postgres.js). */
+export async function repairSalonP1JsonbEncoding(): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    update salon_p1_daily set
+      professionals = case
+        when jsonb_typeof(professionals) = 'string' then (professionals #>> '{}')::jsonb
+        else professionals
+      end,
+      services = case
+        when jsonb_typeof(services) = 'string' then (services #>> '{}')::jsonb
+        else services
+      end,
+      acquisition = case
+        when jsonb_typeof(acquisition) = 'string' then (acquisition #>> '{}')::jsonb
+        else acquisition
+      end
+    where jsonb_typeof(professionals) = 'string'
+       or jsonb_typeof(services) = 'string'
+       or jsonb_typeof(acquisition) = 'string'
+    returning day
+  `) as { day: string }[]
+  return rows.length
+}
