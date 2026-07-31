@@ -8,6 +8,7 @@ import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
   normalizePhone,
+  normalizeRevenueRow,
   normalizeStockMovementRow,
   parseOptionalMoney,
   parseServiceTempoMinutes,
@@ -245,5 +246,18 @@ describe('normalizeP1AcquisitionRow 0003', () => {
 
   it('descarta linha sem clientes', () => {
     expect(normalizeP1AcquisitionRow({ como_conheceu: 'Instagram', qtd_clientes: 0 })).toBeNull()
+  })
+})
+
+describe('normalizeRevenueRow 0088', () => {
+  it('prioriza faturamento/comandaQtd sobre valor/total auxiliares', () => {
+    const row = normalizeRevenueRow({
+      faturamento: 1334,
+      comandaQtd: 1,
+      valor: 0.01,
+      total: 0.01,
+      data: '2026-07-31',
+    })
+    expect(row).toEqual({ day: '2026-07-31', revenue: 1334, attended: 1 })
   })
 })
