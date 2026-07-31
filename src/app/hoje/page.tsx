@@ -172,13 +172,17 @@ export default function HojePage() {
             value={
               loading
                 ? '—'
-                : salon?.revenue
-                  ? formatCurrency(salon.revenue)
-                  : '—'
+                : salon?.revenue == null
+                  ? '—'
+                  : formatCurrency(Number(salon.revenue))
             }
             loading={loading}
             source={avecSource}
-            warn={!loading && !salon?.revenue && (syncUi?.status === 'partial' || syncUi?.status === 'error')}
+            warn={
+              !loading &&
+              (salon?.revenue == null || Number(salon.revenue) === 0) &&
+              (syncUi?.status === 'partial' || syncUi?.status === 'error')
+            }
           />
         )}
         <KpiCard
@@ -192,7 +196,17 @@ export default function HojePage() {
         <KpiCard
           icon={<TrendingUp size={16} />}
           label="Atendidos"
-          value={loading ? '—' : salon?.attended == null ? '—' : String(salon.attended)}
+          value={
+            loading
+              ? '—'
+              : salon?.attended == null
+                ? '—'
+                : // Sync morto costuma gravar 0 falso — não fingir caixa zerado.
+                  salon.attended === 0 &&
+                    (syncUi?.status === 'error' || syncUi?.status === 'partial')
+                  ? '—'
+                  : String(salon.attended)
+          }
           loading={loading}
           source={avecSource}
           hint="Visitas/comandas fechadas no caixa Avec"
