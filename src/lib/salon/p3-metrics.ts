@@ -111,3 +111,18 @@ function addDaysIso(day: string, delta: number): string {
   d.setUTCDate(d.getUTCDate() + delta)
   return d.toISOString().slice(0, 10)
 }
+
+/** Corrige jsonb legado gravado como string (JSON.stringify + postgres.js). */
+export async function repairSalonP3JsonbEncoding(): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    update salon_p3_daily set
+      revenue_curve = case
+        when jsonb_typeof(revenue_curve) = 'string' then (revenue_curve #>> '{}')::jsonb
+        else revenue_curve
+      end
+    where jsonb_typeof(revenue_curve) = 'string'
+    returning day
+  `) as { day: string }[]
+  return rows.length
+}

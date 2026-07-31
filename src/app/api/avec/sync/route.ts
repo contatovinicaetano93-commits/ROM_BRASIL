@@ -9,6 +9,9 @@ import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
+import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
+import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
+import { repairSalonP3JsonbEncoding } from '@/lib/salon/p3-metrics'
 
 /** Sync Avec pode demorar (vários relatórios). Pro permite até 800s. */
 export const maxDuration = 500
@@ -100,6 +103,19 @@ async function executeSync(
           return err(dbQuotaUserMessage(purgeErr), 503)
         }
         throw purgeErr
+      }
+    }
+
+    // Repair jsonb legado só no full — no fast a cada 20min era custo morto.
+    if (effectiveMode === 'full') {
+      try {
+        await Promise.all([
+          repairSalonP1JsonbEncoding(),
+          repairSalonP2JsonbEncoding(),
+          repairSalonP3JsonbEncoding(),
+        ])
+      } catch {
+        // não bloqueia sync
       }
     }
 
