@@ -143,7 +143,7 @@ export default function HojePage() {
             {syncUi.status === 'error' && syncUi.detail && (
               <p className="max-w-[16rem] text-right text-[0.65rem] text-danger">{syncUi.detail}</p>
             )}
-            {syncUi.warnings.length > 0 && syncUi.status !== 'error' && (
+            {syncUi.warnings.length > 0 && syncUi.status === 'partial' && (
               <p className="max-w-[16rem] text-right text-[0.65rem] text-warning">
                 Sync incompleto — {syncUi.warnings.length} aviso(s)
               </p>
@@ -182,6 +182,7 @@ export default function HojePage() {
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={avecSource}
+          hint="Linhas da agenda (abertos + pagos) — não é o mesmo que Atendidos"
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -189,6 +190,7 @@ export default function HojePage() {
           value={loading ? '—' : salon?.attended == null ? '—' : String(salon.attended)}
           loading={loading}
           source={avecSource}
+          hint="Clientes únicos com atendimento no dia (Avec 0002/caixa)"
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
@@ -478,6 +480,7 @@ function KpiCard({
   loading,
   warn,
   source,
+  hint,
 }: {
   icon: React.ReactNode
   label: string
@@ -486,10 +489,13 @@ function KpiCard({
   warn?: boolean
   /** Fonte curta (Avec / proxy / incompleto / desatualizado) — não polui o hero. */
   source?: string
+  /** Esclarece o que o número conta (ex.: agendados ≠ atendidos). */
+  hint?: string
 }) {
   return (
     <div
       className={`rounded-2xl border p-4 ${warn ? 'border-warning/40 bg-warning/10' : 'border-border bg-card'}`}
+      title={hint}
     >
       <div className="mb-2 flex items-center gap-1.5 text-muted">
         {icon}
@@ -503,6 +509,7 @@ function KpiCard({
           {source ? (
             <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
           ) : null}
+          {hint ? <p className="mt-0.5 text-[0.58rem] leading-snug text-muted/60">{hint}</p> : null}
         </>
       )}
     </div>
