@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
 
     const payload = await ttlGetOrSet(
-      `hoje:v3:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v4:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
       HOJE_CACHE_TTL_MS,
       async () => {
         const sql = getSql()
