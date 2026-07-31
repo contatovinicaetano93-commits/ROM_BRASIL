@@ -20,7 +20,7 @@ describe('buildAftercareWhatsAppMessage', () => {
       contactName: 'Bia',
       serviceName: 'Corte',
       cadenceDays: null,
-      bookingLink: null,
+      bookingLink: '',
     })
     expect(text).not.toContain('dias')
     expect(text).toContain('responder esta mensagem')

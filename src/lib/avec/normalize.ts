@@ -1,5 +1,7 @@
 // Normalização defensiva — colunas dos relatórios Avec variam por unidade/versão.
 
+import { createHash } from 'node:crypto'
+
 function pick(row: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
     const v = row[k]
@@ -1031,6 +1033,7 @@ export interface NormalizedStockMovement {
   cost: number | null
   reason: string | null
   occurredAt: string | null
+  dedupKey?: string
 }
 
 const ENTRADA_HINTS = ['entrada', 'compra', 'recebimento', 'devolucao', 'devolução', 'ajuste_positivo']
@@ -1047,6 +1050,27 @@ function inferMovementType(row: Record<string, unknown>): 'entrada' | 'saida' | 
   if (ENTRADA_HINTS.some((h) => reason.includes(h))) return 'entrada'
   if (SAIDA_HINTS.some((h) => reason.includes(h))) return 'saida'
   return null
+}
+
+function stockMovementDedupKey(parts: {
+  avecProductId: string
+  type: 'entrada' | 'saida'
+  quantity: number
+  datePart: string | null
+  timePart: string | null
+  reason: string | null
+  cost: number | null
+}): string {
+  const raw = [
+    parts.avecProductId,
+    parts.type,
+    String(parts.quantity),
+    parts.datePart ?? '',
+    parts.timePart ?? '',
+    parts.reason ?? '',
+    parts.cost != null ? String(parts.cost) : '',
+  ].join('|')
+  return createHash('sha1').update(raw).digest('hex').slice(0, 24)
 }
 
 /** 0044 — Entradas e saídas por motivos (fonte mestra do histórico de movimentação). */
@@ -1081,8 +1105,17 @@ export function normalizeStockMovementRow(row: Record<string, unknown>): Normali
   const datePart = pick(row, ['data', 'data_movimento', 'dia', 'date', 'datacad'])
   const timePart = pick(row, ['hora', 'horario', 'horário'])
   const occurredAt = parseAvecDateTime(datePart, timePart)
+  const dedupKey = stockMovementDedupKey({
+    avecProductId,
+    type,
+    quantity,
+    datePart,
+    timePart,
+    reason,
+    cost,
+  })
 
-  return { avecProductId, name, type, quantity, cost, reason, occurredAt }
+  return { avecProductId, name, type, quantity, cost, reason, occurredAt, dedupKey }
 }
 
 export interface NormalizedStockPurchase {

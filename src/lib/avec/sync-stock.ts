@@ -316,8 +316,8 @@ async function syncMovements(stats: StockSyncStats, syncRunId: string, deadlineA
     stats.aborted = true
     return
   }
-  // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
-  // produto+tipo+quantidade+data+origem em applyStockMovement).
+  // Janela com sobreposição (3 dias) — reprocessar não duplica (fingerprint
+  // Avec em applyStockMovement).
   const { inicio, fim } = periodRange(3, 0)
   const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
