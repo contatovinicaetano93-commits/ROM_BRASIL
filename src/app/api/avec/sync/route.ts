@@ -189,7 +189,7 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/20 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '5,25,45 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: { schedule: '20 10,22 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         purge: {
           schedule: '10 7 * * *',

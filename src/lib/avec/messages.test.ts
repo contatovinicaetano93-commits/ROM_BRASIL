@@ -128,6 +128,7 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('AVEC_UNIT_ID vazio — sync sem filtro')).toBe(true)
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
+    expect(isSoftAvecSyncWarning('P1 0107 truncado: 5000 linhas (teto de paginação) — UI deve mostrar 5000+')).toBe(true)
     expect(isSoftAvecSyncWarning('TM 0223: nenhum tempo cadastrado')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
     expect(
