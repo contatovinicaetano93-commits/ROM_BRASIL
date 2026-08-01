@@ -6,6 +6,7 @@ import {
   formatAvecUserMessage,
   hardAvecSyncWarnings,
   isAvecTokenExpiredError,
+  isCleanBudgetAbortPartial,
   isSoftAvecPeripheralError,
   isSoftAvecSyncWarning,
   isSoftOnlyPartialAvecRun,
