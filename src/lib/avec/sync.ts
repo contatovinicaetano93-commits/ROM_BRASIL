@@ -659,10 +659,8 @@ function servicesCreatedRecently(service: { created_at: string }) {
   return Date.now() - new Date(service.created_at).getTime() < 5000
 }
 
-/** True quando syncAttendances já gravou returning (+ last_done no full) — evita 2º fetch 0002. */
+/** True quando syncAttendances já gravou mix (+ last_done no full) — evita 2º fetch 0002. */
 let attendancesCoveredReturning = false
-/** True quando syncAttendances já buscou 0002 — truncado ou não, não refaz fallback. */
-let attendancesFetched0002 = false
 
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const today = todayIso()
@@ -678,7 +676,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     limit: 250,
   }
   const result = await fetchSyncReport('0002', params)
-  attendancesFetched0002 = true
   warnIfTruncated(stats, '0002', result)
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
@@ -730,17 +727,41 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         const service = await findOrCreateService(contact.id, att.serviceName)
         const isNew = servicesCreatedRecently(service)
         if (isNew) stats.services_created++
-        await markServiceDone(service.id, {
-          doneAt: att.attendedAt,
-          professionalName: att.professional,
-          lastPrice: att.price,
-        })
+        // 0002 desta unidade só manda ultima_visita (data) — sem hora. Não sobrescrever
+        // o horário do 0051 Pago com meia-noite/placeholder.
+        const doneAt = att.endedAt ?? att.startedAt ?? null
+        if (doneAt) {
+          await markServiceDone(service.id, {
+            doneAt,
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          stats.services_completed++
+        } else if (
+          service.scheduled_at &&
+          toSalonDateIso(service.scheduled_at) === today &&
+          att.attendedAt &&
+          toSalonDateIso(att.attendedAt) === today
+        ) {
+          // 0002 sem hora: conclui mantendo o wall-clock do 0051 (não inventa meia-noite).
+          await markServiceDone(service.id, {
+            doneAt: service.scheduled_at,
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          stats.services_completed++
+        } else if (att.professional || att.price != null) {
+          await patchServiceVisitMeta(service.id, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+            allowLastPrice: true,
+          })
+        }
         if (att.professional && isNailService(att.serviceName)) {
           await setPreferredManicurist(contact.id, att.professional)
         } else if (att.professional && isHairService(att.serviceName)) {
           await setPreferredHairstylist(contact.id, att.professional)
         }
-        stats.services_completed++
       }
 
       stats.attendances_synced++
@@ -761,10 +782,13 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     )
   } else {
     if (mode === 'fast') {
-      await upsertSalonMetrics(today, {
-        new_clients: newByDay.get(today) ?? 0,
-        returning_clients: returningByDay.get(today) ?? 0,
-      })
+      // Fast 0002 cobre ontem+hoje — gravar mix dos dois dias (não só today).
+      for (const day of [addCalendarDaysYmd(today, -1), today]) {
+        await upsertSalonMetrics(day, {
+          new_clients: newByDay.get(day) ?? 0,
+          returning_clients: returningByDay.get(day) ?? 0,
+        })
+      }
     } else {
       const days = listDaysInclusive(addCalendarDaysYmd(today, -7), today)
       for (const day of days) {
@@ -1111,7 +1135,9 @@ async function syncReturningFrom0002(
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
-  if (attendancesFetched0002 || attendancesCoveredReturning) return
+  // Só pula se o dump 0002 já gravou mix. Truncado/abort NÃO seta
+  // attendancesCoveredReturning — o fallback ainda precisa rodar.
+  if (attendancesCoveredReturning) return
   if (syncBudgetExhausted()) {
     markSyncBudgetExhausted(stats, 'recorrentes 0002')
     return
@@ -1149,10 +1175,12 @@ async function syncReturningFrom0002(
       }
     }
     if (mode === 'fast') {
-      await upsertSalonMetrics(today, {
-        new_clients: newByDay.get(today) ?? 0,
-        returning_clients: returningByDay.get(today) ?? 0,
-      })
+      for (const day of [addCalendarDaysYmd(today, -1), today]) {
+        await upsertSalonMetrics(day, {
+          new_clients: newByDay.get(day) ?? 0,
+          returning_clients: returningByDay.get(day) ?? 0,
+        })
+      }
     } else {
       for (const day of listDaysInclusive(from, today)) {
         await upsertSalonMetrics(day, {
@@ -1161,6 +1189,7 @@ async function syncReturningFrom0002(
         })
       }
     }
+    attendancesCoveredReturning = true
   } catch (e) {
     stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -1270,7 +1299,6 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   beginSyncServiceCache()
   setActiveSyncDeadlineAt(Date.now() + AVEC_SYNC_BUDGET_MS)
   attendancesCoveredReturning = false
-  attendancesFetched0002 = false
 
   try {
     await healImportadoStatus(stats)

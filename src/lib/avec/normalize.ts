@@ -1,6 +1,7 @@
 // Normalização defensiva — colunas dos relatórios Avec variam por unidade/versão.
 
 import { createHash } from 'node:crypto'
+import { toSalonDateIso } from '@/lib/salon/format'
 
 function pick(row: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
@@ -456,7 +457,7 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
     Number(pick(row, ['comandaQtd', 'atendimentos', 'comandas', 'qtd', 'quantidade', 'count']) ?? 0) ||
     0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
-  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
   if (revenue <= 0 && attended <= 0) return null
   return { day, revenue, attended }
 }
@@ -464,7 +465,7 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
 export function normalizeCancellationRow(row: Record<string, unknown>): NormalizedAvecCancellation | null {
   const status = (pick(row, ['status', 'situacao', 'situação']) ?? '').toLowerCase()
   const datePart = pick(row, ['data', 'data_agendamento', 'dia', 'date'])
-  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
   const isNoShow = status.includes('falta') || status.includes('no-show') || status.includes('noshow')
   const isCancelled = status.includes('cancel')
 
