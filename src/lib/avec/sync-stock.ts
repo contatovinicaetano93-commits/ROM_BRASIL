@@ -30,6 +30,7 @@ import {
   upsertStockProductFromPosition,
   createStockDimCache,
   applyStockAlert,
+  loadStockProductNameIndex,
   resolveStaleStockAlerts,
   applyStockMovement,
   enrichMovementWithPurchaseOrigin,
@@ -278,6 +279,10 @@ async function syncAlerts(
       await snapshotSafe(id, params, result.rows, stats, syncRunId)
     }
 
+    // 1 query de catálogo + cache de dimensões — evita SELECT * em stock_products
+    // e re-consulta de categoria a cada linha do 0046 (estourava o orçamento).
+    const productNameIndex = await loadStockProductNameIndex()
+    const alertDimCache = createStockDimCache()
     const seenAvecProductIds: string[] = []
     let active = 0
     for (const row of result.rows) {
@@ -290,7 +295,10 @@ async function syncAlerts(
       }
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
-      const applied = await applyStockAlert(alert)
+      const applied = await applyStockAlert(alert, {
+        productNameIndex,
+        dimCache: alertDimCache,
+      })
       if (!applied) continue
       seenAvecProductIds.push(applied.avecProductId)
       active++
