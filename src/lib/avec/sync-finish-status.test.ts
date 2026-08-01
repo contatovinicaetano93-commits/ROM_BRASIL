@@ -42,7 +42,7 @@ describe('resolveAvecFinishStatus', () => {
     ).toBe('ok')
   })
 
-  it('partial com hard warning ou abort', () => {
+  it('partial com hard warning; abort sem core', () => {
     expect(
       resolveAvecFinishStatus({
         errorCount: 0,
@@ -59,6 +59,17 @@ describe('resolveAvecFinishStatus', () => {
         hadCoreRows: false,
       }),
     ).toBe('partial')
+  })
+
+  it('ok quando abort limpo com core e sem hard warning', () => {
+    expect(
+      resolveAvecFinishStatus({
+        errorCount: 0,
+        hardWarningCount: 0,
+        aborted: true,
+        hadCoreRows: true,
+      }),
+    ).toBe('ok')
   })
 
   it('error só quando erros sem progresso core', () => {

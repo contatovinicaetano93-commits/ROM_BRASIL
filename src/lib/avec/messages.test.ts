@@ -185,11 +185,28 @@ describe('isSoftAvecSyncWarning', () => {
         'Falha ao gravar snapshot',
         'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
         'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
+        'sync: orçamento esgotado em appointments (abort limpo)',
+        'agenda: reconcile/KPI adiado — sync abortou no orçamento (keep-set incompleto)',
       ]),
     ).toEqual([
       'Falha ao gravar snapshot',
       'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
       'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
     ])
+    expect(
+      isCleanBudgetAbortPartial({
+        status: 'partial',
+        created_at: '2026-08-01T22:45:14.000Z',
+        error: null,
+        stats: {
+          aborted: true,
+          errors: [],
+          warnings: [
+            'sync: orçamento esgotado em appointments (abort limpo)',
+            'agenda: reconcile/KPI adiado — sync abortou no orçamento (keep-set incompleto)',
+          ],
+        },
+      }),
+    ).toBe(true)
   })
 })
