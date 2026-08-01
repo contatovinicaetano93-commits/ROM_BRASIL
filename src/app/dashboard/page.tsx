@@ -110,8 +110,23 @@ export default function DashboardPage() {
         // Um lambda: evita waterfall de 4 rotas × pooler max:1.
         const dashRes = await apiFetch(`/api/kpis/dashboard?month=${month}`, {
           cache: 'no-store',
+          timeoutMs: 45_000,
         })
-        const dashJson = await dashRes.json()
+        const raw = await dashRes.text()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let dashJson: { error?: string; data?: any }
+        try {
+          dashJson = raw ? (JSON.parse(raw) as typeof dashJson) : {}
+        } catch {
+          if (cancelled) return
+          setError(
+            dashRes.status === 504 || dashRes.status === 503
+              ? 'Timeout ao carregar (banco/sync ocupado). Atualize em alguns segundos.'
+              : `Resposta inválida da API (${dashRes.status || 'rede'}). Confirme se o banco está configurado.`,
+          )
+          setWarn(null)
+          return
+        }
         if (cancelled) return
         if (dashJson.error) {
           setError(dashJson.error)
