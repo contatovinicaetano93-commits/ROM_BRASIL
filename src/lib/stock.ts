@@ -380,10 +380,12 @@ export async function applyStockAlert(
       const hit = candidates.find((p) => productNameKey(p.name) === target)
       avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
     }
-    // Produto criado agora entra no índice: alertas seguintes com o mesmo nome reaproveitam.
-    if (avecProductId) opts?.productNameIndex?.set(target, avecProductId)
   }
   if (!avecProductId) return null
+
+  // Id-bearing e name-only: alimenta o índice p/ alertas seguintes com o mesmo nome reaproveitarem.
+  const nameKey = productNameKey(alert.name)
+  if (nameKey) opts?.productNameIndex?.set(nameKey, avecProductId)
 
   const rows = (await sql`
     insert into stock_products (avec_product_id, name, category_id, current_qty, minimum_qty, suggested_reposition, last_synced_at)
