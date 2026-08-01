@@ -80,18 +80,29 @@ export function estimateLostRevenue(
 async function sumRevenueAndAttended(
   from: string,
   to: string,
-): Promise<{ revenue: number; attended: number }> {
+): Promise<{ revenue: number | null; attended: number | null }> {
   const sql = getSql()
   const rows = (await sql`
     select
-      coalesce(sum(revenue), 0)::float as revenue,
-      coalesce(sum(attended), 0)::int as attended
+      sum(revenue)::float as revenue,
+      count(revenue)::int as revenue_days,
+      sum(attended)::float as attended,
+      count(attended)::int as attended_days
     from salon_daily_metrics
     where day >= ${from}::date and day <= ${to}::date
-  `) as { revenue: number; attended: number }[]
+  `) as {
+    revenue: number | null
+    revenue_days: number
+    attended: number | null
+    attended_days: number
+  }[]
+  const revenueDays = Number(rows[0]?.revenue_days ?? 0)
+  const attendedDays = Number(rows[0]?.attended_days ?? 0)
   return {
-    revenue: Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100,
-    attended: Number(rows[0]?.attended ?? 0) || 0,
+    // Sem nenhum dia com receita conhecida → null (não inventar R$0 / MoM falso).
+    revenue:
+      revenueDays > 0 ? Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100 : null,
+    attended: attendedDays > 0 ? Number(rows[0]?.attended ?? 0) || 0 : null,
   }
 }
 
@@ -118,8 +129,10 @@ export interface PeriodMonthTotals {
   label: string
   from: string
   to: string
-  revenue: number
-  attended: number
+  /** null = nenhum dia com receita conhecida no intervalo. */
+  revenue: number | null
+  /** null = nenhum dia com atendidos conhecidos no intervalo. */
+  attended: number | null
   cancelled: number
   no_shows: number
   lost_revenue: number | null
@@ -155,9 +168,12 @@ export interface PeriodAnalytics {
   new_clients_period: number | null
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
-  /** Totais do mês em salon_daily_metrics (receita/atendidos). */
-  month_revenue: number
-  month_attended: number
+  /**
+   * Totais do mês em salon_daily_metrics (receita/atendidos).
+   * null = nenhum dia com valor conhecido (ex.: dia 1 sem caixa Avec).
+   */
+  month_revenue: number | null
+  month_attended: number | null
   /** true se a janela atual é MTD (mês corrente). */
   mtd: boolean
   /** Mês anterior alinhado (MTD→mesmo dia; mês fechado→mês cheio). */
@@ -188,9 +204,11 @@ export async function computePeriodAnalytics(opts?: {
   const prevP2 = await getSalonP2DailyNear(prevWindow.to, nearOpts)
   const prevP3 = await getSalonP3DailyNear(prevWindow.to, nearOpts)
   const ticket_avg =
-    totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
+    totals.revenue != null && totals.attended != null && totals.attended > 0
+      ? Math.round((totals.revenue / totals.attended) * 100) / 100
+      : null
   const prevTicket =
-    prevTotals.attended > 0
+    prevTotals.revenue != null && prevTotals.attended != null && prevTotals.attended > 0
       ? Math.round((prevTotals.revenue / prevTotals.attended) * 100) / 100
       : null
   const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals)

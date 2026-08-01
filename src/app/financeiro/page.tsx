@@ -571,7 +571,8 @@ export default function FinanceiroPage() {
     return categories.find((c) => c.id === id)?.name ?? 'Sem categoria'
   }
 
-  const noRevenueYet = Boolean(kpis && kpis.current.revenue === 0)
+  const awaitingCaixa = Boolean(kpis && kpis.current.revenue_source === 'empty')
+  const noRevenueYet = awaitingCaixa || Boolean(kpis && kpis.current.revenue === 0)
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
@@ -669,7 +670,7 @@ export default function FinanceiroPage() {
               <strong>{kpis.current.label}</strong>
               {kpis.current.revenue_source === 'payments_0081'
                 ? ' — receita via fallback 0081 (formas de pagamento), não métricas diárias.'
-                : ' — sem receita nas métricas diárias.'}
+                : ' — aguardando faturamento no Avec (caixa do dia ainda não fechou). Não é falha de sync.'}
             </p>
           )}
           {kpis.previous.revenue_source && kpis.previous.revenue_source !== 'metrics' && (
@@ -707,18 +708,38 @@ export default function FinanceiroPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
         <FinanceKpiCard
           label="Receita"
-          value={loading || !kpis ? '—' : formatCurrency(kpis.current.revenue)}
-          delta={kpis ? fmtDelta(kpis.current.revenue, kpis.previous.revenue) : null}
+          value={
+            loading || !kpis
+              ? '—'
+              : awaitingCaixa
+                ? 'aguardando caixa'
+                : formatCurrency(kpis.current.revenue)
+          }
+          delta={
+            kpis && !awaitingCaixa
+              ? fmtDelta(kpis.current.revenue, kpis.previous.revenue)
+              : null
+          }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
-          positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
+          positive={
+            kpis && !awaitingCaixa
+              ? kpis.current.revenue >= kpis.previous.revenue
+              : null
+          }
           loading={loading}
           source={formatKpiSources('avec', 'rom')}
         />
         <FinanceKpiCard
           label="Atendidos"
-          value={loading || !kpis ? '—' : String(kpis.current.attended ?? 0)}
+          value={
+            loading || !kpis
+              ? '—'
+              : awaitingCaixa
+                ? 'aguardando'
+                : String(kpis.current.attended ?? 0)
+          }
           delta={
-            kpis
+            kpis && !awaitingCaixa
               ? (() => {
                   const diff = (kpis.current.attended ?? 0) - (kpis.previous.attended ?? 0)
                   if (diff === 0) return null
@@ -727,7 +748,11 @@ export default function FinanceiroPage() {
               : null
           }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
-          positive={kpis ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0) : null}
+          positive={
+            kpis && !awaitingCaixa
+              ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0)
+              : null
+          }
           loading={loading}
           source={formatKpiSources('avec')}
         />
@@ -1009,7 +1034,9 @@ export default function FinanceiroPage() {
 
       {!loading && noRevenueYet && (
         <p className="-mt-3 text-xs text-muted">
-          Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.
+          {awaitingCaixa
+            ? 'Aguardando faturamento pago no Avec — margem e fluxo aparecem quando o caixa do dia fechar. Agenda/sync podem já estar ok.'
+            : 'Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.'}
         </p>
       )}
 
