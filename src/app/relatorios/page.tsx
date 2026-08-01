@@ -235,7 +235,7 @@ export default function RelatoriosOverviewPage() {
           <strong>{data.label}</strong>
           {data.finance.revenue_source === 'payments_0081'
             ? ' — receita via fallback 0081 (formas de pagamento), não métricas diárias.'
-            : ' — sem receita nas métricas diárias.'}
+            : ' — aguardando faturamento no Avec (caixa do dia ainda não fechou).'}
         </p>
       )}
 

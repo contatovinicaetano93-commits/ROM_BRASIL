@@ -258,6 +258,13 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
+      {period && !loading && period.month_revenue == null && period.mtd ? (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          Aguardando faturamento pago no Avec neste mês — agenda pode já estar ok; o comparativo MoM
+          aparece quando houver caixa conhecido. Não é falha de sync de receita.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <InsightCard
           icon={<TrendingUp size={15} />}
@@ -265,16 +272,28 @@ export default function DashboardPage() {
           value={
             loading || !period
               ? '—'
-              : period.month_revenue > 0
+              : period.month_revenue != null && period.month_revenue > 0
                 ? formatCurrency(period.month_revenue)
-                : 'sem receita'
+                : period.month_revenue === 0
+                  ? 'sem receita'
+                  : period.mtd
+                    ? 'aguardando caixa'
+                    : 'sem dado'
           }
           compare={momCurrency(period?.month_revenue, period?.previous?.revenue, period?.previous?.label)}
         />
         <InsightCard
           icon={<Users size={15} />}
           label="Atendidos · mês acum."
-          value={loading || !period ? '—' : String(period.month_attended)}
+          value={
+            loading || !period
+              ? '—'
+              : period.month_attended != null
+                ? String(period.month_attended)
+                : period.mtd
+                  ? 'aguardando'
+                  : 'sem dado'
+          }
           compare={momNumber(period?.month_attended, period?.previous?.attended, period?.previous?.label)}
         />
         <InsightCard
