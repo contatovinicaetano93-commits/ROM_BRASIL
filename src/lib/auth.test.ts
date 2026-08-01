@@ -73,8 +73,24 @@ describe('auth dual login', () => {
 
     const adminTok = await createSessionToken('admin', 'admin')
     const staffTok = await createSessionToken('staff', 'staff')
-    expect(adminTok).toHaveLength(64)
-    expect(staffTok).toHaveLength(64)
+    // Formato v2.<expiraEmMs>.<hmac hex de 64 chars>
+    expect(adminTok).toMatch(/^v2\.\d+\.[0-9a-f]{64}$/)
+    expect(staffTok).toMatch(/^v2\.\d+\.[0-9a-f]{64}$/)
     expect(adminTok).not.toEqual(staffTok)
+  })
+
+  it('token de sessão expira e é determinístico para um exp fixo', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+
+    const token = await createSessionToken('admin', 'admin')
+    const exp = Number(token.split('.')[1])
+    expect(exp).toBeGreaterThan(Date.now())
+
+    // Verificação recomputa o esperado a partir do exp do cookie.
+    expect(await createSessionToken('admin', 'admin', exp)).toEqual(token)
+
+    // Trocar o exp muda a assinatura — cookie adulterado não valida.
+    const forged = await createSessionToken('admin', 'admin', exp + 60_000)
+    expect(forged).not.toEqual(token)
   })
 })
