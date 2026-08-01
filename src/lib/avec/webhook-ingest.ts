@@ -19,7 +19,13 @@ import {
   isHairService,
   parseOptionalMoney,
   parseAvecDateTime,
+  defaultCadenceDaysForServiceName,
 } from '@/lib/avec/normalize'
+import { toSalonDateIso } from '@/lib/salon/format'
+import {
+  isAvecOpenStatus,
+  isAvecPaidStatus,
+} from '@/lib/avec/appointment-status'
 import {
   COMANDA_SERVICE_NAME,
   type ScheduleOrigin,
@@ -164,15 +170,13 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
   const datePart = pickStr(data.data, pickNested(agendamento, ['data']))
   const timePart = pickStr(data.hora, pickNested(agendamento, ['hora']))
   const scheduled_at =
-    (scheduledRaw && !Number.isNaN(new Date(scheduledRaw).getTime())
-      ? new Date(scheduledRaw).toISOString()
-      : null) ?? parseAvecDateTime(datePart ?? null, timePart ?? null) ?? undefined
+    parseAvecDateTime(datePart ?? null, timePart ?? null) ??
+    (scheduledRaw ? parseAvecDateTime(scheduledRaw, null) : null) ??
+    undefined
 
   const completedRaw = pickStr(data.completed_at, data.attended_at, data.finalizado_em)
   const completed_at =
-    completedRaw && !Number.isNaN(new Date(completedRaw).getTime())
-      ? new Date(completedRaw).toISOString()
-      : undefined
+    (completedRaw ? parseAvecDateTime(completedRaw, null) : null) ?? undefined
 
   const priceRaw = pickRaw(
     data.price,
@@ -195,9 +199,32 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     perdido: 'perdido',
     finalizado: 'convertido',
     atendido: 'convertido',
+    pago: 'convertido',
+    realizado: 'convertido',
+    realizada: 'convertido',
     cancelado: 'perdido',
+    faltou: 'perdido',
+    falta: 'perdido',
+    ausente: 'perdido',
+    noshow: 'perdido',
+    'no-show': 'perdido',
+    'no show': 'perdido',
   }
-  const status = statusRaw ? statusMap[statusRaw] : undefined
+  let status = statusRaw ? statusMap[statusRaw] : undefined
+  if (
+    !status &&
+    statusRaw &&
+    /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid|cancel/.test(
+      statusRaw,
+    )
+  ) {
+    status = 'perdido'
+  }
+  if (!status && statusRaw) {
+    if (isAvecPaidStatus(statusRaw) && !isAvecOpenStatus(statusRaw)) {
+      status = 'convertido'
+    }
+  }
 
   return {
     event,
@@ -224,6 +251,9 @@ export async function ingestAvecWebhook(rawBody: unknown) {
   const payload = normalizeAvecWebhookBody(rawBody)
   const event = payload.event
 
+  const isCancelledEvent =
+    event === 'appointment.cancelled' || payload.status === 'perdido'
+
   const contact = await upsertContact({
     phone: payload.phone,
     name: payload.name,
@@ -231,20 +261,46 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     channel: 'avec',
     source: 'avec_webhook',
     avecClientId: payload.client_id,
-    status: payload.status,
+    // Cancel: status perdido só depois de checar se ainda há slot aberto.
+    status: isCancelledEvent ? undefined : payload.status,
   })
 
-  if (payload.status) {
+  // Tombstone LGPD: não reescreve serviços, prefs nem eventos com PII.
+  if (contact.anonymized_at) {
+    return { contact_id: contact.id, event, realtime: true as const, anonymized: true as const }
+  }
+
+  if (payload.status && !isCancelledEvent) {
     await updateContact(contact.id, { status: payload.status })
   }
 
-  if (event === 'appointment.cancelled' && payload.service_name) {
+  if (isCancelledEvent) {
     const services = await listServices(contact.id)
-    const service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
-    if (service?.scheduled_at) await clearServiceSchedule(service.id)
-  }
-
-  if (
+    const cancelDay = payload.scheduled_at ? toSalonDateIso(payload.scheduled_at) : null
+    if (payload.service_name) {
+      const service = services.find(
+        (s) => s.name.toLowerCase() === payload.service_name!.toLowerCase(),
+      )
+      if (service?.scheduled_at) {
+        // Com data: só limpa se for o mesmo dia. Sem data: limpa o slot aberto desse serviço.
+        if (!cancelDay || toSalonDateIso(service.scheduled_at) === cancelDay) {
+          await clearServiceSchedule(service.id)
+        }
+      }
+    } else if (cancelDay) {
+      // Sem service_name: limpa só slots abertos do mesmo dia (não apaga futuro).
+      for (const service of services) {
+        if (service.scheduled_at && toSalonDateIso(service.scheduled_at) === cancelDay) {
+          await clearServiceSchedule(service.id)
+        }
+      }
+    }
+    // Só marca perdido se não restar outro horário aberto neste contato.
+    const remaining = await listServices(contact.id)
+    if (!remaining.some((s) => s.scheduled_at)) {
+      await updateContact(contact.id, { status: 'perdido' })
+    }
+  } else if (
     (event === 'appointment.created' || event === 'appointment.updated') &&
     payload.status === 'convertido' &&
     payload.service_name
@@ -255,6 +311,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       service = await addService(contact.id, {
         name: payload.service_name,
         category: guessServiceCategory(payload.service_name),
+        cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
       })
     }
     await markServiceDone(service.id, {
@@ -274,6 +331,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
         service = await addService(contact.id, {
           name: payload.service_name,
           category: guessServiceCategory(payload.service_name),
+          cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
         })
       }
       const origin: ScheduleOrigin =
@@ -284,15 +342,14 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
     }
-  }
-
-  if (event === 'service.completed' && payload.service_name) {
+  } else if (event === 'service.completed' && payload.service_name) {
     const services = await listServices(contact.id)
     let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
     if (!service) {
       service = await addService(contact.id, {
         name: payload.service_name,
         category: guessServiceCategory(payload.service_name),
+        cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
       })
     }
     await markServiceDone(service.id, {

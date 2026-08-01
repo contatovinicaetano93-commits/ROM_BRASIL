@@ -56,7 +56,6 @@ import {
   normalizeRevenueRow,
   normalizeCancellationRow,
   parseAvecDateTime,
-  parseServiceTempoMinutes,
   guessServiceCategory,
   defaultCadenceDaysForServiceName,
   isNailService,
@@ -683,6 +682,8 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   /** Mix do dia (Cérebro NOVOS·RECORRENTES): 0002 total_visitas na ultima_visita. */
   const returningByDay = new Map<string, number>()
   const newByDay = new Map<string, number>()
+  let durationSumMinutes = 0
+  let durationCount = 0
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -706,7 +707,11 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
       const attendedDay = att.attendedAt ? toSalonDateIso(att.attendedAt) : visitDay
       if (!attendedDay || attendedDay < attendanceFrom || attendedDay > today) continue
 
-      // TM cadastrado vem só do 0223 (`syncDurationFrom0223`) — não usar início/fim 0002.
+      // TM do dia: duração real 0002 (início+fim) — 0223 é catálogo sem data.
+      if (att.durationMinutes != null && att.attendedAt && toSalonDateIso(att.attendedAt) === today) {
+        durationSumMinutes += att.durationMinutes
+        durationCount++
+      }
 
       const contact = await upsertInBatch({
         avecClientId: att.avecClientId ?? undefined,
@@ -773,14 +778,20 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     }
   }
 
-  // Mix novos/recorrentes (+ last_done full) no mesmo dump — syncReturningFrom0002 vira no-op.
+  // TM + mix só em dump completo (truncado/abort → não sobrescreve com amostra).
   if (result.truncated || stats.aborted) {
     stats.warnings.push(
       stats.aborted
-        ? 'mix 0002: abort no orçamento — novos/recorrentes não atualizados (evita zerar)'
-        : 'mix 0002: truncado — novos/recorrentes não atualizados (evita zerar)',
+        ? 'mix 0002: abort no orçamento — novos/recorrentes/TM não atualizados (evita zerar)'
+        : 'mix 0002: truncado — novos/recorrentes/TM não atualizados (evita zerar)',
     )
   } else {
+    if (durationCount > 0) {
+      await upsertSalonMetrics(today, {
+        service_duration_sum_minutes: durationSumMinutes,
+        service_duration_count: durationCount,
+      })
+    }
     if (mode === 'fast') {
       // Fast 0002 cobre ontem+hoje — gravar mix dos dois dias (não só today).
       for (const day of [addCalendarDaysYmd(today, -1), today]) {
@@ -872,6 +883,11 @@ function listDaysInclusive(fromIso: string, toIso: string): string[] {
   return out
 }
 
+/** Hoje primeiro — se o budget estourar, prioriza KPI do dia corrente. */
+function listDaysNewestFirst(fromIso: string, toIso: string): string[] {
+  return listDaysInclusive(fromIso, toIso).reverse()
+}
+
 /** Janela de backfill diário: AVEC_REVENUE_DAYS_BACK override; senão fast=1, full=7. */
 function revenueDaysBack(mode: AvecSyncMode): number {
   const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
@@ -907,7 +923,7 @@ async function syncRevenue(
   const today = todayIso()
   const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysInclusive(from, today)
+  const days = listDaysNewestFirst(from, today)
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
@@ -1000,7 +1016,7 @@ export async function syncCancellationsRange(
     return
   }
 
-  const days = listDaysInclusive(from, to)
+  const days = listDaysNewestFirst(from, to)
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
@@ -1025,16 +1041,20 @@ export async function syncCancellationsRange(
         continue
       }
 
-      let cancelled = 0
+      // Cabeças (DISTINCT cliente) — rates vs Agendados; orphan rows sem id somam 1.
+      const cancelledHeads = new Set<string>()
+      let cancelledOrphans = 0
       for (const row of result.rows) {
         const c = normalizeCancellationRow(row)
         if (!c) continue
         stats.cancellation_rows++
         if (!c.day || c.day === day) {
-          cancelled += c.cancelled
-          // c.noShow ignorado — métrica no_shows só via 0248 (paridade IG)
+          if (c.cancelled <= 0) continue
+          if (c.avecClientId) cancelledHeads.add(c.avecClientId)
+          else cancelledOrphans += c.cancelled
         }
       }
+      const cancelled = cancelledHeads.size + cancelledOrphans
 
       // Sempre grava cancelled (inclui 0) — paridade IG; evita KPI stale em dias vazios.
       await upsertSalonMetrics(day, { cancelled })
@@ -1093,18 +1113,33 @@ export async function syncNoShows0248Range(
       return
     }
 
-    const byDay = new Map<string, number>()
+    // Cabeças por dia (DISTINCT cliente_id); orphan sem id soma 1.
+    const byDay = new Map<string, Set<string>>()
+    const orphansByDay = new Map<string, number>()
     for (const row of result.rows) {
       const appt = normalizeAppointmentRow(row)
       const day =
         (appt?.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null) ??
-        (typeof row.data === 'string' ? String(row.data).slice(0, 10) : null)
+        (typeof row.data === 'string'
+          ? toSalonDateIso(parseAvecDateTime(String(row.data)))
+          : null)
       if (!day) continue
       // Endpoint já filtrado por status=0.6 (Faltou).
-      byDay.set(day, (byDay.get(day) ?? 0) + 1)
+      if (appt?.avecClientId) {
+        let set = byDay.get(day)
+        if (!set) {
+          set = new Set()
+          byDay.set(day, set)
+        }
+        set.add(appt.avecClientId)
+      } else {
+        orphansByDay.set(day, (orphansByDay.get(day) ?? 0) + 1)
+      }
     }
 
-    for (const [day, no_shows] of byDay) {
+    const daysWithNoshow = new Set([...byDay.keys(), ...orphansByDay.keys()])
+    for (const day of daysWithNoshow) {
+      const no_shows = (byDay.get(day)?.size ?? 0) + (orphansByDay.get(day) ?? 0)
       if (syncBudgetExhausted()) {
         markSyncBudgetExhausted(stats, 'no-shows-0248 upsert')
         break
@@ -1113,12 +1148,12 @@ export async function syncNoShows0248Range(
     }
 
     // Zera dias do intervalo sem falta (paridade IG; limpa stale após correção Avec).
-    for (const day of listDaysInclusive(from, to)) {
+    for (const day of listDaysNewestFirst(from, to)) {
       if (syncBudgetExhausted()) {
         markSyncBudgetExhausted(stats, 'no-shows-0248 zero')
         break
       }
-      if (!byDay.has(day)) {
+      if (!daysWithNoshow.has(day)) {
         await upsertSalonMetrics(day, { no_shows: 0 })
       }
     }
@@ -1196,50 +1231,21 @@ async function syncReturningFrom0002(
 }
 
 /**
- * TM cadastrado — 0223 (`tempo`) só do dia (métrica de Hoje).
- * Fast: poucas páginas. Full: um pouco mais. Snapshot só no full (DB leve).
+ * TM atendimento — 0223 (`tempo`) é catálogo sem filtro de data.
+ * Não grava como KPI do dia (fonte: 0002 com duração real). Snapshot só no full.
  */
 async function syncDurationFrom0223(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
-  const today = todayIso()
-  const params = { ...periodRange(0, 0), profissional_id: '', limit: 250 }
-  // Fast: 4 páginas bastam p/ amostrar tempo do dia; truncamento não vira warning
-  // (Avec BR costuma ter tempo=null — warning permanente = Sync parcial eterno).
-  const maxPages = mode === 'fast' ? 4 : 40
+  if (mode !== 'full') return
   try {
-    const result = await fetchSyncReport('0223', params, maxPages)
-    if (mode === 'full') {
-      warnIfTruncated(stats, '0223', result)
-      await snapshotReport('0223', params, result.rows, stats, syncRunId)
-    }
-
-    let sum = 0
-    let count = 0
-    for (const row of result.rows) {
-      const minutes = parseServiceTempoMinutes(
-        (row as Record<string, unknown>).tempo ??
-          (row as Record<string, unknown>).duracao ??
-          (row as Record<string, unknown>)['duração'],
-      )
-      if (minutes == null) continue
-      sum += minutes
-      count++
-    }
-    stats.duration_rows = count
-    // Sempre grava (inclui 0) — dia scoped pode vir vazio e não pode manter TM stale.
-    await upsertSalonMetrics(today, {
-      service_duration_sum_minutes: sum,
-      service_duration_count: count,
-    })
-    // Só no full: aviso de cadastro. No fast, tempo vazio é esperado e não marca partial.
-    if (count === 0 && mode === 'full') {
-      stats.warnings.push(
-        'TM 0223: nenhuma linha com campo tempo preenchido na Avec hoje — cadastre duração nos serviços.',
-      )
-    }
+    const params = { profissional_id: '', limit: 250 }
+    const result = await fetchSyncReport('0223', params, 1)
+    warnIfTruncated(stats, '0223', result)
+    await snapshotReport('0223', params, result.rows, stats, syncRunId)
+    stats.warnings.push('TM 0223: catálogo ignorado para KPI do dia (fonte: 0002)')
   } catch (e) {
     stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }
