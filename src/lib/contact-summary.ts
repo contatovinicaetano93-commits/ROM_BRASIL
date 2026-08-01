@@ -524,7 +524,8 @@ function normalizeDayKey(raw: string | null | undefined): string {
 
 /**
  * Contatos novos do dia que ainda não estão na Avec.
- * Critério: sem avec_client_id + não é dump importado/backfill/lake.
+ * Só entrada ROM real (WhatsApp/manual/etc.) — exclui qualquer source/channel Avec,
+ * inclusive sync de agenda/atendidos sem avec_client_id.
  */
 export async function countNewContactsNotInAvec(opts?: {
   day?: string | null
@@ -537,9 +538,8 @@ export async function countNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
+      and channel <> 'avec'
+      and coalesce(source, '') not like 'avec_%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
@@ -560,9 +560,8 @@ export async function listNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
+      and channel <> 'avec'
+      and coalesce(source, '') not like 'avec_%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
@@ -573,9 +572,8 @@ export async function listNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
+      and channel <> 'avec'
+      and coalesce(source, '') not like 'avec_%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
     order by created_at desc
