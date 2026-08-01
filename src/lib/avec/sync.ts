@@ -963,10 +963,17 @@ async function syncRevenue(
 
       const attendedInt = Math.round(attended)
       const revenueRounded = Math.round(revenue * 100) / 100
-      // 0 preenche dia faltante; não zera métricas já gravadas se o payload veio vazio/ilegível.
+      // 0 preenche dia passado fechado; não zera métricas já gravadas se o payload veio vazio.
       if (revenueRounded === 0 && attendedInt === 0) {
         const existing = await getSalonMetrics(day)
         if (existing && (Number(existing.revenue) > 0 || Number(existing.attended) > 0)) {
+          continue
+        }
+        // Hoje: 0088 vazio de manhã ≠ caixa fechado em R$0 — mantém NULL (UI "—").
+        if (day === today) {
+          stats.warnings.push(
+            `receita ${day}: 0088 vazio — não grava R$0 (caixa do dia ainda não lançou)`,
+          )
           continue
         }
       }
