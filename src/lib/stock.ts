@@ -329,23 +329,59 @@ async function ensureProductExists(avecProductId: string, name: string): Promise
 // Alertas — vindos do relatório 0046 (a Avec já calcula a sugestão de reposição).
 // ---------------------------------------------------------------------------
 
-/** Aplica uma linha de 0046: garante o produto, atualiza mínimo/sugestão e abre/atualiza alerta ativo. */
+/**
+ * Índice nameKey → avec_product_id, carregado uma vez por ciclo de 0046.
+ * Sem ele cada alerta relia stock_products inteiro (N+1).
+ */
+export async function loadStockProductNameIndex(): Promise<Map<string, string>> {
+  const sql = getSql()
+  const rows = (await sql`
+    select avec_product_id, name from stock_products
+    where avec_product_id is not null
+  `) as { avec_product_id: string; name: string }[]
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    const key = productNameKey(row.name)
+    // Primeiro vence — mesmo critério do .find() anterior.
+    if (key && !map.has(key)) map.set(key, row.avec_product_id)
+  }
+  return map
+}
+
+/**
+ * Aplica uma linha de 0046: garante o produto, atualiza mínimo/sugestão e abre/atualiza alerta ativo.
+ * Ao processar muitas linhas, passe `productNameIndex` (loadStockProductNameIndex) e
+ * `dimCache` (createStockDimCache): sem eles cada alerta relê catálogo e categoria.
+ */
 export async function applyStockAlert(
   alert: NormalizedStockAlert,
+  opts?: {
+    productNameIndex?: Map<string, string>
+    dimCache?: StockDimCache
+  },
 ): Promise<{ productId: string; avecProductId: string } | null> {
   const sql = getSql()
-  const categoryId = await upsertCategoryByName(alert.categoryName)
+  const categoryId = await resolveCategoryCached(alert.categoryName, opts?.dimCache)
 
   let avecProductId = alert.avecProductId
   if (!avecProductId) {
     // Match sem acento/case — 0046 manda nome sem id e o catálogo pode diferir em acentos.
     const target = productNameKey(alert.name)
-    const candidates = (await sql`
-      select avec_product_id, name from stock_products
-      where avec_product_id is not null
-    `) as { avec_product_id: string; name: string }[]
-    const hit = candidates.find((p) => productNameKey(p.name) === target)
-    avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
+    const fromIndex = opts?.productNameIndex?.get(target)
+    if (fromIndex) {
+      avecProductId = fromIndex
+    } else {
+      const candidates = opts?.productNameIndex
+        ? []
+        : ((await sql`
+            select avec_product_id, name from stock_products
+            where avec_product_id is not null
+          `) as { avec_product_id: string; name: string }[])
+      const hit = candidates.find((p) => productNameKey(p.name) === target)
+      avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
+    }
+    // Produto criado agora entra no índice: alertas seguintes com o mesmo nome reaproveitam.
+    if (avecProductId) opts?.productNameIndex?.set(target, avecProductId)
   }
   if (!avecProductId) return null
 
