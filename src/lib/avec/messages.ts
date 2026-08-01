@@ -21,6 +21,7 @@ export interface AvecSyncLastLike {
   stats?: {
     warnings?: unknown
     errors?: unknown
+    aborted?: unknown
   } | null
 }
 
@@ -93,6 +94,9 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
   if (/agenda:\s*reconcile de órfãos adiado/i.test(warning)) return true
   if (/sync:\s*orçamento esgotado/i.test(warning)) return true
+  // Consequência do abort limpo por orçamento — core (receita/caixa) já veio.
+  if (/agenda:.*orçamento/i.test(warning)) return true
+  if (/agenda:\s*reconcile\/KPI adiado/i.test(warning)) return true
   // BR usa 0223 para TM do dia; este aviso é ruído soft de paginação/cadastro.
   if (/TM 0223:/i.test(warning)) return true
   // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
@@ -123,6 +127,21 @@ export function isSoftOnlyPartialAvecRun(last: AvecSyncLastLike | null | undefin
   const hardW = hardAvecSyncWarnings(asStringArray(last.stats?.warnings))
   if (hardW.length > 0 || errors.length === 0) return false
   return errors.every(isSoftAvecPeripheralError)
+}
+
+/**
+ * Abort limpo por orçamento com core já gravado e só warnings soft.
+ * Não deve acender banner “sync parcial” na Visão (BR costuma abortar agenda).
+ */
+export function isCleanBudgetAbortPartial(last: AvecSyncLastLike | null | undefined): boolean {
+  if (!last || last.status !== 'partial') return false
+  const errors = asStringArray(last.stats?.errors)
+  if (errors.length > 0) return false
+  const warnings = asStringArray(last.stats?.warnings)
+  if (hardAvecSyncWarnings(warnings).length > 0) return false
+  const aborted = Boolean(last.stats?.aborted)
+  const budgetWarn = warnings.some((w) => /orçamento esgotado/i.test(w))
+  return aborted || budgetWarn
 }
 
 function asStringArray(value: unknown): string[] {
