@@ -654,7 +654,7 @@ export default function FinanceiroPage() {
               ? 'Nenhum sync Avec registrado ainda — rode o sync no Admin ou aguarde o cron.'
               : syncMeta.fast_stale
                 ? 'Sync Avec fast desatualizado (>1h) — caixa/Hoje podem estar velhos.'
-                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
+                : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast.'
             : syncMeta.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}

@@ -223,7 +223,7 @@ export default function RelatoriosOverviewPage() {
               ? 'Nenhum sync Avec registrado ainda — confira Admin / cron.'
               : data.sync.fast_stale
                 ? 'Sync Avec fast desatualizado (>1h) — números de caixa podem estar velhos.'
-                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos.'
+                : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast.'
             : data.sync.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}
