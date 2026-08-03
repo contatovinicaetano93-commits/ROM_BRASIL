@@ -3,7 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
-import { getLastStockSync, runStockSync, type StockSyncMode } from '@/lib/avec/sync-stock'
+import { getLastStockSync, runStockSync, stockPaginationPlan, type StockSyncMode } from '@/lib/avec/sync-stock'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 
 /** Sync de estoque pode demorar (vários relatórios paginados). */
@@ -26,9 +26,12 @@ async function execute(req: NextRequest, cron: boolean) {
 
   const mode = parseMode(req)
   const force = req.nextUrl.searchParams.get('force') === '1'
+  const continueSync = req.nextUrl.searchParams.get('continue') === '1'
+  const reportParam = req.nextUrl.searchParams.get('report')?.trim()
+  const startPageParam = req.nextUrl.searchParams.get('startPage')
 
-  // Gap só no cron — trigger manual (diagnóstico) pode forçar na hora.
-  if (cron && !force) {
+  // Gap só no cron — trigger manual (diagnóstico) pode forçar na hora; continue=1 também pula gap.
+  if (cron && !force && !continueSync) {
     const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
     const minGap = mode === 'full' ? STOCK_FULL_MIN_GAP_MS : STOCK_FAST_MIN_GAP_MS
     const last = await getLastStockSync(kind, { finishedOnly: true }).catch(() => null)
@@ -47,8 +50,21 @@ async function execute(req: NextRequest, cron: boolean) {
   }
 
   try {
+    if (continueSync) {
+      const continueFrom =
+        reportParam && startPageParam
+          ? { [reportParam]: Number(startPageParam) }
+          : 'auto'
+      const run = await runStockSync('full', { continueFrom })
+      return ok({
+        ...run,
+        mode: 'full',
+        continued: true,
+        pagination: stockPaginationPlan(run),
+      })
+    }
     const run = await runStockSync(mode)
-    return ok({ ...run, mode })
+    return ok({ ...run, mode, pagination: stockPaginationPlan(run) })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
       if (cron) {
