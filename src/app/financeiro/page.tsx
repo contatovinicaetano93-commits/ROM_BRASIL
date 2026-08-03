@@ -26,8 +26,8 @@ import {
   todayIso,
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
-import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
-import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
+import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta-surface'
 
 interface FiscalSplitSummary {
   gross_paid: number

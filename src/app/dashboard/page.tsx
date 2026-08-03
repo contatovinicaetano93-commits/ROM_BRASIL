@@ -22,7 +22,7 @@ import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
-import { visaoSyncFastInfoMessage, visaoSyncStaleMessage } from '@/lib/avec/sync-meta'
+import { visaoSyncFastInfoMessage, visaoSyncStaleMessage } from '@/lib/avec/sync-meta-surface'
 import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
 import { buildContactsPerDayChart, contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
 import { displayServiceName, serviceTicketAvg } from '@/lib/salon/service-display'
