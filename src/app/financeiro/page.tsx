@@ -27,6 +27,7 @@ import {
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
+import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -647,16 +648,10 @@ export default function FinanceiroPage() {
         </div>
       )}
 
-      {syncMeta && (syncMeta.stale || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
+      {syncMeta && (isFinanceiroStale(syncMeta) || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
-          {syncMeta.stale
-            ? syncMeta.never_synced
-              ? 'Nenhum sync Avec registrado ainda — rode o sync no Admin ou aguarde o cron.'
-              : syncMeta.fast_stale
-                ? 'Sync Avec fast desatualizado (>1h) — caixa/Hoje podem estar velhos.'
-                : syncMeta.ops_stale
-                  ? 'Snapshot Visão (P1/P2/P3) >24h — receita do dia ok via sync fast.'
-                  : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast.'
+          {isFinanceiroStale(syncMeta)
+            ? financeiroSyncStaleMessage(syncMeta)
             : syncMeta.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}
