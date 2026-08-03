@@ -92,6 +92,19 @@ import {
 
 export type AvecSyncMode = 'fast' | 'full'
 
+/**
+ * Fatias do sync full — cada uma cabe no orçamento Vercel (~720s).
+ * `all` = comportamento admin/legado (P1…catálogo numa única execução).
+ */
+export type AvecSyncStage = 'all' | 'ops' | 'agenda' | 'catalog'
+
+export function parseAvecSyncStage(value: string | null | undefined): AvecSyncStage {
+  if (value === 'ops' || value === 'agenda' || value === 'catalog' || value === 'all') {
+    return value
+  }
+  return 'all'
+}
+
 export interface AvecSyncStats {
   panel: RomPanelId
   deployment_host: string | null
@@ -111,6 +124,8 @@ export interface AvecSyncStats {
   p3_rows?: number
   /** Linhas 0223 com campo tempo válido (TM cadastrado). */
   duration_rows?: number
+  /** Fatia do full (ops/agenda/catalog/all) — min-gap por estágio. */
+  stage?: AvecSyncStage
   /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
   running?: boolean
   /** Abort limpo por orçamento de tempo (deadlineAt) — status partial. */
@@ -206,13 +221,34 @@ async function checkpointAvecSyncRun(id: string, stats: AvecSyncStats): Promise<
 
 export async function getLastAvecSync(
   kind?: string,
-  opts?: { finishedOnly?: boolean },
+  opts?: { finishedOnly?: boolean; stage?: AvecSyncStage },
 ): Promise<AvecSyncRun | null> {
   const sql = getSql()
   // NÃO fazer UPDATE aqui — Relatórios/Hoje/Visão chamam isto a cada load e
   // o write no pooler (max:1) deixava os painéis em “Carregando…”.
   // Orphans são saneados em beginAvecSyncRun / abandonStaleAvecSyncRuns.
   const finishedOnly = opts?.finishedOnly === true
+  const stage = opts?.stage
+  if (kind && stage) {
+    // Runs legados sem stats.stage contam como 'all'.
+    const rows = finishedOnly
+      ? ((await sql`
+          select * from avec_sync_runs
+          where kind = ${kind}
+            and coalesce(stats->>'stage', 'all') = ${stage}
+            and coalesce(stats->>'running', 'false') <> 'true'
+          order by created_at desc
+          limit 1
+        `) as AvecSyncRun[])
+      : ((await sql`
+          select * from avec_sync_runs
+          where kind = ${kind}
+            and coalesce(stats->>'stage', 'all') = ${stage}
+          order by created_at desc
+          limit 1
+        `) as AvecSyncRun[])
+    return rows[0] ?? null
+  }
   if (kind) {
     const rows = finishedOnly
       ? ((await sql`
@@ -1258,16 +1294,23 @@ async function syncDurationFrom0223(
   }
 }
 
-export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
+export async function runAvecSync(
+  mode: AvecSyncMode = 'full',
+  opts?: { stage?: AvecSyncStage },
+): Promise<AvecSyncRun> {
+  const stage: AvecSyncStage = mode === 'full' ? (opts?.stage ?? 'all') : 'all'
   // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
-  return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
+  return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode, stage), {
     // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
     ttlMs: 15 * 60 * 1000,
-    owner: `avec-${mode}`,
+    owner: stage === 'all' ? `avec-${mode}` : `avec-${mode}-${stage}`,
   })
 }
 
-async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
+async function runAvecSyncUnlocked(
+  mode: AvecSyncMode,
+  stage: AvecSyncStage,
+): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
@@ -1278,6 +1321,9 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   })
 
   const deployment = getDeploymentContext()
+  const runOps = mode === 'full' && (stage === 'all' || stage === 'ops')
+  const runAgenda = mode === 'full' && (stage === 'all' || stage === 'agenda')
+  const runCatalog = mode === 'full' && (stage === 'all' || stage === 'catalog')
 
   const stats: AvecSyncStats = {
     panel: deployment.panel,
@@ -1293,6 +1339,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     snapshots_saved: 0,
     errors: [],
     warnings: [],
+    stage: mode === 'full' ? stage : undefined,
   }
 
   if (!getAvecUnitId()) {
@@ -1344,19 +1391,26 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         markSyncBudgetExhausted(stats, 'antes de attendances')
       }
     } else {
-      // Full: P1/P2/P3 primeiro (paridade IG) — Visão não morre se agenda estourar o teto.
-      // Cada etapa isolada — 403/WAF num relatório não derruba o resto.
-      for (const [label, fn] of [
+      // Full fatiado: ops (P1–P3/TM) → agenda (caixa) → catalog (0004).
+      // Cada fatia tem cron próprio — cabe no orçamento sem abortar o core.
+      const opsSteps = [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
+        ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
+      ] as const
+      const agendaSteps = [
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
-        ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
-      ] as const) {
+      ] as const
+      const steps = [
+        ...(runOps ? opsSteps : []),
+        ...(runAgenda ? agendaSteps : []),
+      ]
+      for (const [label, fn] of steps) {
         if (syncBudgetExhausted()) {
           markSyncBudgetExhausted(stats, `antes de ${label}`)
           break
@@ -1374,7 +1428,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     // Webhook ainda chama recompute para feedback imediato até o fast sync.
     // Returning: no-op se attendances já cobriu; senão fallback.
     // Com abort: não dispara 0002 extra — Hoje já tem caixa/agenda do checkpoint.
-    if (!syncBudgetExhausted()) {
+    if ((mode === 'fast' || runAgenda) && !syncBudgetExhausted()) {
       try {
         await syncReturningFrom0002(stats, mode, syncRunId)
       } catch (e) {
@@ -1382,7 +1436,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       }
     }
 
-    if (mode === 'full') {
+    if (runCatalog) {
       if (!syncBudgetExhausted()) {
         const dumpClients = await shouldSyncClientCatalog()
         if (dumpClients) {
