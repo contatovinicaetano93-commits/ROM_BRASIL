@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Permite re-executar à mão pelo Actions quando o GitHub não cria a execução
+  # sozinho (acontece: um push já ficou sem check suite de Actions).
+  workflow_dispatch:
 
 permissions:
   contents: read
