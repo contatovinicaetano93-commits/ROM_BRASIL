@@ -15,11 +15,13 @@ describe('withSyncLock', () => {
   it('adquire lock, executa fn e libera (tabela já existe)', async () => {
     sqlMock
       .mockResolvedValueOnce([{ ok: true }]) // to_regclass exists → skip DDL
-      .mockResolvedValueOnce([{ key: 'avec_sync' }]) // acquire
+      .mockResolvedValueOnce([{ key: 'avec_sync_fast' }]) // acquire
       .mockResolvedValueOnce(undefined) // release
 
     const { withSyncLock, SYNC_LOCK_KEYS } = await import('./sync-lock')
-    const result = await withSyncLock(SYNC_LOCK_KEYS.avec, async () => 42, { owner: 'test-1' })
+    const result = await withSyncLock(SYNC_LOCK_KEYS.avecFast, async () => 42, {
+      owner: 'test-1',
+    })
 
     expect(result).toBe(42)
     expect(sqlMock).toHaveBeenCalled()
@@ -36,7 +38,7 @@ describe('withSyncLock', () => {
 
     let caught: unknown
     try {
-      await withSyncLock(SYNC_LOCK_KEYS.avec, async () => 'nope', { owner: 'test-2' })
+      await withSyncLock(SYNC_LOCK_KEYS.avecFast, async () => 'nope', { owner: 'test-2' })
     } catch (e) {
       caught = e
     }
@@ -45,7 +47,7 @@ describe('withSyncLock', () => {
     expect(isSyncLockBusyError(caught)).toBe(true)
     if (isSyncLockBusyError(caught)) {
       expect(caught.holder).toBe('other')
-      expect(caught.key).toBe('avec_sync')
+      expect(caught.key).toBe('avec_sync_fast')
     }
   })
 
