@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-<<<<<<< HEAD
-import { toSalonDateIso, whatsAppUrl } from './format'
-=======
-import { fmtScheduleParts, toSalonDateIso } from './format'
->>>>>>> 0a9f5cf (feat(contatos): mostrar a data de criação na lista Novos)
+import { fmtScheduleParts, toSalonDateIso, whatsAppUrl } from './format'
 
 describe('toSalonDateIso', () => {
   it('converte instante perto da meia-noite SP sem usar slice UTC', () => {
@@ -19,7 +15,6 @@ describe('toSalonDateIso', () => {
   })
 })
 
-<<<<<<< HEAD
 describe('whatsAppUrl', () => {
   it('prefixa 55 em celular BR local', () => {
     expect(whatsAppUrl('(11) 99999-8888')).toBe('https://wa.me/5511999998888')
@@ -31,7 +26,9 @@ describe('whatsAppUrl', () => {
 
   it('mantém BR já com DDI', () => {
     expect(whatsAppUrl('+5511999998888')).toBe('https://wa.me/5511999998888')
-=======
+  })
+})
+
 describe('fmtScheduleParts', () => {
   it('date usa o dia do fuso SP, não o UTC', () => {
     // 2026-07-10 02:30 UTC = 2026-07-09 23:30 SP — o dia UTC daria 10/07.
@@ -45,6 +42,5 @@ describe('fmtScheduleParts', () => {
     const parts = fmtScheduleParts(agora.toISOString())
     expect(parts.day).toBe('Hoje')
     expect(parts.date).toMatch(/^\d{2}\/\d{2}$/)
->>>>>>> 0a9f5cf (feat(contatos): mostrar a data de criação na lista Novos)
   })
 })
