@@ -93,7 +93,7 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.detail).toContain('1h')
   })
 
-  it('expõe warnings de truncamento', () => {
+  it('truncamento soft (0046) não pinta sync parcial — só expõe warning', () => {
     const ui = deriveAvecSyncUi({
       configured: true,
       now,
@@ -106,7 +106,7 @@ describe('deriveAvecSyncUi', () => {
         },
       },
     })
-    expect(ui.status).toBe('partial')
+    expect(ui.status).toBe('ok')
     expect(ui.warnings).toHaveLength(1)
     expect(ui.warnings[0]).toContain('0046')
   })
@@ -150,6 +150,24 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.status).toBe('ok')
     expect(ui.tone).toBe('success')
   })
+
+  it('não marca incompleto quando partial só por 0088 vazio (caixa ainda não lançou)', () => {
+    const ui = deriveAvecSyncUi({
+      configured: true,
+      now,
+      last: {
+        status: 'partial',
+        created_at: '2026-08-03T16:05:04.000Z',
+        error: null,
+        stats: {
+          errors: [],
+          warnings: ['receita 2026-08-03: 0088 vazio — não grava R$0 (caixa do dia ainda não lançou)'],
+        },
+      },
+    })
+    expect(ui.status).toBe('ok')
+    expect(ui.tone).toBe('success')
+  })
 })
 
 describe('isSoftAvecSyncWarning', () => {
@@ -184,6 +202,19 @@ describe('isSoftAvecSyncWarning', () => {
       ),
     ).toBe(true)
     expect(isSoftAvecSyncWarning('TM 0223: nenhum tempo cadastrado')).toBe(true)
+    expect(
+      isSoftAvecSyncWarning(
+        'receita 2026-08-03: 0088 vazio — não grava R$0 (caixa do dia ainda não lançou)',
+      ),
+    ).toBe(true)
+    expect(
+      isSoftAvecSyncWarning('atendimento: linha sem avec_client_id e sem telefone — ignorada'),
+    ).toBe(true)
+    expect(
+      isSoftAvecSyncWarning(
+        '0046: truncado — alertas stale NÃO resolvidos (evita limpar alertas das páginas omitidas)',
+      ),
+    ).toBe(true)
     expect(isSoftAvecSyncWarning('heal importado: timeout no update')).toBe(true)
     expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
