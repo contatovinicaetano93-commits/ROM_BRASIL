@@ -526,7 +526,7 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title={`Tempo médio cadastrado (TM · ${month})`}
+            title={`Tempo médio de atendimento (TM · ${month})`}
             badge={<Clock size={15} className="text-muted" />}
           >
             {tm ? (
@@ -538,13 +538,13 @@ export default function DashboardPage() {
               <div className="h-16 animate-pulse rounded-2xl bg-card" />
             )}
             <p className="mt-3 text-[0.65rem] text-muted">
-              Média do tempo cadastrado no Avec (0223) — não é duração cronometrada da visita.
+              Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no
+              KPI.
             </p>
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-2 text-xs text-muted">
-                Avec 0223 não tem campo <span className="font-medium">tempo</span> preenchido nos
-                serviços (cadastro na Avec). Jan–jun de receita já estão no caixa — TM cadastrado só
-                aparece depois que a unidade preencher duração nos serviços.
+                TM histórico indisponível: a Avec 0002 desta unidade não envia início/fim do
+                atendimento nos dias passados (só data). Não inventamos TM pelo catálogo 0223.
               </p>
             )}
           </SectionCard>
