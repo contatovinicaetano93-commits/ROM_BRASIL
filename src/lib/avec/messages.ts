@@ -97,7 +97,7 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   // Consequência do abort limpo por orçamento — core (receita/caixa) já veio.
   if (/agenda:.*orçamento/i.test(warning)) return true
   if (/agenda:\s*reconcile\/KPI adiado/i.test(warning)) return true
-  // BR usa 0223 para TM do dia; este aviso é ruído soft de paginação/cadastro.
+  // Sync ainda lê 0223 e avisa que o catálogo foi ignorado (KPI vem do 0002).
   if (/TM 0223:/i.test(warning)) return true
   // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
   // Catálogo 0004 adiado de propósito (ritmo leve).

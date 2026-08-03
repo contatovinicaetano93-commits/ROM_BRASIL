@@ -7,7 +7,7 @@ import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { todayIso } from '@/lib/salon/format'
 
 /**
- * TM mês/trimestre — média do tempo cadastrado (Avec 0223), não duração cronometrada da visita.
+ * TM mês/trimestre — duração real (Avec 0002 início/fim); catálogo 0223 não entra no KPI.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return okCached(
       {
         ...data,
-        note: 'Média do tempo cadastrado no Avec (0223) — não é duração cronometrada do atendimento.',
+        note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
       },
       60,
     )
