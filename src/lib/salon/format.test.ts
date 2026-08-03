@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toSalonDateIso } from './format'
+import { toSalonDateIso, whatsAppUrl } from './format'
 
 describe('toSalonDateIso', () => {
   it('converte instante perto da meia-noite SP sem usar slice UTC', () => {
@@ -12,5 +12,19 @@ describe('toSalonDateIso', () => {
   it('retorna null para inválido', () => {
     expect(toSalonDateIso(null)).toBeNull()
     expect(toSalonDateIso('não-é-data')).toBeNull()
+  })
+})
+
+describe('whatsAppUrl', () => {
+  it('prefixa 55 em celular BR local', () => {
+    expect(whatsAppUrl('(11) 99999-8888')).toBe('https://wa.me/5511999998888')
+  })
+
+  it('não prefixa 55 em E.164 com DDI explícito (+1)', () => {
+    expect(whatsAppUrl('+17866224690')).toBe('https://wa.me/17866224690')
+  })
+
+  it('mantém BR já com DDI', () => {
+    expect(whatsAppUrl('+5511999998888')).toBe('https://wa.me/5511999998888')
   })
 })

@@ -38,6 +38,10 @@ describe('resolveUpsertPhone', () => {
   it('não devolve telefone cru quando normalize falha', () => {
     expect(resolveUpsertPhone('abc-def')).toBeNull()
   })
+
+  it('preserva DDI explícito (+1) sem forçar 55', () => {
+    expect(resolveUpsertPhone('+17866224690')).toBe('+17866224690')
+  })
 })
 
 describe('isUniqueViolation', () => {
