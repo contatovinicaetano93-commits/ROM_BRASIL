@@ -16,10 +16,11 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 ## Como funciona
 
 - `src/app/api/webhooks/avec` — **tempo real** (push): agendamento, atendimento, cliente.
-  Header `x-avec-secret` = `AVEC_WEBHOOK_SECRET`.
-- `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec
-  (clientes `0004`, agendamentos `0051`, atendidos `0002`). Cron fast a cada 20 min,
-  full 2×/dia (leve no DB/Avec), ou tempo real via webhook. Manual com `CRON_SECRET`.
+  Header `x-avec-secret` = `AVEC_WEBHOOK_SECRET`. Dispara sync fast `scope=kpi` (caixa/KPI — não full).
+- `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec.
+  **fast** (~20 min): 0051 ontem→amanhã, 0002, 0052, revenue. **full fatiado** 2×/dia + retry horário:
+  `/api/avec/sync/full/{ops,agenda,catalog}` (agenda = +21d para Contatos Agendados +7d).
+  Estoque: `/api/estoque/sync` (cron separado). Manual com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
   (Meta), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
@@ -46,8 +47,8 @@ ou investigar depois.
    para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
-   Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec` (só sync fast).
-   Backup: `CRON_SECRET` (cron fast 20 min + full 2×/dia).
+   Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec` (sync fast `scope=kpi` apenas).
+   Backup: `CRON_SECRET` (cron fast ~20 min + full fatiado 2×/dia + retry horário).
 5. **WhatsApp Cloud API oficial** — no Meta Developer:
    `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
    `WHATSAPP_APP_SECRET`. Webhook → `/api/webhooks/whatsapp` (campo `messages`).
