@@ -64,6 +64,7 @@ import {
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
+import { syncDirectorVisits } from '@/lib/avec/sync-director-visits'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   getSalonMetrics,
@@ -133,6 +134,8 @@ export interface AvecSyncStats {
   p3_rows?: number
   /** Linhas 0223 com campo tempo válido (TM cadastrado). */
   duration_rows?: number
+  /** Visitas 0002 gravadas em salon_client_visits (0011 offline). */
+  director_visits_upserted?: number
   /** Fatia do full (ops/agenda/catalog/all) — min-gap por estágio. */
   stage?: AvecSyncStage
   /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
@@ -1473,6 +1476,20 @@ async function runAvecSyncUnlocked(
       } catch (e) {
         stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
       }
+    }
+
+    // Relatório gerência 0011 offline — visitas 0002 em salon_client_visits.
+    if (runAgenda && !syncBudgetExhausted()) {
+      try {
+        await syncDirectorVisits(stats, syncRunId)
+        await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+      } catch (e) {
+        stats.errors.push(
+          `director-visits: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
+    } else if (runAgenda && syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, 'antes de director-visits')
     }
 
     if (runCatalog) {
