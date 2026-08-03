@@ -9,8 +9,16 @@
       "schedule": "5,25,45 * * * *"
     },
     {
-      "path": "/api/avec/sync/full",
+      "path": "/api/avec/sync/full/ops",
       "schedule": "20 10,22 * * *"
+    },
+    {
+      "path": "/api/avec/sync/full/agenda",
+      "schedule": "40 10,22 * * *"
+    },
+    {
+      "path": "/api/avec/sync/full/catalog",
+      "schedule": "55 10,22 * * *"
     },
     {
       "path": "/api/estoque/sync",
