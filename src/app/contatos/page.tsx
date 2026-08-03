@@ -150,6 +150,16 @@ export default function ContatosPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [novosDay, setNovosDay] = useState<string | null>(null)
+  const [urlQueueReady, setUrlQueueReady] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('queue') === 'novos') setMode('novos')
+    const day = params.get('day')
+    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setNovosDay(day)
+    setUrlQueueReady(true)
+  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -185,7 +195,8 @@ export default function ContatosPage() {
         params.set('pending', 'true')
         params.set('queue', queue)
       } else if (mode === 'novos') {
-        params.set('new_not_avec', '1')
+        params.set('queue', 'novos')
+        if (novosDay) params.set('day', novosDay)
       } else {
         params.set('q', debouncedQuery)
       }
@@ -217,9 +228,10 @@ export default function ContatosPage() {
   }
 
   useEffect(() => {
+    if (!urlQueueReady) return
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, debouncedQuery, queue])
+  }, [mode, debouncedQuery, queue, urlQueueReady, novosDay])
 
   const visible = contacts
 
