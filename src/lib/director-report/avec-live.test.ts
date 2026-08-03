@@ -45,17 +45,17 @@ describe('resolveDirectorReturnRate', () => {
     ).toBe(0.7)
   })
 
-  it('rejects 100% when there are clients to reactivate', () => {
+  it('rejects 100% when there are clients to reactivate (no salon clone)', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [1, 1, 1],
         nonReturnerCount: 10,
         salonRate: 0.669,
       }),
-    ).toBe(0.669)
+    ).toBeNull()
   })
 
-  it('allows 100% only with empty reactivation list', () => {
+  it('allows 100% only with empty reactivation list via cohort hint', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [1],
@@ -77,17 +77,28 @@ describe('resolveDirectorReturnRate', () => {
     ).toBeNull()
   })
 
-  it('uses salon rate when Avec list has no per-row taxa', () => {
+  it('does not clone salon rate onto a professional with a reactivation list', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [],
         nonReturnerCount: 5,
         salonRate: 0.42,
       }),
+    ).toBeNull()
+  })
+
+  it('allows salon fallback only for aggregated salon row', () => {
+    expect(
+      resolveDirectorReturnRate({
+        returnRates: [],
+        nonReturnerCount: 0,
+        salonRate: 0.42,
+        allowSalonFallback: true,
+      }),
     ).toBe(0.42)
   })
 
-  it('rejects contaminated 100% without salon fallback as null', () => {
+  it('rejects contaminated 100% as null', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [1],

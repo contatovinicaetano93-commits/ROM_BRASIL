@@ -325,7 +325,8 @@ async function fetch0011Quarter(
   if (!hasRates() && professionals.length > 0) {
     const timeLeft =
       budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
-    if (timeLeft > 20_000) {
+    // Precisa sobrar tempo p/ 0002 P1+P2; sem isso vários pros ficam sem taxa própria.
+    if (timeLeft > 10_000) {
       try {
         const local = await fetchLocal0011Quarter(quarter, professionals, budget)
         truncated = truncated || local.truncated
@@ -405,9 +406,11 @@ function avg(nums: number[]): number | null {
 }
 
 /**
- * Taxa coerente com a lista 0011 (não-retornados).
- * 100% com clientes p/ reativar > 0 é impossível → descarta média contaminada.
- * Sem evidência de taxa → null (UI mostra "—"), nunca 0% inventado.
+ * Taxa por profissional — só com evidência própria (taxa/cohort do pro).
+ * Nunca clona a taxa do salão (0007) em cada linha: isso faz vários pros
+ * aparecerem com a mesma % impossível de ser individual.
+ * 100% com clientes p/ reativar > 0 → descarta (contaminado).
+ * Sem evidência → null (UI "—").
  */
 export function resolveDirectorReturnRate(opts: {
   returnRates: number[]
@@ -415,6 +418,8 @@ export function resolveDirectorReturnRate(opts: {
   salonRate: number | null
   clientsTotalHint?: number
   clientsReturnedHint?: number
+  /** true só na linha agregada "Salão" — nunca em profissional de piso. */
+  allowSalonFallback?: boolean
 }): number | null {
   const hintTotal = opts.clientsTotalHint ?? 0
   const hintReturned = opts.clientsReturnedHint ?? 0
@@ -422,13 +427,16 @@ export function resolveDirectorReturnRate(opts: {
     return Math.round((hintReturned / hintTotal) * 1000) / 1000
   }
 
-  let rate: number | null = avg(opts.returnRates) ?? opts.salonRate
-  if (rate == null) return null
-  if (opts.nonReturnerCount > 0 && rate >= 0.999) {
-    rate = opts.salonRate != null && opts.salonRate < 0.999 ? opts.salonRate : null
+  const fromRates = avg(opts.returnRates)
+  if (fromRates != null) {
+    if (opts.nonReturnerCount > 0 && fromRates >= 0.999) return null
+    return Math.round(fromRates * 1000) / 1000
   }
-  if (rate == null) return null
-  return Math.round(rate * 1000) / 1000
+
+  if (opts.allowSalonFallback && opts.salonRate != null) {
+    return Math.round(opts.salonRate * 1000) / 1000
+  }
+  return null
 }
 
 function buildQuarterRow(
@@ -436,6 +444,7 @@ function buildQuarterRow(
   agg: QuarterAgg | undefined,
   salonRate: number | null,
   prevRate: number | null,
+  allowSalonFallback = false,
 ): ReturnQuarterRow {
   const listN = agg?.clients.length ?? 0
   const return_rate = resolveDirectorReturnRate({
@@ -444,6 +453,7 @@ function buildQuarterRow(
     salonRate,
     clientsTotalHint: agg?.clientsTotalHint,
     clientsReturnedHint: agg?.clientsReturnedHint,
+    allowSalonFallback,
   })
 
   // Coluna “clientes p/ reativar” = tamanho da lista; senão hint de cohort.
@@ -733,16 +743,10 @@ export async function fetchLiveDirectorBlocks(
         const selAgg = selByPro.get(professional.id)
         const cmpAgg = cmpByPro.get(professional.id)
 
-        const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, salonCmp, null)
-        const selRow = buildQuarterRow(selectedQuarter, selAgg, salonSel, cmpRow.return_rate)
+        // Taxa do salão NÃO entra por profissional (evita várias linhas com a mesma %).
+        const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, null, null)
+        const selRow = buildQuarterRow(selectedQuarter, selAgg, null, cmpRow.return_rate)
 
-        // Se não há lista por pro mas há taxa salão, ainda mostra a taxa
-        if (!selAgg && salonSel != null && selRow.clients_total === 0) {
-          selRow.return_rate = Math.round(salonSel * 1000) / 1000
-        }
-        if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
-          cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
-        }
         if (selRow.return_rate != null && cmpRow.return_rate != null) {
           selRow.delta_vs_prev =
             Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
@@ -763,6 +767,16 @@ export async function fetchLiveDirectorBlocks(
           reactivation,
         }
       })
+
+      const missingPersonalRate = return_blocks.some((b) =>
+        b.quarters.some((q) => q.clients_total > 0 && q.return_rate == null),
+      )
+      if (missingPersonalRate && (salonSel != null || salonCmp != null)) {
+        const pct = Math.round(((salonSel ?? salonCmp) as number) * 1000) / 10
+        warnings.push(
+          `Taxa do salão (~${pct}%) disponível via 0007, mas não é atribuída por profissional — só taxas individuais aparecem na tabela`,
+        )
+      }
     } catch (e) {
       warnings.push(`0011 falhou ao montar blocos: ${e instanceof Error ? e.message : String(e)}`)
     }
