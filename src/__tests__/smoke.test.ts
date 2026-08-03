@@ -36,7 +36,8 @@ describe('Smoke Tests', () => {
 
   describe('Build Artifacts', () => {
     it('should have compiled successfully', async () => {
-      const pkg = await import('@/package.json')
+      // '@' aponta para ./src — o package.json fica na raiz do repo.
+      const pkg = await import('../../package.json')
       expect(pkg.name).toBeDefined()
       expect(pkg.version).toBeDefined()
     })
