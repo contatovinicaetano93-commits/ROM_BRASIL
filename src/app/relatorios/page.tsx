@@ -16,6 +16,7 @@ import {
 } from '@/lib/salon/month-overview-export'
 import type { MonthOverview } from '@/lib/salon/month-overview'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
+import { isRelatoriosStale, relatoriosSyncStaleMessage } from '@/lib/avec/sync-meta'
 
 function currentMonthKey() {
   return todayIso().slice(0, 7)
@@ -216,16 +217,10 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
-      {data?.sync && (data.sync.stale || data.sync.status === 'partial' || data.sync.status === 'error') && (
+      {data?.sync && (isRelatoriosStale(data.sync) || data.sync.status === 'partial' || data.sync.status === 'error') && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          {data.sync.stale
-            ? data.sync.never_synced
-              ? 'Nenhum sync Avec registrado ainda — confira Admin / cron.'
-              : data.sync.fast_stale
-                ? 'Sync Avec fast desatualizado (>1h) — números de caixa podem estar velhos.'
-                : data.sync.ops_stale
-                  ? 'Snapshot Visão (P1/P2/P3) >24h — receita do dia ok via sync fast.'
-                  : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast.'
+          {isRelatoriosStale(data.sync)
+            ? relatoriosSyncStaleMessage(data.sync)
             : data.sync.status === 'partial'
               ? 'Último sync Avec parcial — confira Admin.'
               : 'Último sync Avec com erro — confira Admin.'}

@@ -90,6 +90,7 @@ describe('deriveAvecSyncUi', () => {
     })
     expect(ui.status).toBe('stale')
     expect(ui.tone).toBe('gold')
+    expect(ui.detail).toContain('1h')
   })
 
   it('expõe warnings de truncamento', () => {
