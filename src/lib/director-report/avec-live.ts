@@ -6,6 +6,7 @@ import {
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { tryFetch0011QuarterPairFromDb } from './from-db'
 import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
@@ -563,7 +564,42 @@ export async function fetchLiveDirectorBlocks(
   let compareQ = { ...emptyQ }
 
   if (includeReturn) {
-    if (shouldSkipAvec0011() && professionals.length > 0) {
+    // 1) Banco interno (salon_client_visits) — rápido e estável quando o sync full cobriu os tris.
+    let usedDb = false
+    if (professionals.length > 0) {
+      try {
+        const fromDb = await tryFetch0011QuarterPairFromDb(
+          selectedQuarter,
+          compareQuarter,
+          professionals,
+        )
+        if (fromDb && fromDb.selected.source === 'local' && fromDb.compare.source === 'local') {
+          selectedQ = {
+            byPro: fromDb.selected.byPro,
+            salonRates: fromDb.selected.salonRates,
+            truncated: fromDb.selected.truncated,
+            source: 'local',
+            note: fromDb.selected.note,
+          }
+          compareQ = {
+            byPro: fromDb.compare.byPro,
+            salonRates: fromDb.compare.salonRates,
+            truncated: fromDb.compare.truncated,
+            source: 'local',
+            note: fromDb.compare.note,
+          }
+          usedDb = true
+          warnings.push('0011 via banco interno (visitas 0002 sincronizadas)')
+          if (selectedQ.note) warnings.push(selectedQ.note)
+        }
+      } catch (e) {
+        warnings.push(
+          `0011 DB: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160),
+        )
+      }
+    }
+
+    if (!usedDb && shouldSkipAvec0011() && professionals.length > 0) {
       // Skip: usa local-0011 pair (mais eficiente — compartilha 0002 do trimestre do meio).
       try {
         const pair = await fetchLocal0011QuarterPair(
@@ -594,7 +630,7 @@ export async function fetchLiveDirectorBlocks(
       } catch (e) {
         warnings.push(`0011 local: ${e instanceof Error ? e.message : String(e)}`)
       }
-    } else {
+    } else if (!usedDb) {
       // Padrão: Avec 0011 (+ fallback local se falhar, + fallback 0007).
       const [selRes, cmpRes] = await Promise.allSettled([
         fetch0011Quarter(selectedQuarter, budget, professionals),
