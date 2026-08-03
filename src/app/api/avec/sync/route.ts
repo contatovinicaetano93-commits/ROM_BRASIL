@@ -50,17 +50,18 @@ export async function GET(req: NextRequest) {
       cron: {
         fast: { schedule: '5,25,45 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: '20 10,22 * * *',
+          schedule: 'ops/agenda/catalog 2×/dia',
           mode: 'full',
-          path: '/api/avec/sync/full',
-          note: 'path sem query — evita cron cair em fast',
+          path: '/api/avec/sync/full/{ops,agenda,catalog}',
+          note: 'full fatiado — /full monolítico só admin; lock separado do fast',
         },
         purge: {
           schedule: '10 7 * * *',
           path: '/api/avec/purge-snapshots',
           note: '04:10 America/Sao_Paulo — mantém 1 snapshot/report + limpa payloads legados',
         },
-        cadence: 'fast a cada 20 min · full 2×/dia · purge diário — webhook só fast',
+        cadence:
+          'fast a cada 20 min · full fatiado 2×/dia · purge diário — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
