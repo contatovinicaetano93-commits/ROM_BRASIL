@@ -13,7 +13,7 @@ import {
 } from '@/lib/salon/playbook'
 import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
-import { pickHojeAvecSyncRun } from '@/lib/avec/sync-run-health'
+import { pickHojeAvecSyncRun, pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
 import { countDistinctContactIds } from '@/lib/salon/headcount'
@@ -62,10 +62,14 @@ export async function GET(req: NextRequest) {
             and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         `) as { novos: number; whatsapp_novos: number }[]
         // Hoje = caixa/agenda: preferir finished usável; empty-kill não mascara ok.
-        const [avecFast, avecFull] = await Promise.all([
+        // Full KPI = ops/agenda/legado all — nunca catalog (dump não é analytics).
+        const [avecFast, fullOps, fullAgenda, fullLegacy] = await Promise.all([
           getLastAvecSync('fast', { finishedOnly: true }),
-          getLastAvecSync('full', { finishedOnly: true }),
+          getLastAvecSync('full', { finishedOnly: true, stage: 'ops' }),
+          getLastAvecSync('full', { finishedOnly: true, stage: 'agenda' }),
+          getLastAvecSync('full', { finishedOnly: true, stage: 'all' }),
         ])
+        const avecFull = pickNewestUsableAvecRun([fullOps, fullAgenda, fullLegacy])
         const avecLast = pickHojeAvecSyncRun(avecFast, avecFull)
         const reactivation = await getReactivationKpis().catch(() => ({
           window_days: 21,
