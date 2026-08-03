@@ -338,10 +338,14 @@ async function syncAlerts(
       active++
     }
     stats.alerts_active = active
+    // Fast com teto baixo (2 págs) quase sempre tem hasMore — não acender banner.
+    // Full/continue truncado: avisa e deixa a UI oferecer o próximo lote.
     if (result.hasMore) {
-      stats.warnings.push(
-        '0046: truncado — alertas stale NÃO resolvidos (evita limpar alertas das páginas omitidas)',
-      )
+      if (!opts.expectTruncation) {
+        stats.warnings.push(
+          '0046: truncado — alertas stale NÃO resolvidos (evita limpar alertas das páginas omitidas)',
+        )
+      }
     } else if (active > 0 || result.rows.length === 0) {
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
@@ -651,4 +655,21 @@ export function stockPaginationPlan(lastRun: StockSyncRun | null): StockPaginati
         ? `Próximas ${entry.nextPage}–${entry.nextPage + entry.maxPages - 1}`
         : `Páginas ${entry.startPage}–${entry.endPage} sincronizadas`,
   }))
+}
+
+/**
+ * Prefere full com lote pendente. Fast horário corta 0046 de propósito (2 págs) —
+ * não expor isso como “continue” quando já existe um full (evita banner eterno).
+ */
+export function pickStockPaginationPlan(
+  full: StockSyncRun | null,
+  fast: StockSyncRun | null,
+): StockPaginationPlanItem[] {
+  const fullPlan = stockPaginationPlan(full)
+  const fastPlan = stockPaginationPlan(fast)
+  if (fullPlan.some((p) => p.hasMore)) return fullPlan
+  // Full sem pendência: não deixar o fast horário “ressuscitar” o banner.
+  if (fullPlan.length > 0) return fullPlan
+  if (fastPlan.some((p) => p.hasMore)) return fastPlan
+  return fastPlan
 }
