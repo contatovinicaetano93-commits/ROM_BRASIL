@@ -55,15 +55,27 @@ export function monthRangeBr(month: MonthKey, referenceDay?: string): { inicio: 
   }
 }
 
-/** Intervalo dd/mm/yyyy do trimestre (YYYY-Qn). */
-export function quarterRangeBr(quarter: QuarterKey): { inicio: string; fim: string } {
+/** Intervalo dd/mm/yyyy do trimestre (YYYY-Qn). Trimestre aberto fecha em referenceDay. */
+export function quarterRangeBr(
+  quarter: QuarterKey,
+  referenceDay?: string,
+): { inicio: string; fim: string } {
   const [yStr, qStr] = quarter.split('-Q')
   const y = Number(yStr)
   const q = Number(qStr) as 1 | 2 | 3 | 4
   if (!y || !q || q < 1 || q > 4) throw new Error(`Trimestre inválido: ${quarter}`)
   const startMonth = (q - 1) * 3
   const start = new Date(y, startMonth, 1)
-  const end = new Date(y, startMonth + 3, 0)
+  let end = new Date(y, startMonth + 3, 0)
+  const today = referenceDay
+    ? (() => {
+        const [ty, tm, td] = referenceDay.split('-').map(Number)
+        if (!ty || !tm || !td) throw new Error(`Dia inválido: ${referenceDay}`)
+        return new Date(ty, tm - 1, td)
+      })()
+    : new Date()
+  const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  if (end.getTime() > todayLocal.getTime()) end = todayLocal
   return { inicio: fmtAvecDate(start), fim: fmtAvecDate(end) }
 }
 
@@ -297,30 +309,56 @@ async function fetch0011Quarter(
     console.warn(`[director-report] 0011 ${quarter} falhou, tentando local:`, msg)
   }
 
-  const hasUseful =
+  const hasRates = (): boolean =>
     salonRates.length > 0 ||
-    [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
+    [...byPro.values()].some(
+      (a) =>
+        a.returnRates.length > 0 ||
+        (a.clientsTotalHint > 0 && a.clientsReturnedHint >= 0),
+    )
+  const hasClients = () => [...byPro.values()].some((a) => a.clients.length > 0)
 
-  // Fallback local-0011: quando Avec 0011 falhou e temos roster de profissionais.
-  if (!hasUseful && professionals.length > 0) {
+  // Fallback local-0011:
+  // - Avec falhou por completo, OU
+  // - Avec trouxe só lista de não-retornados sem taxa (caso típico do Excel 0011).
+  // Mantém listas Avec e só completa taxas/hints.
+  if (!hasRates() && professionals.length > 0) {
     const timeLeft =
       budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
     if (timeLeft > 20_000) {
       try {
         const local = await fetchLocal0011Quarter(quarter, professionals, budget)
-        truncated = local.truncated
+        truncated = truncated || local.truncated
         for (const rate of local.salonRates) salonRates.push(rate)
         for (const [proName, agg] of local.byPro) {
-          byPro.set(proName, {
-            clients: agg.clients,
-            returnRates: agg.returnRates,
-            clientsTotalHint: agg.clientsTotalHint,
-            clientsReturnedHint: agg.clientsReturnedHint,
-          })
+          const existing = byPro.get(proName)
+          if (!existing) {
+            byPro.set(proName, {
+              clients: agg.clients,
+              returnRates: [...agg.returnRates],
+              clientsTotalHint: agg.clientsTotalHint,
+              clientsReturnedHint: agg.clientsReturnedHint,
+            })
+            continue
+          }
+          if (existing.returnRates.length === 0 && agg.returnRates.length > 0) {
+            existing.returnRates.push(...agg.returnRates)
+          }
+          if (existing.clientsTotalHint <= 0 && agg.clientsTotalHint > 0) {
+            existing.clientsTotalHint = agg.clientsTotalHint
+            existing.clientsReturnedHint = agg.clientsReturnedHint
+          }
+          if (existing.clients.length === 0 && agg.clients.length > 0) {
+            existing.clients = agg.clients
+          }
         }
         if (local.source === 'local') {
-          source = 'local'
-          note = local.note
+          if (!hasClients()) {
+            source = 'local'
+            note = local.note
+          } else if (hasRates()) {
+            note = note ?? '0011 Avec (lista) + taxa local 0002/0007'
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -330,13 +368,11 @@ async function fetch0011Quarter(
     }
   }
 
-  // Fallback 0007: taxa do salão quando nenhum dado disponível.
-  const hasUseful2 =
-    salonRates.length > 0 ||
-    [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
+  // Fallback 0007: taxa do salão quando ainda não há evidência de taxa
+  // (mesmo se a lista 0011 de clientes já veio — lista ≠ taxa).
   const timeLeft2 =
     budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
-  if (!hasUseful2 && timeLeft2 > 8_000) {
+  if (!hasRates() && timeLeft2 > 8_000) {
     const id0007 = resolveMapperId('return_rate')
     if (id0007) {
       try {
@@ -350,7 +386,10 @@ async function fetch0011Quarter(
           const rate = normalizeP3ReturnRateRow(row)
           if (rate != null) salonRates.push(rate)
         }
-        if (salonRates.length > 0) source = '0007'
+        if (salonRates.length > 0) {
+          if (source === 'none') source = '0007'
+          else note = note ?? '0011 lista + taxa 0007 do salão'
+        }
       } catch {
         // opcional
       }
@@ -368,6 +407,7 @@ function avg(nums: number[]): number | null {
 /**
  * Taxa coerente com a lista 0011 (não-retornados).
  * 100% com clientes p/ reativar > 0 é impossível → descarta média contaminada.
+ * Sem evidência de taxa → null (UI mostra "—"), nunca 0% inventado.
  */
 export function resolveDirectorReturnRate(opts: {
   returnRates: number[]
@@ -375,17 +415,19 @@ export function resolveDirectorReturnRate(opts: {
   salonRate: number | null
   clientsTotalHint?: number
   clientsReturnedHint?: number
-}): number {
+}): number | null {
   const hintTotal = opts.clientsTotalHint ?? 0
   const hintReturned = opts.clientsReturnedHint ?? 0
   if (hintTotal > 0 && hintReturned >= 0 && hintReturned <= hintTotal) {
     return Math.round((hintReturned / hintTotal) * 1000) / 1000
   }
 
-  let rate = avg(opts.returnRates) ?? opts.salonRate ?? 0
+  let rate: number | null = avg(opts.returnRates) ?? opts.salonRate
+  if (rate == null) return null
   if (opts.nonReturnerCount > 0 && rate >= 0.999) {
-    rate = opts.salonRate != null && opts.salonRate < 0.999 ? opts.salonRate : 0
+    rate = opts.salonRate != null && opts.salonRate < 0.999 ? opts.salonRate : null
   }
+  if (rate == null) return null
   return Math.round(rate * 1000) / 1000
 }
 
@@ -409,7 +451,7 @@ function buildQuarterRow(
   const clients_returned =
     agg?.clientsReturnedHint && agg.clientsReturnedHint > 0
       ? agg.clientsReturnedHint
-      : listN === 0 && clients_total > 0 && return_rate > 0
+      : listN === 0 && clients_total > 0 && return_rate != null && return_rate > 0
         ? Math.round(clients_total * return_rate)
         : 0
 
@@ -420,7 +462,9 @@ function buildQuarterRow(
     clients_total,
     clients_returned,
     delta_vs_prev:
-      prevRate == null ? null : Math.round((return_rate - prevRate) * 1000) / 10,
+      prevRate == null || return_rate == null
+        ? null
+        : Math.round((return_rate - prevRate) * 1000) / 10,
   }
 }
 
@@ -698,8 +742,12 @@ export async function fetchLiveDirectorBlocks(
         }
         if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
           cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
+        }
+        if (selRow.return_rate != null && cmpRow.return_rate != null) {
           selRow.delta_vs_prev =
             Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
+        } else {
+          selRow.delta_vs_prev = null
         }
 
         const reactivation = (selAgg?.clients ?? [])
@@ -725,7 +773,11 @@ export async function fetchLiveDirectorBlocks(
   const hasAnyReturn =
     return_blocks != null &&
     (return_blocks.some((b) => b.reactivation.length > 0) ||
-      return_blocks.some((b) => b.quarters.some((q) => q.return_rate > 0 || q.clients_total > 0)))
+      return_blocks.some((b) =>
+        b.quarters.some(
+          (q) => (q.return_rate != null && q.return_rate > 0) || q.clients_total > 0,
+        ),
+      ))
 
   if (includeRevenue && includeReturn && revenue_blocks == null && return_blocks == null) {
     throw new Error(

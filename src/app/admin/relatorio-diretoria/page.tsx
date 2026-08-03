@@ -293,13 +293,17 @@ export default function RelatorioDiretoriaPage() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   }, [data])
 
+  /** Colunas do comparativo seguem o período já carregado — evita "—" ao trocar filtro antes do fetch. */
+  const displayQuarter0011 = data?.period.selected_quarter ?? quarter
+  const displayCompare0011 = data?.period.compare_quarter ?? compare
+
   const selectedReturn = useMemo(() => {
     if (!data) return []
     return data.return_blocks
       .filter((b) => !proId0011 || b.professional.id === proId0011)
       .map((b) => {
-        const sel = b.quarters.find((q) => q.quarter === quarter)
-        const cmp = b.quarters.find((q) => q.quarter === compare)
+        const sel = b.quarters.find((q) => q.quarter === displayQuarter0011)
+        const cmp = b.quarters.find((q) => q.quarter === displayCompare0011)
         return { pro: b.professional, sel, cmp, reactivation: b.reactivation }
       })
       .sort((a, b) => {
@@ -309,7 +313,7 @@ export default function RelatorioDiretoriaPage() {
         if (byClients !== 0) return byClients
         return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
       })
-  }, [data, quarter, compare, proId0011])
+  }, [data, displayQuarter0011, displayCompare0011, proId0011])
 
   const clientsOnList = useMemo(
     () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
@@ -565,11 +569,14 @@ export default function RelatorioDiretoriaPage() {
                 loading && !data
                   ? '—'
                   : formatPercent(
-                      selectedReturn.length
-                        ? selectedReturn.reduce((s, r) => s + (r.sel?.return_rate ?? 0), 0) /
-                            selectedReturn.length
-                        : null,
-                      1
+                      (() => {
+                        const rates = selectedReturn
+                          .map((r) => r.sel?.return_rate)
+                          .filter((x): x is number => x != null)
+                        if (rates.length === 0) return null
+                        return rates.reduce((s, n) => s + n, 0) / rates.length
+                      })(),
+                      1,
                     )
               }
             />
@@ -609,8 +616,8 @@ export default function RelatorioDiretoriaPage() {
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                     <th className="py-2 pr-3 font-medium">Profissional</th>
-                    <th className="py-2 pr-3 font-medium">{quarter}</th>
-                    <th className="py-2 pr-3 font-medium">{compare}</th>
+                    <th className="py-2 pr-3 font-medium">{displayQuarter0011}</th>
+                    <th className="py-2 pr-3 font-medium">{displayCompare0011}</th>
                     <th className="py-2 pr-3 font-medium">Δ</th>
                     <th className="py-2 font-medium">Clientes p/ reativar</th>
                   </tr>
@@ -633,7 +640,7 @@ export default function RelatorioDiretoriaPage() {
                   )}
                   {selectedReturn.map(({ pro, sel, cmp, reactivation }) => {
                     const delta =
-                      sel && cmp
+                      sel?.return_rate != null && cmp?.return_rate != null
                         ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10
                         : null
                     return (
