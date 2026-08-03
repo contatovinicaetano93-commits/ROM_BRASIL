@@ -39,6 +39,13 @@ interface Contact {
 type ListMode = 'reactivate' | 'novos' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
+type ContactsSyncMeta = {
+  agenda_stale?: boolean
+  agenda_created_at?: string | null
+  fast_stale?: boolean
+  never_synced?: boolean
+}
+
 function contactQueue(c: Contact): ReactivateQueue | null {
   if (c.overdue > 0) return 'overdue'
   if (c.due_soon > 0) return 'due_soon'
@@ -145,6 +152,7 @@ export default function ContatosPage() {
     novos: number
   }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
+  const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
@@ -177,6 +185,7 @@ export default function ContatosPage() {
         const countsRes = await apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
         const countsJson = await countsRes.json()
         const q = countsJson.meta?.queues
+        if (countsJson.meta?.sync) setSyncMeta(countsJson.meta.sync as ContactsSyncMeta)
         if (q && typeof q.novos === 'number') {
           setQueueCounts((prev) => ({
             overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
@@ -205,6 +214,7 @@ export default function ContatosPage() {
       if (json.error) setError(json.error)
       else {
         setError(null)
+        if (json.meta?.sync) setSyncMeta(json.meta.sync as ContactsSyncMeta)
         setContacts(json.data ?? [])
         const total = json.meta?.total
         setTotalInBase(typeof total === 'number' ? total : null)
@@ -376,7 +386,7 @@ export default function ContatosPage() {
               ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
-                : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d. Conta pessoa.`}
+                : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d — janela vem do sync full/agenda (fast cobre só ontem→amanhã). Conta pessoa.`}
           </p>
         </div>
       )}
@@ -412,6 +422,14 @@ export default function ContatosPage() {
               <X size={18} />
             </button>
           )}
+        </div>
+      )}
+
+      {syncMeta?.agenda_stale && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
+          {syncMeta.never_synced
+            ? 'Nenhum sync Avec registrado — agendados até +7d podem estar vazios até o primeiro full/agenda.'
+            : 'Agenda +7d pode estar incompleta: full/agenda desatualizado e sync fast >1h. O fast cobre só ontem/hoje/amanhã; agendamentos da semana dependem do cron full/agenda (2×/dia).'}
         </div>
       )}
 
