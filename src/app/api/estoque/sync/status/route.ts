@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
 import { isAvecConfigured } from '@/lib/avec/client'
-import { getLastStockSync, describeStockSyncPlan, stockPaginationPlan } from '@/lib/avec/sync-stock'
+import { getLastStockSync, describeStockSyncPlan, pickStockPaginationPlan } from '@/lib/avec/sync-stock'
 import { isStockAuthConfigured } from '@/lib/auth'
 import { CircuitBreaker } from '@/lib/circuit-breaker'
 
@@ -18,10 +18,7 @@ export async function GET(req: NextRequest) {
       full: CircuitBreaker.getStatus('stock_sync_full'),
     }
 
-    const pagination =
-      stockPaginationPlan(full).length > 0
-        ? stockPaginationPlan(full)
-        : stockPaginationPlan(fast)
+    const pagination = pickStockPaginationPlan(full, fast)
 
     return ok({
       configured: isAvecConfigured(),
