@@ -28,9 +28,9 @@ describe('E2E: Sync Flow', () => {
 
       if (res.status === 200) {
         const data = await res.json()
-        expect(data.data).toHaveProperty('circuit_status')
-        expect(data.data.circuit_status).toHaveProperty('fast')
-        expect(data.data.circuit_status).toHaveProperty('full')
+        expect(data.data).toHaveProperty('last_fast')
+        expect(data.data).toHaveProperty('last_full')
+        expect(data.data).toHaveProperty('plan')
       }
     })
 
