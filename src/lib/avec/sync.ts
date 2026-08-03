@@ -1438,7 +1438,10 @@ async function runAvecSyncUnlocked(
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
       ] as const
+      // director-visits primeiro: o Relatório gerência depende disso e o budget
+      // do full/agenda costuma esgotar antes do bloco no fim do sync.
       const agendaSteps = [
+        ['director-visits', () => syncDirectorVisits(stats, syncRunId)],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
@@ -1478,19 +1481,7 @@ async function runAvecSyncUnlocked(
       }
     }
 
-    // Relatório gerência 0011 offline — visitas 0002 em salon_client_visits.
-    if (runAgenda && !syncBudgetExhausted()) {
-      try {
-        await syncDirectorVisits(stats, syncRunId)
-        await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
-      } catch (e) {
-        stats.errors.push(
-          `director-visits: ${e instanceof Error ? e.message : String(e)}`,
-        )
-      }
-    } else if (runAgenda && syncBudgetExhausted()) {
-      markSyncBudgetExhausted(stats, 'antes de director-visits')
-    }
+    // director-visits já roda como 1º passo do full/agenda (acima).
 
     if (runCatalog) {
       if (!syncBudgetExhausted()) {
