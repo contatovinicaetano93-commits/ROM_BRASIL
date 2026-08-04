@@ -151,8 +151,9 @@ export async function buildDirectorReport(
           returnRates.length > 0
             ? returnRates.reduce((a, b) => a + b, 0) / returnRates.length
             : null,
-        total_revenue_selected_month: totalRev,
-        avg_ticket_selected_month: totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
+        total_revenue_selected_month: need0021 ? totalRev : null,
+        avg_ticket_selected_month:
+          need0021 && totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
       },
     }
     draft.period.reference_date = reportReferenceDate(draft)
@@ -359,8 +360,9 @@ export async function buildDirectorReport(
         returnRates.length > 0
           ? returnRates.reduce((a, b) => a + b, 0) / returnRates.length
           : null,
-      total_revenue_selected_month: totalRev,
-      avg_ticket_selected_month: totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
+      total_revenue_selected_month: need0021 ? totalRev : null,
+      avg_ticket_selected_month:
+        need0021 && totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
     },
   }
 

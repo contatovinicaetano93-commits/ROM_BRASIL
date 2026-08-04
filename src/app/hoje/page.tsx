@@ -491,14 +491,14 @@ export default function HojePage() {
 
       {!loading && (data?.leads.novos ?? 0) > 0 && (
         <Link
-          href={`/contatos?queue=novos&day=${encodeURIComponent(data!.day)}`}
+          href="/contatos?queue=novos"
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 active:bg-surface"
         >
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
               <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
-              <p className="text-xs text-muted">Ver lista completa</p>
+              <p className="text-xs text-muted">Contatos · últimos 30 dias</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />
