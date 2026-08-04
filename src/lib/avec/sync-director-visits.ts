@@ -8,6 +8,7 @@ import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
+import { getVisitCoverage, isVisitCoverageReady } from '@/lib/director-report/from-db'
 import {
   local0011ClientKey,
   previousQuarterKey,
@@ -245,7 +246,14 @@ async function syncOneQuarter(
   }
 }
 
-async function markQuarterAttemptFailed(quarter: QuarterKey): Promise<void> {
+/**
+ * Falha de sync NÃO invalida cobertura boa.
+ * Só cria stub truncado se o trimestre ainda não tem cobertura pronta.
+ */
+async function markQuarterAttemptFailed(quarter: QuarterKey): Promise<'preserved' | 'stubbed'> {
+  const existing = await getVisitCoverage(quarter)
+  if (isVisitCoverageReady(existing)) return 'preserved'
+
   const sql = getSql()
   const { inicio, fim } = quarterRangeBr(quarter)
   const periodStart = avecBrToIso(inicio)
@@ -262,14 +270,9 @@ async function markQuarterAttemptFailed(quarter: QuarterKey): Promise<void> {
       true,
       now()
     )
-    on conflict (period_key) do update set
-      period_start = excluded.period_start,
-      period_end = excluded.period_end,
-      pages_fetched = excluded.pages_fetched,
-      row_count = salon_visit_sync_coverage.row_count,
-      truncated = true,
-      synced_at = now()
+    on conflict (period_key) do nothing
   `
+  return 'stubbed'
 }
 
 export type SyncDirectorVisitsOpts = {
@@ -310,12 +313,19 @@ export async function syncDirectorVisits(
         stats.warnings.push(`director-visits: schema pendente (${msg.slice(0, 80)})`)
         return
       }
-      await markQuarterAttemptFailed(q).catch((markErr) => {
+      try {
+        const mark = await markQuarterAttemptFailed(q)
+        if (mark === 'preserved') {
+          stats.warnings.push(
+            `director-visits ${q}: falha na atualização — cobertura boa anterior preservada`,
+          )
+        }
+      } catch (markErr) {
         const markMsg = markErr instanceof Error ? markErr.message : String(markErr)
         stats.warnings.push(
           `director-visits ${q}: tentativa sem cobertura (${markMsg})`.slice(0, 160),
         )
-      })
+      }
       stats.errors.push(`director-visits ${q}: ${msg.slice(0, 160)}`)
     }
   }

@@ -410,26 +410,41 @@ export default function RelatorioDiretoriaPage() {
         return { pro: b.professional, sel, cmp, reactivation: b.reactivation }
       })
       .sort((a, b) => {
-        const aN = a.sel?.clients_total ?? a.reactivation.length
-        const bN = b.sel?.clients_total ?? b.reactivation.length
-        const byClients = bN - aN
+        const aN = a.sel?.clients_total ?? (a.reactivation.length || null)
+        const bN = b.sel?.clients_total ?? (b.reactivation.length || null)
+        const byClients = (bN ?? -1) - (aN ?? -1)
         if (byClients !== 0) return byClients
-        return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
+        return (b.sel?.return_rate ?? -1) - (a.sel?.return_rate ?? -1)
       })
   }, [data, displayQuarter0011, displayCompare0011, proId0011])
 
   const clientsOnList = useMemo(() => {
+    if (data?.source === 'error') return null
     const unique = new Set<string>()
     for (const row of selectedReturn) {
       for (const client of row.reactivation) unique.add(clientDedupeKey(client))
     }
+    // Sem blocos e sem totais → não sabemos (não inventar 0).
+    if (selectedReturn.length === 0) return null
+    const anyTotal = selectedReturn.some(
+      (r) => (r.sel?.clients_total != null && r.sel.clients_total > 0) || r.reactivation.length > 0,
+    )
+    if (!anyTotal && selectedReturn.every((r) => r.sel?.clients_total == null)) return null
     return unique.size
-  }, [selectedReturn])
+  }, [data?.source, selectedReturn])
 
-  const clientsOnListByPro = useMemo(
-    () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
-    [selectedReturn],
-  )
+  const clientsOnListByPro = useMemo(() => {
+    if (data?.source === 'error') return null
+    let sum = 0
+    let saw = false
+    for (const r of selectedReturn) {
+      const n = r.sel?.clients_total ?? (r.reactivation.length > 0 ? r.reactivation.length : null)
+      if (n == null) continue
+      saw = true
+      sum += n
+    }
+    return saw ? sum : null
+  }, [data?.source, selectedReturn])
 
   const sourceBadge = returnSourceLabel(data, loading)
   const sourceBadgeTone = returnSourceTone(data)
@@ -661,8 +676,10 @@ export default function RelatorioDiretoriaPage() {
             <Kpi
               icon={<Users size={16} />}
               label="Na lista"
-              value={loading && !data ? '—' : String(clientsOnList)}
+              value={loading && !data ? '—' : clientsOnList == null ? '—' : String(clientsOnList)}
               secondary={
+                clientsOnListByPro != null &&
+                clientsOnList != null &&
                 clientsOnListByPro !== clientsOnList
                   ? `soma por pro: ${clientsOnListByPro}`
                   : undefined
@@ -766,7 +783,11 @@ export default function RelatorioDiretoriaPage() {
                           {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
                         </td>
                         <td className="py-3 tabular-nums">
-                          {sel?.clients_total ?? reactivation.length}
+                          {sel?.clients_total != null
+                            ? sel.clients_total
+                            : reactivation.length > 0
+                              ? reactivation.length
+                              : '—'}
                         </td>
                       </tr>
                     )

@@ -88,33 +88,50 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     if (req.nextUrl.searchParams.get('status') === '1') {
-      const status = await listVisitCoverage()
-      const defaultStatus = default0011CoverageStatus(status.coverage)
+      // Status leve: não pode competir com sync longo / pool esgotado.
+      const status = await Promise.race([
+        listVisitCoverage(),
+        new Promise<Awaited<ReturnType<typeof listVisitCoverage>>>((resolve) => {
+          setTimeout(() => resolve({ coverage: [], visit_rows: -1 }), 12_000)
+        }),
+      ])
+      const timedOut = status.visit_rows < 0
+      const coverage = timedOut ? [] : status.coverage
+      const defaultStatus = default0011CoverageStatus(coverage)
       const probe =
-        req.nextUrl.searchParams.get('probe_0011') === '1' ||
-        req.nextUrl.searchParams.get('probe_0011') === 'true'
+        !timedOut &&
+        (req.nextUrl.searchParams.get('probe_0011') === '1' ||
+          req.nextUrl.searchParams.get('probe_0011') === 'true')
       let report_probe: Awaited<ReturnType<typeof probe0011FromDb>> | null = null
       if (probe) {
-        const selected =
-          (req.nextUrl.searchParams.get('selected') as QuarterKey | null) &&
-          isDirectorVisitQuarterKey(req.nextUrl.searchParams.get('selected')!)
-            ? (req.nextUrl.searchParams.get('selected') as QuarterKey)
+        const selectedRaw = req.nextUrl.searchParams.get('selected')
+        const selected: QuarterKey =
+          selectedRaw && isDirectorVisitQuarterKey(selectedRaw)
+            ? selectedRaw
             : previousQuarterKey(currentQuarterKeySp())
         const compareRaw = req.nextUrl.searchParams.get('compare')
-        const compare =
+        const compare: QuarterKey =
           compareRaw && isDirectorVisitQuarterKey(compareRaw)
             ? compareRaw
             : previousQuarterKey(selected)
-        report_probe = await probe0011FromDb(selected, compare)
+        report_probe = await Promise.race([
+          probe0011FromDb(selected, compare),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000)),
+        ])
       }
       return ok({
-        ...status,
+        coverage,
+        visit_rows: timedOut ? 0 : status.visit_rows,
         ...defaultStatus,
-        ready: status.coverage.some((c) => !c.truncated && c.row_count > 0),
+        // ready = default 0011 utilizável (não “qualquer trimestre ok”).
+        ready: defaultStatus.ready_for_default_0011,
         report_probe,
-        note: probe
-          ? 'Cobertura + probe do proxy última visita 0002 (Na lista / taxas).'
-          : 'Cobertura do proxy última visita 0002 para Relatório gerência. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
+        timed_out: timedOut || undefined,
+        note: timedOut
+          ? 'Status parcial — banco ocupado/timeout curto. Tente de novo em alguns segundos.'
+          : probe
+            ? 'Cobertura + probe do proxy última visita 0002 (Na lista / taxas).'
+            : 'Cobertura do proxy última visita 0002 para Relatório gerência. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
       })
     }
 

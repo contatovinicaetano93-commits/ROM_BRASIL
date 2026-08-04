@@ -51,7 +51,7 @@ async function buildForUi(
         summary: {
           professionals: skeleton.summary.professionals,
           avg_return_rate: null,
-          total_revenue_selected_month: 0,
+          total_revenue_selected_month: null,
           avg_ticket_selected_month: null,
         },
       }
@@ -271,7 +271,7 @@ export async function GET(req: NextRequest) {
               revenue_blocks: [],
               summary: {
                 ...report.summary,
-                total_revenue_selected_month: 0,
+                total_revenue_selected_month: null,
                 avg_ticket_selected_month: null,
               },
             }),

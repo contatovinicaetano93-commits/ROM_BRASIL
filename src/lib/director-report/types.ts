@@ -14,8 +14,10 @@ export interface ReturnQuarterRow {
   label: string
   /** 0–1; null = sem evidência de taxa (não inventar 0%) */
   return_rate: number | null
-  clients_total: number
-  clients_returned: number
+  /** null = sem evidência de tamanho de cohort/lista (UI "—") */
+  clients_total: number | null
+  /** null = sem evidência de retornados (não inventar 0) */
+  clients_returned: number | null
   delta_vs_prev: number | null // pontos percentuais
 }
 
@@ -97,7 +99,8 @@ export interface DirectorReport {
   summary: {
     professionals: number
     avg_return_rate: number | null
-    total_revenue_selected_month: number
+    /** null = sem evidência / etapa não carregada (UI "—"; nunca inventar 0) */
+    total_revenue_selected_month: number | null
     avg_ticket_selected_month: number | null
   }
 }
