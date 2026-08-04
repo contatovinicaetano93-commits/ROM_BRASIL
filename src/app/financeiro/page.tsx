@@ -372,9 +372,11 @@ export default function FinanceiroPage() {
   const [dailyOpen, setDailyOpen] = useSectionOpen('financeiro.section.receita-diaria.open', false)
   const [expensesOpen, setExpensesOpen] = useSectionOpen('financeiro.section.despesas.open', false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const kpisParams = new URLSearchParams({ month, ...(compareMonth ? { compare: compareMonth } : {}) })
       const [kpisRes, catRes, expRes] = await Promise.all([
@@ -400,13 +402,7 @@ export default function FinanceiroPage() {
   }, [month, compareMonth])
 
   useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void load()
-    })
-    return () => {
-      cancelled = true
-    }
+    void load()
   }, [load])
 
   function downloadReport() {
@@ -591,13 +587,25 @@ export default function FinanceiroPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
-            <MonthYearField value={month} onChange={setMonth} aria-label="Mês do financeiro" />
+            <MonthYearField
+              value={month}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setMonth(m)
+              }}
+              aria-label="Mês do financeiro"
+            />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
             <MonthYearField
               value={compareMonth}
-              onChange={setCompareMonth}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setCompareMonth(m)
+              }}
               allowEmpty
               emptyLabel="Automático"
               aria-label="Comparar com"
