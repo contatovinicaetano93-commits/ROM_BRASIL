@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import posthog from 'posthog-js'
 import {
   ChevronLeft,
   Phone,
@@ -306,19 +307,21 @@ function ContactDetailPageContent() {
   }, [id, loading, error])
 
   async function changeStatus(status: string) {
-    await mutate(
+    const ok = await mutate(
       `/api/contacts/${id}`,
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) },
       'Status atualizado'
     )
+    if (ok) posthog.capture('contact_status_changed', { new_status: status })
   }
 
   async function markDone(serviceId: string) {
-    await mutate(
+    const ok = await mutate(
       `/api/services/${serviceId}`,
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'done' }) },
       'Serviço marcado como feito'
     )
+    if (ok) posthog.capture('service_marked_done')
   }
 
   async function unschedule(serviceId: string) {
@@ -339,8 +342,10 @@ function ContactDetailPageContent() {
         setBriefError(json.error ?? 'Não foi possível gerar o briefing')
         return
       }
-      if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
-      else setBriefError('Resposta vazia do servidor')
+      if (json.data?.brief) {
+        setBrief({ text: json.data.brief, source: json.data.source })
+        posthog.capture('client_brief_generated', { source: json.data.source })
+      } else setBriefError('Resposta vazia do servidor')
     } catch (e) {
       setBriefError(String(e))
     } finally {
@@ -353,6 +358,7 @@ function ContactDetailPageContent() {
     try {
       await navigator.clipboard.writeText(brief.text)
       setBriefCopied(true)
+      posthog.capture('client_brief_copied')
       window.setTimeout(() => setBriefCopied(false), 2000)
     } catch {
       setMutationError('Não foi possível copiar o briefing.')
@@ -613,6 +619,7 @@ function ContactDetailPageContent() {
           rel="noopener noreferrer"
           title="Abrir WhatsApp com mensagem pessoal de reativação"
           onClick={() => {
+            posthog.capture('contact_whatsapp_opened')
             void apiFetch('/api/reactivation/outreach', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -808,6 +815,7 @@ function ScheduleSheet({
         setErr(json.error ?? 'Erro ao agendar')
         return
       }
+      posthog.capture('service_scheduled', { service_category: service.category })
       onScheduled()
     } catch (e) {
       setErr(String(e))
