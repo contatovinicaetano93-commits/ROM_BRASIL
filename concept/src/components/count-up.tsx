@@ -30,7 +30,9 @@ export function CountUp({ value }: { value: string }) {
     if (!el) return
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(parsed.format(parsed.number) + parsed.suffix)
+      const next = parsed.format(parsed.number) + parsed.suffix
+      // Preferência do SO: aplicar depois do efeito (evita setState síncrono no body).
+      queueMicrotask(() => setDisplay(next))
       return
     }
 
