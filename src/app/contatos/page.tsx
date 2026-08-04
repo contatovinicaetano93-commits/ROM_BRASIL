@@ -15,6 +15,7 @@ import {
   UserPlus,
   HelpCircle,
 } from 'lucide-react'
+import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
@@ -743,6 +744,11 @@ function NewContactSheet({
         setFormError(json.error ?? 'Erro ao salvar')
         return
       }
+      posthog.capture('contact_created', {
+        has_service: serviceName.trim().length > 0,
+        service_category: serviceName.trim().length > 0 ? serviceCategory : undefined,
+        has_cadence: cadence.length > 0,
+      })
       onCreated(name.trim())
       onClose()
     } catch (err) {

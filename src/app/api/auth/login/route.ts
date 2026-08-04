@@ -10,6 +10,7 @@ import {
 import { isProduction } from '@/lib/env'
 import { LoginRequestSchema } from '@/lib/schemas'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
@@ -37,6 +38,18 @@ export async function POST(req: NextRequest) {
   if (!hit) {
     return err('Usuário ou senha incorretos', 401)
   }
+
+  const posthog = getPostHogClient()
+  posthog.identify({
+    distinctId: hit.user,
+    properties: { role: hit.role },
+  })
+  posthog.capture({
+    distinctId: hit.user,
+    event: 'server_user_logged_in',
+    properties: { role: hit.role },
+  })
+  await posthog.flush()
 
   const res = ok({
     auth: 'ok',
