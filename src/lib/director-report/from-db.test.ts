@@ -6,11 +6,11 @@ const db = vi.hoisted(() => ({
   visits: new Map<string, unknown[]>(),
   sqlMock: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = Array.from(strings).join('')
-    if (/from salon_visit_sync_coverage/i.test(text) && /where period_key/i.test(text)) {
-      return db.coverage.get(String(values[0])) ? [db.coverage.get(String(values[0]))] : []
-    }
     if (/from salon_client_visits/i.test(text)) {
       return db.visits.get(String(values[0])) ?? []
+    }
+    if (/from salon_visit_sync_coverage/i.test(text) && /where period_key/i.test(text)) {
+      return db.coverage.get(String(values[0])) ? [db.coverage.get(String(values[0]))] : []
     }
     return []
   }),

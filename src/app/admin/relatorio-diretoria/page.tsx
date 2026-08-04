@@ -351,8 +351,11 @@ export default function RelatorioDiretoriaPage() {
   ])
 
   useEffect(() => {
-    load()
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
     return () => {
+      window.clearTimeout(timer)
       loadAbortRef.current?.abort()
     }
   }, [load])
@@ -378,7 +381,11 @@ export default function RelatorioDiretoriaPage() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'estoque') loadStock()
+    if (tab !== 'estoque') return
+    const timer = window.setTimeout(() => {
+      void loadStock()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [tab, loadStock])
 
   const pros = useMemo(() => {
