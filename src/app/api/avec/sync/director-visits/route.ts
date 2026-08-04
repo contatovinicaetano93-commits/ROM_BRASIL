@@ -17,11 +17,19 @@ import {
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
 import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
+import {
+  isSyncLockBusyError,
+  SYNC_LOCK_KEYS,
+  withSyncLock,
+} from '@/lib/sync-lock'
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
  * Este é proxy de última visita 0002 para o 0011, não 0011 event-level da Avec.
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
+ *
+ * Lock: usa `avecFull` (Option A) — evita corrida com full/agenda sem nested lock
+ * (withSyncLock não é reentrante).
  *
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
@@ -152,23 +160,42 @@ async function runSync(req: NextRequest) {
     req.nextUrl.searchParams.get('force') === '1' ||
     req.nextUrl.searchParams.get('force') === 'true'
 
-  await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
+  try {
+    return await withSyncLock(
+      SYNC_LOCK_KEYS.avecFull,
+      async () => {
+        await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
-  const stats = emptyStats()
-  await syncDirectorVisits(stats, undefined, { quarters, force })
-  const status = await listVisitCoverage()
+        const stats = emptyStats()
+        await syncDirectorVisits(stats, undefined, { quarters, force })
+        const status = await listVisitCoverage()
 
-  const okRun = stats.errors.length === 0
-  return ok({
-    ran: true,
-    status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
-    director_visits_upserted: stats.director_visits_upserted ?? 0,
-    quarters: quarters ?? null,
-    force,
-    warnings: stats.warnings,
-    errors: stats.errors,
-    coverage: status.coverage,
-    visit_rows: status.visit_rows,
-    note: 'Relatório gerência usa este warehouse como proxy última visita 0002 quando a cobertura dos trimestres necessários não está truncada.',
-  })
+        const okRun = stats.errors.length === 0
+        return ok({
+          ran: true,
+          status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
+          director_visits_upserted: stats.director_visits_upserted ?? 0,
+          quarters: quarters ?? null,
+          force,
+          warnings: stats.warnings,
+          errors: stats.errors,
+          coverage: status.coverage,
+          visit_rows: status.visit_rows,
+          note: 'Relatório gerência usa este warehouse como proxy última visita 0002 quando a cobertura dos trimestres necessários não está truncada.',
+        })
+      },
+      { ttlMs: 15 * 60 * 1000, owner: 'avec-director-visits' },
+    )
+  } catch (e) {
+    if (isSyncLockBusyError(e)) {
+      return ok({
+        skipped: true,
+        reason: 'sync_em_andamento',
+        holder: e.holder,
+        expires_at: e.expiresAt,
+        note: 'Lock avecFull — full/agenda ou outro director-visits em andamento.',
+      })
+    }
+    throw e
+  }
 }

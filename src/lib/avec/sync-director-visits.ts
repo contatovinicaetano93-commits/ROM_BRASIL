@@ -9,6 +9,10 @@ import { normalizeAttendanceRow } from '@/lib/avec/normalize'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
+  getVisitCoverage,
+  isVisitCoverageReady,
+} from '@/lib/director-report/from-db'
+import {
   local0011ClientKey,
   previousQuarterKey,
   splitAvecProfessionalNames,
@@ -47,6 +51,68 @@ function avecBrToIso(ddmmYYYY: string): string {
   const [d, m, y] = ddmmYYYY.split('/')
   if (!d || !m || !y) throw new Error(`Data Avec inválida: ${ddmmYYYY}`)
   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+}
+
+async function upsertVisitCoverage(
+  quarter: QuarterKey,
+  periodStart: string,
+  periodEnd: string,
+  pagesFetched: number,
+  rowCount: number,
+  truncated: boolean,
+): Promise<void> {
+  const sql = getSql()
+  await sql`
+    insert into salon_visit_sync_coverage (
+      period_key, period_start, period_end, pages_fetched, row_count, truncated, synced_at
+    ) values (
+      ${quarter},
+      ${periodStart}::date,
+      ${periodEnd}::date,
+      ${pagesFetched},
+      ${rowCount},
+      ${truncated},
+      now()
+    )
+    on conflict (period_key) do update set
+      period_start = excluded.period_start,
+      period_end = excluded.period_end,
+      pages_fetched = excluded.pages_fetched,
+      row_count = excluded.row_count,
+      truncated = excluded.truncated,
+      synced_at = now()
+  `
+}
+
+/**
+ * Em falha/abort: se já havia cobertura boa e não gravamos visitas nesta
+ * tentativa, não envenena o ready check. Se já upsertamos rows, marca
+ * truncado — senão o relatório leria cobertura "pronta" com dados parciais.
+ * Sem cobertura pronta, grava stub truncado.
+ */
+async function preserveOrStubCoverage(
+  quarter: QuarterKey,
+  periodStart: string,
+  periodEnd: string,
+  pagesFetched: number,
+  rowCount: number,
+  stats: AvecSyncStats,
+  reason: string,
+): Promise<'preserved' | 'stubbed'> {
+  const prior = await getVisitCoverage(quarter)
+  if (isVisitCoverageReady(prior) && rowCount === 0) {
+    stats.warnings.push(
+      `director-visits ${quarter}: ${reason}; cobertura anterior preservada (${prior!.row_count} rows)`,
+    )
+    return 'preserved'
+  }
+  await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+  if (isVisitCoverageReady(prior) && rowCount > 0) {
+    stats.warnings.push(
+      `director-visits ${quarter}: ${reason}; visitas parciais gravadas — cobertura marcada truncada (prior ${prior!.row_count} rows)`,
+    )
+  }
+  return 'stubbed'
 }
 
 /**
@@ -147,8 +213,8 @@ async function syncOneQuarter(
   quarter: QuarterKey,
   stats: AvecSyncStats,
   syncRunId?: string,
+  opts?: Pick<SyncDirectorVisitsOpts, 'shouldAbort'>,
 ): Promise<void> {
-  const sql = getSql()
   const { inicio, fim } = quarterRangeBr(quarter)
   const periodStart = avecBrToIso(inicio)
   const periodEnd = avecBrToIso(fim)
@@ -156,6 +222,7 @@ async function syncOneQuarter(
   let pagesFetched = 0
   let rowCount = 0
   let truncated = false
+  let aborted = false
   const seen = new Set<string>()
   let batch: VisitUpsert[] = []
 
@@ -168,73 +235,126 @@ async function syncOneQuarter(
     stats.director_visits_upserted = (stats.director_visits_upserted ?? 0) + chunk.length
   }
 
-  for (let page = 1; page <= MAX_PAGES_PER_QUARTER; page++) {
-    const payload = await fetchAvecReport(
-      '0002',
-      { inicio, fim, como_conheceu: '', limit: 250, page },
-      { timeoutMs: 55_000 },
-    )
-    pagesFetched = page
-    const rows = extractRows(payload)
-    if (rows.length === 0) break
+  try {
+    for (let page = 1; page <= MAX_PAGES_PER_QUARTER; page++) {
+      if (opts?.shouldAbort?.()) {
+        aborted = true
+        truncated = true
+        stats.aborted = true
+        break
+      }
 
-    for (const row of rows) {
-      const att = normalizeAttendanceRow(row)
-      if (!att?.clientName || !att.lastVisitDay) continue
-      const phone = att.phone
-      const key = local0011ClientKey(phone, att.clientName)
-      if (!key) continue
-      const dedupe = `${key}|${att.lastVisitDay}`
-      if (seen.has(dedupe)) continue
-      seen.add(dedupe)
+      const payload = await fetchAvecReport(
+        '0002',
+        { inicio, fim, como_conheceu: '', limit: 250, page },
+        { timeoutMs: 55_000 },
+      )
+      pagesFetched = page
+      const rows = extractRows(payload)
+      if (rows.length === 0) {
+        // Página vazia: se prior estava pronto e ainda não gravamos nada, preserva.
+        if (page === 1 && rowCount === 0) {
+          const prior = await getVisitCoverage(quarter)
+          if (isVisitCoverageReady(prior)) {
+            stats.warnings.push(
+              `director-visits ${quarter}: Avec vazio; cobertura anterior preservada (${prior!.row_count} rows)`,
+            )
+            return
+          }
+        }
+        break
+      }
 
-      const proRaw =
-        typeof row.todas_os_profissionais === 'string'
-          ? row.todas_os_profissionais
-          : att.professional
-      const pros = splitAvecProfessionalNames(proRaw)
-      const email =
-        typeof row.email === 'string' && row.email.trim() ? row.email.trim() : null
+      for (const row of rows) {
+        const att = normalizeAttendanceRow(row)
+        if (!att?.clientName || !att.lastVisitDay) continue
+        const phone = att.phone
+        const key = local0011ClientKey(phone, att.clientName)
+        if (!key) continue
+        const dedupe = `${key}|${att.lastVisitDay}`
+        if (seen.has(dedupe)) continue
+        seen.add(dedupe)
 
-      batch.push({
-        client_key: key,
-        visited_on: att.lastVisitDay,
-        client_name: att.clientName,
-        phone,
-        mobile: phone,
-        email,
-        professional_names: pros,
-        source_report: '0002',
-      })
-      if (batch.length >= UPSERT_BATCH_SIZE) await flush()
+        const proRaw =
+          typeof row.todas_os_profissionais === 'string'
+            ? row.todas_os_profissionais
+            : att.professional
+        const pros = splitAvecProfessionalNames(proRaw)
+        const email =
+          typeof row.email === 'string' && row.email.trim() ? row.email.trim() : null
+
+        batch.push({
+          client_key: key,
+          visited_on: att.lastVisitDay,
+          client_name: att.clientName,
+          phone,
+          mobile: phone,
+          email,
+          professional_names: pros,
+          source_report: '0002',
+        })
+        if (batch.length >= UPSERT_BATCH_SIZE) await flush()
+      }
+
+      if (rows.length < 250) break
+      if (page === MAX_PAGES_PER_QUARTER) truncated = true
     }
 
-    if (rows.length < 250) break
-    if (page === MAX_PAGES_PER_QUARTER) truncated = true
+    await flush()
+  } catch (e) {
+    await flush().catch(() => {})
+    await preserveOrStubCoverage(
+      quarter,
+      periodStart,
+      periodEnd,
+      pagesFetched,
+      rowCount,
+      stats,
+      'falha no sync',
+    )
+    throw e
   }
 
-  await flush()
-
-  await sql`
-    insert into salon_visit_sync_coverage (
-      period_key, period_start, period_end, pages_fetched, row_count, truncated, synced_at
-    ) values (
-      ${quarter},
-      ${periodStart}::date,
-      ${periodEnd}::date,
-      ${pagesFetched},
-      ${rowCount},
-      ${truncated},
-      now()
+  if (aborted) {
+    const outcome = await preserveOrStubCoverage(
+      quarter,
+      periodStart,
+      periodEnd,
+      pagesFetched,
+      rowCount,
+      stats,
+      'abortado por orçamento',
     )
-    on conflict (period_key) do update set
-      period_start = excluded.period_start,
-      period_end = excluded.period_end,
-      pages_fetched = excluded.pages_fetched,
-      row_count = excluded.row_count,
-      truncated = excluded.truncated,
-      synced_at = now()
-  `
+    if (outcome === 'stubbed') {
+      stats.warnings.push(
+        `director-visits ${quarter}: abortado por orçamento; cobertura marcada truncada`,
+      )
+    }
+    return
+  }
+
+  // Resultado "completo" mas suspeitosamente baixo vs cobertura boa anterior.
+  if (!truncated) {
+    const prior = await getVisitCoverage(quarter)
+    if (
+      isVisitCoverageReady(prior) &&
+      prior &&
+      (rowCount === 0 || (prior.row_count > 100 && rowCount < prior.row_count * 0.5))
+    ) {
+      await preserveOrStubCoverage(
+        quarter,
+        periodStart,
+        periodEnd,
+        pagesFetched,
+        rowCount,
+        stats,
+        `resultado incompleto (${rowCount} vs prior ${prior.row_count})`,
+      )
+      return
+    }
+  }
+
+  await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, truncated)
 
   if (truncated) {
     stats.warnings.push(`director-visits ${quarter}: truncado em ${MAX_PAGES_PER_QUARTER} páginas 0002`)
@@ -245,39 +365,12 @@ async function syncOneQuarter(
   }
 }
 
-async function markQuarterAttemptFailed(quarter: QuarterKey): Promise<void> {
-  const sql = getSql()
-  const { inicio, fim } = quarterRangeBr(quarter)
-  const periodStart = avecBrToIso(inicio)
-  const periodEnd = avecBrToIso(fim)
-  await sql`
-    insert into salon_visit_sync_coverage (
-      period_key, period_start, period_end, pages_fetched, row_count, truncated, synced_at
-    ) values (
-      ${quarter},
-      ${periodStart}::date,
-      ${periodEnd}::date,
-      0,
-      0,
-      true,
-      now()
-    )
-    on conflict (period_key) do update set
-      period_start = excluded.period_start,
-      period_end = excluded.period_end,
-      pages_fetched = excluded.pages_fetched,
-      row_count = salon_visit_sync_coverage.row_count,
-      truncated = true,
-      synced_at = now()
-  `
-}
-
 export type SyncDirectorVisitsOpts = {
   /** Se omitido, sincroniza corrente + anterior + YoY. */
   quarters?: QuarterKey[]
   /** Re-sincroniza mesmo com cobertura fresca (<12h). */
   force?: boolean
-  /** Abort limpo entre trimestres para respeitar o orçamento do sync full. */
+  /** Abort limpo entre páginas/trimestres para respeitar o orçamento do sync full. */
   shouldAbort?: () => boolean
 }
 
@@ -302,7 +395,7 @@ export async function syncDirectorVisits(
         stats.warnings.push(`director-visits ${q}: cobertura fresca — pulado`)
         continue
       }
-      await syncOneQuarter(q, stats, syncRunId)
+      await syncOneQuarter(q, stats, syncRunId, opts)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       // Tabela ainda não migrada — não derruba o sync full.
@@ -310,12 +403,7 @@ export async function syncDirectorVisits(
         stats.warnings.push(`director-visits: schema pendente (${msg.slice(0, 80)})`)
         return
       }
-      await markQuarterAttemptFailed(q).catch((markErr) => {
-        const markMsg = markErr instanceof Error ? markErr.message : String(markErr)
-        stats.warnings.push(
-          `director-visits ${q}: tentativa sem cobertura (${markMsg})`.slice(0, 160),
-        )
-      })
+      // syncOneQuarter já fez preserveOrStub antes de rethrow.
       stats.errors.push(`director-visits ${q}: ${msg.slice(0, 160)}`)
     }
   }

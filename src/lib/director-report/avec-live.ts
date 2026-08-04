@@ -595,7 +595,7 @@ export async function fetchLiveDirectorBlocks(
           compareQuarter,
           professionals,
         )
-        if (fromDb) {
+        if (fromDb && fromDb.selected.source === 'local') {
           selectedQ = {
             byPro: fromDb.selected.byPro,
             salonRates: fromDb.selected.salonRates,
@@ -611,15 +611,18 @@ export async function fetchLiveDirectorBlocks(
             note: fromDb.compare.note,
           }
           usedDb = true
-          const compareDbAvailable =
-            !/cobertura faltante|comparativo DB indispon[ií]vel/i.test(compareQ.note ?? '')
-          returnSource = combineReturnSources(
-            'db',
-            compareDbAvailable ? 'db' : 'none',
-          )
+          returnSource =
+            fromDb.compare.source === 'local' ? 'db' : 'mixed'
           warnings.push('0011 via banco interno (proxy última visita 0002 sincronizado)')
           if (selectedQ.note) warnings.push(selectedQ.note)
-          if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
+          if (fromDb.compare.source !== 'local') {
+            warnings.push(
+              '0011 DB: comparativo sem cobertura completa — exibindo selecionado do banco',
+            )
+          }
+          if (compareQ.note && compareQ.note !== selectedQ.note) {
+            warnings.push(compareQ.note)
+          }
         }
       } catch (e) {
         warnings.push(
