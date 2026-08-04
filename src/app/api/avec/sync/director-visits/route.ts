@@ -23,6 +23,8 @@ import type { QuarterKey } from '@/lib/director-report/types'
  * Este é proxy de última visita 0002 para o 0011, não 0011 event-level da Avec.
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
  *
+ * maxDuration 800s requer Vercel Fluid Compute (Settings → Functions → Fluid).
+ *
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
 export const maxDuration = 800

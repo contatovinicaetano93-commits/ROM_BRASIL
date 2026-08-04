@@ -39,6 +39,19 @@ export class HealthMonitor {
         }
       }
 
+      // Hard platform timeout (Fluid off / teto ~300s) — health.ok já vai false.
+      const ht = health.avec?.hard_timeout
+      if (ht && ht.ok === false) {
+        const msg = ht.message || 'Full sync hard-timeout sem aborted limpo'
+        issues.push(msg)
+        await this.alertIfNew(
+          'avec_hard_timeout',
+          'error',
+          'Avec Full Sync Hard Timeout',
+          msg,
+        )
+      }
+
       if (health.stock?.last_fast) {
         // Cron estoque BR = a cada hora — limiar de "failed por idade" > 90 min (não 60).
         const status = calculateSyncStatus(
