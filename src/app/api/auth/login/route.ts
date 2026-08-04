@@ -39,17 +39,25 @@ export async function POST(req: NextRequest) {
     return err('Usuário ou senha incorretos', 401)
   }
 
-  const posthog = getPostHogClient()
-  posthog.identify({
-    distinctId: hit.user,
-    properties: { role: hit.role },
-  })
-  posthog.capture({
-    distinctId: hit.user,
-    event: 'server_user_logged_in',
-    properties: { role: hit.role },
-  })
-  await posthog.flush()
+  // Analytics não pode atrasar nem quebrar login: sem token vira no-op, erro é
+  // engolido, e o flush não bloqueia a resposta (PostHog lento ≠ login lento).
+  try {
+    const posthog = getPostHogClient()
+    if (posthog) {
+      posthog.identify({
+        distinctId: hit.user,
+        properties: { role: hit.role },
+      })
+      posthog.capture({
+        distinctId: hit.user,
+        event: 'server_user_logged_in',
+        properties: { role: hit.role },
+      })
+      void posthog.flush().catch(() => {})
+    }
+  } catch {
+    // ignorado de propósito
+  }
 
   const res = ok({
     auth: 'ok',
