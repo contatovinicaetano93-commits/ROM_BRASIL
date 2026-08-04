@@ -16,6 +16,7 @@ import {
   monthsInComparableQuarter,
 } from './period'
 import type {
+  DirectorReport,
   DirectorProfessional,
   MonthKey,
   MonthRevenueRow,
@@ -231,6 +232,25 @@ type QuarterAgg = {
   returnRates: number[]
   clientsTotalHint: number
   clientsReturnedHint: number
+}
+
+type ReturnSource = NonNullable<DirectorReport['return_source']>
+type QuarterReturnSource = 'db' | 'local' | 'avec' | 'none'
+
+function combineReturnSources(
+  selected: QuarterReturnSource,
+  compare: QuarterReturnSource,
+): ReturnSource {
+  if (selected === 'none' && compare === 'none') return 'none'
+  if (selected === 'db' && compare !== 'db') return 'mixed'
+  if (selected !== 'none' && compare !== 'none' && selected !== compare) return 'mixed'
+  if (selected !== 'none') return selected
+  return compare
+}
+
+function sourceFromFetchedQuarter(source: '0011' | '0007' | 'local' | 'none'): QuarterReturnSource {
+  if (source === '0011' || source === '0007') return 'avec'
+  return source
 }
 
 async function fetch0011Quarter(
@@ -484,6 +504,7 @@ export interface LiveDirectorBlocks {
   return_blocks: ProfessionalReturnBlock[] | null
   /** null = etapa 0021 falhou ao montar (bug/exceção) — caller deixa bloco vazio (sem fixture). */
   revenue_blocks: ProfessionalRevenueBlock[] | null
+  return_source: ReturnSource
   warnings: string[]
 }
 
@@ -509,6 +530,7 @@ export async function fetchLiveDirectorBlocks(
   const includeRevenue = opts?.includeRevenue !== false
   const budget = opts?.budget ?? directorFullBudget()
   const warnings: string[] = []
+  let returnSource: ReturnSource = includeReturn ? 'none' : 'none'
   const monthsNeeded = new Set<MonthKey>()
   if (includeRevenue) {
     monthsNeeded.add(selectedMonth)
@@ -573,24 +595,31 @@ export async function fetchLiveDirectorBlocks(
           compareQuarter,
           professionals,
         )
-        if (fromDb && fromDb.selected.source === 'local' && fromDb.compare.source === 'local') {
+        if (fromDb) {
           selectedQ = {
             byPro: fromDb.selected.byPro,
             salonRates: fromDb.selected.salonRates,
             truncated: fromDb.selected.truncated,
-            source: 'local',
+            source: fromDb.selected.source,
             note: fromDb.selected.note,
           }
           compareQ = {
             byPro: fromDb.compare.byPro,
             salonRates: fromDb.compare.salonRates,
             truncated: fromDb.compare.truncated,
-            source: 'local',
+            source: fromDb.compare.source,
             note: fromDb.compare.note,
           }
           usedDb = true
-          warnings.push('0011 via banco interno (visitas 0002 sincronizadas)')
+          const compareDbAvailable =
+            !/cobertura faltante|comparativo DB indispon[ií]vel/i.test(compareQ.note ?? '')
+          returnSource = combineReturnSources(
+            'db',
+            compareDbAvailable ? 'db' : 'none',
+          )
+          warnings.push('0011 via banco interno (proxy última visita 0002 sincronizado)')
           if (selectedQ.note) warnings.push(selectedQ.note)
+          if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
         }
       } catch (e) {
         warnings.push(
@@ -627,6 +656,10 @@ export async function fetchLiveDirectorBlocks(
         }
         if (selectedQ.note) warnings.push(selectedQ.note)
         else if (compareQ.note) warnings.push(compareQ.note)
+        returnSource = combineReturnSources(
+          selectedQ.source === 'local' ? 'local' : 'none',
+          compareQ.source === 'local' ? 'local' : 'none',
+        )
       } catch (e) {
         warnings.push(`0011 local: ${e instanceof Error ? e.message : String(e)}`)
       }
@@ -654,6 +687,10 @@ export async function fetchLiveDirectorBlocks(
           `0011 ${compareQuarter}: ${cmpRes.reason instanceof Error ? cmpRes.reason.message : String(cmpRes.reason)}`,
         )
       }
+      returnSource = combineReturnSources(
+        sourceFromFetchedQuarter(selectedQ.source),
+        sourceFromFetchedQuarter(compareQ.source),
+      )
     }
   }
 
@@ -843,5 +880,5 @@ export async function fetchLiveDirectorBlocks(
     warnings.push('0011 sem lista/taxa casada aos profissionais do portfólio')
   }
 
-  return { return_blocks, revenue_blocks, warnings }
+  return { return_blocks, revenue_blocks, return_source: returnSource, warnings }
 }

@@ -89,6 +89,7 @@ export interface DirectorReport {
   generated_at: string
   period: DirectorReportPeriod
   source: 'mock' | 'avec' | 'error' | 'partial'
+  return_source?: 'db' | 'local' | 'avec' | 'none' | 'mixed'
   avec_reports: { return: string; revenue: string }
   schedule_note: string
   return_blocks: ProfessionalReturnBlock[]

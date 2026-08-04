@@ -9,13 +9,18 @@ import {
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
 import { getDeploymentContext } from '@/lib/deployment'
-import { listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
+import {
+  isVisitCoverageReady,
+  listVisitCoverage,
+  probe0011FromDb,
+} from '@/lib/director-report/from-db'
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
 import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
+ * Este é proxy de última visita 0002 para o 0011, não 0011 event-level da Avec.
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
  *
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
@@ -51,6 +56,31 @@ function parseQuarterParam(req: NextRequest): QuarterKey[] | undefined {
   return parts as QuarterKey[]
 }
 
+function default0011CoverageStatus(coverage: Awaited<ReturnType<typeof listVisitCoverage>>['coverage']) {
+  const current = currentQuarterKeySp()
+  const selected = previousQuarterKey(current)
+  const compare = previousQuarterKey(selected)
+  const quarters = [...new Set([
+    selected,
+    previousQuarterKey(selected),
+    compare,
+    previousQuarterKey(compare),
+  ])]
+  const byQuarter = new Map(coverage.map((c) => [c.period_key, c]))
+  const missing = quarters.filter((q) => !isVisitCoverageReady(byQuarter.get(q)))
+  const lastSyncedAt = coverage
+    .map((c) => c.synced_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? null
+  return {
+    ready_for_default_0011: missing.length === 0,
+    default_0011_quarters: quarters,
+    default_0011_missing: missing,
+    last_synced_at: lastSyncedAt,
+  }
+}
+
 /** GET — cron/admin: sincroniza visitas. `?status=1` só consulta cobertura. */
 export async function GET(req: NextRequest) {
   try {
@@ -59,6 +89,7 @@ export async function GET(req: NextRequest) {
 
     if (req.nextUrl.searchParams.get('status') === '1') {
       const status = await listVisitCoverage()
+      const defaultStatus = default0011CoverageStatus(status.coverage)
       const probe =
         req.nextUrl.searchParams.get('probe_0011') === '1' ||
         req.nextUrl.searchParams.get('probe_0011') === 'true'
@@ -78,11 +109,12 @@ export async function GET(req: NextRequest) {
       }
       return ok({
         ...status,
+        ...defaultStatus,
         ready: status.coverage.some((c) => !c.truncated && c.row_count > 0),
         report_probe,
         note: probe
-          ? 'Cobertura + probe 0011 do warehouse (Na lista / taxas).'
-          : 'Cobertura do warehouse 0011. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
+          ? 'Cobertura + probe do proxy última visita 0002 (Na lista / taxas).'
+          : 'Cobertura do proxy última visita 0002 para Relatório gerência. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
       })
     }
 
@@ -137,6 +169,6 @@ async function runSync(req: NextRequest) {
     errors: stats.errors,
     coverage: status.coverage,
     visit_rows: status.visit_rows,
-    note: 'Relatório gerência usa este warehouse quando a cobertura dos 4 trimestres (selecionado/comparativo + priors) não está truncada.',
+    note: 'Relatório gerência usa este warehouse como proxy última visita 0002 quando a cobertura dos trimestres necessários não está truncada.',
   })
 }

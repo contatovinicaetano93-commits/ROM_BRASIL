@@ -41,6 +41,23 @@ interface StockKpisPayload {
   last_synced_at: string | null
 }
 
+interface DirectorVisitCoverage {
+  period_key: string
+  row_count: number
+  truncated: boolean
+  synced_at: string
+}
+
+interface DirectorVisitsStatusPayload {
+  coverage: DirectorVisitCoverage[]
+  visit_rows: number
+  ready: boolean
+  ready_for_default_0011?: boolean
+  default_0011_quarters?: string[]
+  default_0011_missing?: string[]
+  last_synced_at?: string | null
+}
+
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 function spNowParts() {
@@ -106,6 +123,55 @@ function previousQuarterKey(key: string) {
   return `${year}-Q${q - 1}`
 }
 
+function clientDedupeKey(client: {
+  name: string
+  phone: string | null
+  mobile: string | null
+  email: string | null
+}) {
+  return [
+    client.name.trim().toLowerCase().replace(/\s+/g, ' '),
+    (client.mobile || client.phone || '').replace(/\D/g, ''),
+    (client.email || '').trim().toLowerCase(),
+  ].join('|')
+}
+
+function formatStatusDate(value: string | null | undefined) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return value
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function returnSourceLabel(data: DirectorReport | null, loading: boolean) {
+  if (loading && !data) return '…'
+  if (!data) return '—'
+  const note = data.schedule_note ?? ''
+  if (data.return_source === 'db' || /banco interno/i.test(note)) return 'Banco interno'
+  if (data.return_source === 'local') return 'Proxy local'
+  if (data.return_source === 'avec') return 'Avec'
+  if (data.return_source === 'mixed') return 'Misto'
+  if (data.return_source === 'none') return 'Sem 0011'
+  if (data.source === 'partial') return 'parcial'
+  if (data.source === 'error') return 'sem dados / timeout'
+  if (data.source === 'mock') return 'demo / fixture'
+  return 'Avec'
+}
+
+function returnSourceTone(data: DirectorReport | null) {
+  if (data?.return_source === 'db' || /banco interno/i.test(data?.schedule_note ?? '')) {
+    return 'text-foreground'
+  }
+  if (data?.return_source === 'mixed' || data?.source === 'partial') return 'text-warning'
+  if (data?.source === 'error' || data?.return_source === 'none') return 'text-danger'
+  return 'text-foreground'
+}
+
 const QUARTERS = buildQuarterOptions()
 const MONTHS = buildMonthOptions()
 /** Timeout do browser para anos históricos (servidor maxDuration 300s). */
@@ -115,6 +181,7 @@ const CURRENT_FETCH_MS = 90_000
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
   const { session } = useClientSession()
+  const isAdmin = session?.role === 'admin'
   const canViewRevenue = Boolean(session?.can_view_revenue)
 
   // 0011 default = trimestre fechado anterior (evita 0% no tri em aberto)
@@ -139,7 +206,33 @@ export default function RelatorioDiretoriaPage() {
   const [stockKpis, setStockKpis] = useState<StockKpisPayload | null>(null)
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
+  const [directorVisitsStatus, setDirectorVisitsStatus] = useState<DirectorVisitsStatusPayload | null>(null)
   const loadAbortRef = useRef<AbortController | null>(null)
+
+  const loadDirectorVisitsStatus = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await apiFetch('/api/avec/sync/director-visits?status=1', {
+        cache: 'no-store',
+        clientCache: false,
+        signal,
+        timeoutMs: 15_000,
+      })
+      if (signal?.aborted) return
+      if (res.status === 401 || res.status === 403) {
+        setDirectorVisitsStatus(null)
+        return
+      }
+      const json = await res.json()
+      if (signal?.aborted) return
+      if (!res.ok || json.error) {
+        setDirectorVisitsStatus(null)
+        return
+      }
+      setDirectorVisitsStatus(json.data as DirectorVisitsStatusPayload)
+    } catch {
+      if (!signal?.aborted) setDirectorVisitsStatus(null)
+    }
+  }, [])
 
   /** Carrega por etapa — 0011 não espera o 0021 (e vice-versa). */
   const load = useCallback(async () => {
@@ -216,6 +309,11 @@ export default function RelatorioDiretoriaPage() {
               : next.revenue_blocks,
         }
       })
+      if (isAdmin) {
+        void loadDirectorVisitsStatus(controller.signal)
+      } else {
+        setDirectorVisitsStatus(null)
+      }
     } catch (e) {
       if (controller.signal.aborted && loadAbortRef.current !== controller) {
         // Substituído por outro load — não mostrar erro.
@@ -248,11 +346,16 @@ export default function RelatorioDiretoriaPage() {
     tab,
     proId0011,
     proId0021,
+    isAdmin,
+    loadDirectorVisitsStatus,
   ])
 
   useEffect(() => {
-    load()
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
     return () => {
+      window.clearTimeout(timer)
       loadAbortRef.current?.abort()
     }
   }, [load])
@@ -278,7 +381,11 @@ export default function RelatorioDiretoriaPage() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'estoque') loadStock()
+    if (tab !== 'estoque') return
+    const timer = window.setTimeout(() => {
+      void loadStock()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [tab, loadStock])
 
   const pros = useMemo(() => {
@@ -311,10 +418,26 @@ export default function RelatorioDiretoriaPage() {
       })
   }, [data, displayQuarter0011, displayCompare0011, proId0011])
 
-  const clientsOnList = useMemo(
+  const clientsOnList = useMemo(() => {
+    const unique = new Set<string>()
+    for (const row of selectedReturn) {
+      for (const client of row.reactivation) unique.add(clientDedupeKey(client))
+    }
+    return unique.size
+  }, [selectedReturn])
+
+  const clientsOnListByPro = useMemo(
     () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
     [selectedReturn],
   )
+
+  const sourceBadge = returnSourceLabel(data, loading)
+  const sourceBadgeTone = returnSourceTone(data)
+  const isDbReturnSource = Boolean(
+    data && (data.return_source === 'db' || /banco interno/i.test(data.schedule_note ?? '')),
+  )
+  const isLocalReturnSource = data?.return_source === 'local'
+  const isAvecReturnSource = data?.return_source === 'avec'
 
   const quarterPair = useMemo(() => {
     if (!compareMonths) return { older: quarter0021, newer: quarter0021 }
@@ -452,29 +575,7 @@ export default function RelatorioDiretoriaPage() {
           </p>
           <p className="mt-2 text-xs text-muted">
             Fonte:{' '}
-            <span
-              className={
-                data?.source === 'avec'
-                  ? 'text-foreground'
-                  : data?.source === 'partial'
-                    ? 'text-warning'
-                    : data?.source === 'error'
-                      ? 'text-danger'
-                      : 'text-warning'
-              }
-            >
-              {loading && !data
-                ? '…'
-                : !data
-                  ? '—'
-                  : data.source === 'avec'
-                    ? 'Avec live'
-                    : data.source === 'partial'
-                      ? 'parcial'
-                      : data.source === 'error'
-                        ? 'sem dados / timeout'
-                        : 'demo / fixture'}
-            </span>
+            <span className={sourceBadgeTone}>{sourceBadge}</span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
         </div>
@@ -504,6 +605,10 @@ export default function RelatorioDiretoriaPage() {
         <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
         </div>
+      )}
+
+      {isAdmin && directorVisitsStatus && (
+        <DirectorVisitsCoverageStrip status={directorVisitsStatus} />
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -557,6 +662,11 @@ export default function RelatorioDiretoriaPage() {
               icon={<Users size={16} />}
               label="Na lista"
               value={loading && !data ? '—' : String(clientsOnList)}
+              secondary={
+                clientsOnListByPro !== clientsOnList
+                  ? `soma por pro: ${clientsOnListByPro}`
+                  : undefined
+              }
             />
             <Kpi
               icon={<TrendingUp size={16} />}
@@ -691,18 +801,21 @@ export default function RelatorioDiretoriaPage() {
                 para a recepção reaquecer o lead (WhatsApp). Na tela mostramos uma amostra (até 12 por
                 profissional); a lista completa vai no CSV / e-mail.
               </p>
-              {data?.source === 'avec' &&
-                /0011 local/i.test(data.schedule_note ?? '') && (
-                  <p className="text-muted">
-                    Fonte 0011 local (0002+0007 por profissional) — fallback quando Avec 0011 falha.
-                  </p>
-                )}
-              {data?.source === 'avec' &&
-                !/0011 local/i.test(data.schedule_note ?? '') && (
-                  <p className="text-muted">
-                    Fonte Avec live (0011) no trimestre selecionado.
-                  </p>
-                )}
+              {isDbReturnSource && (
+                <p className="text-muted">
+                  Fonte Banco interno — proxy última visita 0002 sincronizado para o 0011.
+                </p>
+              )}
+              {isLocalReturnSource && (
+                <p className="text-muted">
+                  Fonte Proxy local (0002+0007 por profissional) — fallback quando Avec 0011 falha.
+                </p>
+              )}
+              {isAvecReturnSource && (
+                <p className="text-muted">
+                  Fonte Avec (0011) no trimestre selecionado.
+                </p>
+              )}
               {data?.source === 'partial' && (
                 <p className="text-warning">
                   Relatório parcial — só etapas Avec OK. Etapa faltante ficou vazia (sem fixture).
@@ -1257,10 +1370,12 @@ function Kpi({
   icon,
   label,
   value,
+  secondary,
 }: {
   icon: React.ReactNode
   label: string
   value: string
+  secondary?: string
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -1269,6 +1384,37 @@ function Kpi({
         {label}
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums leading-snug">{value}</p>
+      {secondary && <p className="mt-1 text-[0.7rem] text-muted">{secondary}</p>}
+    </div>
+  )
+}
+
+function DirectorVisitsCoverageStrip({ status }: { status: DirectorVisitsStatusPayload }) {
+  const quarters = status.default_0011_quarters ?? []
+  const missing = new Set(status.default_0011_missing ?? [])
+  const readyCount = quarters.filter((q) => !missing.has(q)).length
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
+      <span className="font-medium text-foreground">Banco interno 0011</span>
+      <span>
+        {readyCount}/{quarters.length || 0} períodos prontos
+      </span>
+      <span className={status.ready_for_default_0011 ? 'text-success' : 'text-warning'}>
+        {status.ready_for_default_0011 ? 'default pronto' : 'default com lacunas'}
+      </span>
+      {quarters.map((q) => (
+        <span
+          key={q}
+          className={`rounded-full border px-2 py-0.5 ${
+            missing.has(q)
+              ? 'border-warning/40 bg-warning/10 text-warning'
+              : 'border-success/40 bg-success/10 text-success'
+          }`}
+        >
+          {q} {missing.has(q) ? 'faltando' : 'ok'}
+        </span>
+      ))}
+      <span className="ml-auto">último sync: {formatStatusDate(status.last_synced_at)}</span>
     </div>
   )
 }

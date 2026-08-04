@@ -140,6 +140,7 @@ export async function buildDirectorReport(
         reference_date: '',
       },
       source: 'mock',
+      return_source: 'none',
       avec_reports: { return: '0011', revenue: '0021' },
       schedule_note: `Dados de demonstração (mock) — não usar para decisão · ${professionals.length} profissionais de piso`,
       return_blocks,
@@ -168,6 +169,7 @@ export async function buildDirectorReport(
   let liveNote: string | null = null
   let live0011 = false
   let live0021 = false
+  let returnSource: DirectorReport['return_source'] = need0011 ? 'none' : undefined
 
   if (!avecReady) {
     liveNote = 'Avec não configurada — sem dados inventados'
@@ -197,8 +199,10 @@ export async function buildDirectorReport(
         if (live.return_blocks !== null) {
           return_blocks = live.return_blocks
           live0011 = true
+          returnSource = live.return_source
         } else {
           return_blocks = []
+          returnSource = 'none'
         }
       }
       if (need0021) {
@@ -301,6 +305,17 @@ export async function buildDirectorReport(
     })
     .filter((x): x is number => x != null)
 
+  const returnSourceNote =
+    !need0011 || !returnSource || returnSource === 'none'
+      ? null
+      : returnSource === 'db'
+        ? '0011 banco interno (proxy última visita 0002)'
+        : returnSource === 'mixed'
+          ? '0011 misto (banco interno/proxy local/Avec)'
+          : returnSource === 'local'
+            ? '0011 proxy local'
+            : '0011 Avec'
+
   const draft: DirectorReport = {
     generated_at: new Date().toISOString(),
     period: {
@@ -316,14 +331,25 @@ export async function buildDirectorReport(
       reference_date: '',
     },
     source,
+    return_source: returnSource,
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note:
       professionals.length === 0
         ? '⚠ Nenhum profissional de piso (cabelo/maquiagem) no roster — relatório sai vazio.'
         : source === 'avec'
-          ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec · ${professionals.length} profissionais de piso${liveNote ? ` · ${liveNote}` : ''}`
+          ? [
+              'Envio em 2 etapas (terças 08:00 SP)',
+              returnSourceNote ?? '0011/0021 live Avec',
+              `${professionals.length} profissionais de piso`,
+              liveNote,
+            ].filter(Boolean).join(' · ')
           : source === 'partial'
-            ? `Dados parciais Avec (etapa faltante vazia, sem fixture) · ${professionals.length} profissionais de piso${liveNote ? ` · ${liveNote}` : ''}`
+            ? [
+                'Dados parciais (etapa faltante vazia, sem fixture)',
+                returnSourceNote,
+                `${professionals.length} profissionais de piso`,
+                liveNote,
+              ].filter(Boolean).join(' · ')
             : `Sem dados Avec — relatório vazio (sem fixture) · ${professionals.length} profissionais de piso${liveNote ? ` · ${liveNote}` : ''}`,
     return_blocks,
     revenue_blocks,
