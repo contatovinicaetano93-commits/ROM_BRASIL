@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "db:migrate": "node scripts/run-migrations.mjs",
     "check:db-driver": "node scripts/check-db-driver.mjs",
     "check:brasil-db-host": "node scripts/check-brasil-db-host.mjs",

@@ -1,8 +1,21 @@
 name: Sync to ROM-IGUATEMI
 
-# Dispara manualmente no GitHub → Actions → Run workflow
+# Dispara manualmente no GitHub → Actions → Run workflow.
+#
+# Este workflow publica um snapshot deste repo por cima do main do ROM-IGUATEMI.
+# Ele existia para o bootstrap do repo standalone, quando o Iguatemi ainda não
+# tinha história própria.
+#
+# Hoje o ROM-IGUATEMI recebe PRs direto. Empurrar um snapshot antigo por cima
+# apagaria esses commits. Por isso o push só acontece se a ref de origem já
+# contiver todo o main do destino; caso contrário o job falha sem escrever nada.
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Branch/ref deste repo a publicar no Iguatemi"
+        required: true
+        default: cursor/rom-iguatemi-standalone-4fb3
 
 permissions:
   contents: read
@@ -11,24 +24,50 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Iguatemi standalone branch
+      - name: Checkout da ref de origem
         uses: actions/checkout@v4
         with:
-          ref: cursor/rom-iguatemi-standalone-4fb3
+          ref: ${{ inputs.source_ref }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Push to ROM-IGUATEMI
+      - name: Publicar no ROM-IGUATEMI (somente fast-forward)
         env:
           PAT: ${{ secrets.ROM_IGUATEMI_PAT }}
           TARGET: contatovinicaetano93-commits/ROM-IGUATEMI
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          if [ -z "$PAT" ]; then
+          set -euo pipefail
+
+          if [ -z "${PAT:-}" ]; then
             echo "::error::Secret ROM_IGUATEMI_PAT não configurado. Veja deploy/PUSH-IGUATEMI-VIA-GITHUB.md"
             exit 1
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add iguatemi "https://x-access-token:${PAT}@github.com/${TARGET}.git"
-          git push iguatemi HEAD:main --force
+          git fetch iguatemi main
+
+          # Guarda: recusa publicar se o main do Iguatemi tiver commits que a ref
+          # de origem não contém — seria perda de trabalho.
+          PERDIDOS=$(git rev-list --count HEAD..iguatemi/main)
+          if [ "$PERDIDOS" -gt 0 ]; then
+            echo "::error::Abortado: o main do ${TARGET} tem ${PERDIDOS} commit(s) que '${SOURCE_REF}' não contém. Publicar agora apagaria esse trabalho."
+            echo ""
+            echo "Commits que seriam perdidos:"
+            git log --oneline HEAD..iguatemi/main | head -50
+            echo ""
+            echo "Para publicar assim mesmo, traga esses commits para a ref de origem (merge/rebase) e rode de novo."
+            exit 1
+          fi
+
+          NOVOS=$(git rev-list --count iguatemi/main..HEAD)
+          if [ "$NOVOS" -eq 0 ]; then
+            echo "✓ Nada a publicar — ${TARGET} já está em dia."
+            exit 0
+          fi
+
+          echo "Publicando ${NOVOS} commit(s) em ${TARGET}…"
+          git push iguatemi HEAD:main
           echo "✓ Código publicado em https://github.com/${TARGET}"
