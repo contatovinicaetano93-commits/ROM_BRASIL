@@ -282,7 +282,7 @@ export default function ContatosPage() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (sem cliente Avec)`
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} nos últimos ${NOVOS_WINDOW_DAYS} dias (sem cliente Avec)`
         : `${visible.length} na fila${
             totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
           }`
@@ -428,8 +428,7 @@ export default function ContatosPage() {
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
           Novos: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro novo
           porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Fica aqui por{' '}
-          {NOVOS_WINDOW_DAYS} dias; sai antes se fizer um serviço com cadência, e aí passa a
-          aparecer em Vencendo/Atrasados.
+          {NOVOS_WINDOW_DAYS} dias; sai antes quando a cadência já estiver em Vencendo/Atrasados.
         </p>
       )}
 
