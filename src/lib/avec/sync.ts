@@ -1441,7 +1441,7 @@ async function runAvecSyncUnlocked(
       // director-visits primeiro: o Relatório gerência depende disso e o budget
       // do full/agenda costuma esgotar antes do bloco no fim do sync.
       const agendaSteps = [
-        ['director-visits', () => syncDirectorVisits(stats, syncRunId)],
+        ['director-visits', () => syncDirectorVisits(stats, syncRunId, { shouldAbort: () => syncBudgetExhausted() })],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],

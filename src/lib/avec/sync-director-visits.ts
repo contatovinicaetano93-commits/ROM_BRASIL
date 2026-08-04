@@ -1,6 +1,7 @@
 /**
  * Sync 0002 → salon_client_visits (histórico cliente×pro×dia).
- * Sem essa tabela o Relatório gerência 0011 só existia via Avec ao vivo.
+ * Relatório gerência usa isso como proxy de última visita 0002 para 0011;
+ * não é 0011 event-level da Avec.
  */
 
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
@@ -244,11 +245,40 @@ async function syncOneQuarter(
   }
 }
 
+async function markQuarterAttemptFailed(quarter: QuarterKey): Promise<void> {
+  const sql = getSql()
+  const { inicio, fim } = quarterRangeBr(quarter)
+  const periodStart = avecBrToIso(inicio)
+  const periodEnd = avecBrToIso(fim)
+  await sql`
+    insert into salon_visit_sync_coverage (
+      period_key, period_start, period_end, pages_fetched, row_count, truncated, synced_at
+    ) values (
+      ${quarter},
+      ${periodStart}::date,
+      ${periodEnd}::date,
+      0,
+      0,
+      true,
+      now()
+    )
+    on conflict (period_key) do update set
+      period_start = excluded.period_start,
+      period_end = excluded.period_end,
+      pages_fetched = excluded.pages_fetched,
+      row_count = salon_visit_sync_coverage.row_count,
+      truncated = true,
+      synced_at = now()
+  `
+}
+
 export type SyncDirectorVisitsOpts = {
   /** Se omitido, sincroniza corrente + anterior + YoY. */
   quarters?: QuarterKey[]
   /** Re-sincroniza mesmo com cobertura fresca (<12h). */
   force?: boolean
+  /** Abort limpo entre trimestres para respeitar o orçamento do sync full. */
+  shouldAbort?: () => boolean
 }
 
 /**
@@ -262,6 +292,11 @@ export async function syncDirectorVisits(
 ): Promise<void> {
   const quarters = opts?.quarters?.length ? opts.quarters : quartersToSync()
   for (const q of quarters) {
+    if (opts?.shouldAbort?.()) {
+      stats.aborted = true
+      stats.warnings.push(`director-visits: abortado por orçamento antes de ${q}`)
+      break
+    }
     try {
       if (!opts?.force && (await coverageIsFresh(q))) {
         stats.warnings.push(`director-visits ${q}: cobertura fresca — pulado`)
@@ -275,6 +310,12 @@ export async function syncDirectorVisits(
         stats.warnings.push(`director-visits: schema pendente (${msg.slice(0, 80)})`)
         return
       }
+      await markQuarterAttemptFailed(q).catch((markErr) => {
+        const markMsg = markErr instanceof Error ? markErr.message : String(markErr)
+        stats.warnings.push(
+          `director-visits ${q}: tentativa sem cobertura (${markMsg})`.slice(0, 160),
+        )
+      })
       stats.errors.push(`director-visits ${q}: ${msg.slice(0, 160)}`)
     }
   }
