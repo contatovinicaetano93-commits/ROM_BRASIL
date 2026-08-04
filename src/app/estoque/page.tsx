@@ -241,9 +241,11 @@ export default function EstoquePage() {
   const [outflowWindow, setOutflowWindow] = useState<'hoje' | 'semana'>('semana')
   const [movementsOpen, setMovementsOpen] = useSectionOpen('estoque.section.movimentos.open', false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       // Lotes pequenos: 7 Promise.all no pooler (max:1) deixavam Estoque lento / falho.
       const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store' })
@@ -281,9 +283,9 @@ export default function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
     // Poll leve: full reload a cada 5 min (antes 60s saturava pooler + lambdas).
-    const interval = setInterval(load, 5 * 60_000)
+    const interval = setInterval(() => { void load({ reset: false }) }, 5 * 60_000)
     return () => clearInterval(interval)
   }, [load])
 
@@ -308,13 +310,19 @@ export default function EstoquePage() {
     })
   }, [products, catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
 
-  useEffect(() => {
+  const catalogFilterKey = `${catalogQuery}\0${catalogCategoryId}\0${catalogBrandId}\0${catalogStockFilter}`
+  const [catalogFilterSeen, setCatalogFilterSeen] = useState(catalogFilterKey)
+  if (catalogFilterKey !== catalogFilterSeen) {
+    setCatalogFilterSeen(catalogFilterKey)
     setCatalogPage(1)
-  }, [catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
+  }
 
-  useEffect(() => {
+  const movementsLen = movements.length
+  const [movementsLenSeen, setMovementsLenSeen] = useState(movementsLen)
+  if (movementsLen !== movementsLenSeen) {
+    setMovementsLenSeen(movementsLen)
     setMovementsPage(1)
-  }, [movements.length])
+  }
 
   const catalogPageItems = useMemo(
     () => listPageSlice(catalogProducts, catalogPage, LIST_PAGE_SIZE),
@@ -346,7 +354,7 @@ export default function EstoquePage() {
       if (!res.ok || json.error) {
         throw new Error(json.error ?? 'Falha ao reconhecer alerta')
       }
-      await load()
+      await load({ reset: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -361,7 +369,7 @@ export default function EstoquePage() {
       if (!res.ok || json.error) {
         throw new Error(json.error ?? 'Falha no sync de estoque')
       }
-      await load()
+      await load({ reset: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -383,7 +391,7 @@ export default function EstoquePage() {
       if (!res.ok || json.error) {
         throw new Error(json.error ?? 'Falha ao continuar sync de estoque')
       }
-      await load()
+      await load({ reset: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

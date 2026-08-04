@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import gsap from 'gsap'
 
 function parseValue(raw: string) {
@@ -18,21 +18,42 @@ function parseValue(raw: string) {
   return { number, suffix, format }
 }
 
+function subscribeReducedMotion(onChange: () => void) {
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+  mq.addEventListener('change', onChange)
+  return () => mq.removeEventListener('change', onChange)
+}
+
+function getReducedMotionSnapshot() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function getReducedMotionServerSnapshot() {
+  return false
+}
+
 export function CountUp({ value }: { value: string }) {
   const parsed = useMemo(() => parseValue(value), [value])
+  const prefersReduced = useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    getReducedMotionServerSnapshot,
+  )
   const ref = useRef<HTMLSpanElement>(null)
   const started = useRef(false)
   const [display, setDisplay] = useState(() => (parsed ? parsed.format(0) + parsed.suffix : value))
 
+  const staticText = !parsed
+    ? value
+    : prefersReduced
+      ? parsed.format(parsed.number) + parsed.suffix
+      : null
+
   useEffect(() => {
-    if (!parsed) return
+    if (!parsed || prefersReduced) return
     const el = ref.current
     if (!el) return
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(parsed.format(parsed.number) + parsed.suffix)
-      return
-    }
+    started.current = false
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -56,7 +77,7 @@ export function CountUp({ value }: { value: string }) {
     return () => {
       observer.disconnect()
     }
-  }, [parsed])
+  }, [parsed, prefersReduced])
 
-  return <span ref={ref}>{display}</span>
+  return <span ref={ref}>{staticText ?? display}</span>
 }
