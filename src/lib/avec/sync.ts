@@ -1540,6 +1540,11 @@ async function runAvecSyncUnlocked(
       }
     }
 
+    // Pós agenda/catálogo: re-heal status e bust cache Contatos (Novos/filas).
+    // O heal do início roda antes dos upserts; sem isto a lambda quente serve
+    // counts stale até o TTL de 30s.
+    await healImportadoStatus(stats)
+
     stats.errors = formatAvecErrorList(stats.errors)
     // P1 0107 timeout etc. → warning soft (não pinta Hoje como incompleto).
     const softPeripheral = stats.errors.filter(isSoftAvecPeripheralError)
