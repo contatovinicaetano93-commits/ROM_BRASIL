@@ -62,7 +62,7 @@ export interface MonthOverview {
     expenses: number
     cmv: number
     cash_flow: number
-    lost_revenue: number
+    lost_revenue: number | null
     occupancy_avg: number | null
   }
   source_notes: MonthOverviewSourceNote[]
@@ -212,7 +212,7 @@ export function analyticsFromMonthPayload(payload: unknown): PeriodAnalytics | n
   const analytics = (payload as { analytics?: PeriodAnalytics }).analytics
   if (!analytics || typeof analytics !== 'object') return null
   if (typeof analytics.month !== 'string' || typeof analytics.label !== 'string') return null
-  if (!analytics.previous || typeof analytics.previous !== 'object') return null
+  // BR: previous pode ser null (mês sem comparável).
   return analytics
 }
 
@@ -224,40 +224,33 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
   const cancelled = Number(row.cancelled) || 0
   const no_shows = Number(row.no_shows) || 0
   const ticket_avg = row.ticket_avg != null ? Number(row.ticket_avg) : null
+  const monthRevenue = revenue > 0 || attended > 0 ? revenue : null
+  const monthAttended = attended > 0 || revenue > 0 ? attended : null
   return {
     month: row.month,
     label: labelMonthPt(row.month),
     from: window.from,
     to: window.to,
     snapshot_day: null,
-    revenue: revenue > 0 || attended > 0 ? revenue : null,
-    attended: attended > 0 || revenue > 0 ? attended : null,
-    mtd: window.mtd,
+    snapshot_missing: true,
     occupancy_avg: null,
     cancelled,
     no_shows,
     ticket_avg,
     lost_revenue: estimateLostRevenue(cancelled, no_shows, ticket_avg),
     packages: [],
-    packages_sold: 0,
-    packages_revenue: 0,
+    packages_sold: null,
+    packages_revenue: null,
     booking_channels: [],
     acquisition: [],
     return_rate: null,
     new_clients_period: Number(row.new_clients) || 0,
     top_professionals: [],
     top_services: [],
-    previous: {
-      month: previousMonthKey(row.month),
-      label: labelMonthPt(previousMonthKey(row.month)),
-      revenue: null,
-      attended: null,
-      cancelled: 0,
-      no_shows: 0,
-      ticket_avg: null,
-      lost_revenue: 0,
-      occupancy_avg: null,
-    },
+    month_revenue: monthRevenue,
+    month_attended: monthAttended,
+    mtd: window.mtd,
+    previous: null,
   }
 }
 
@@ -271,6 +264,7 @@ function buildOverview(args: {
   fromCache?: boolean
 }): MonthOverview {
   const { brand, month, finance, analytics, completeness, materializedAt, fromCache } = args
+  const prevAnalytics = analytics.previous
   return {
     unit: brand.displayName,
     panel: brand.panel,
@@ -300,14 +294,14 @@ function buildOverview(args: {
     previous_closing: {
       revenue: finance.previous.revenue,
       attended: finance.previous.attended,
-      cancelled: analytics.previous.cancelled,
-      no_shows: analytics.previous.no_shows,
+      cancelled: prevAnalytics?.cancelled ?? 0,
+      no_shows: prevAnalytics?.no_shows ?? 0,
       ticket_avg: finance.previous.ticket_avg,
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
       cash_flow: finance.previous.cash_flow,
-      lost_revenue: analytics.previous.lost_revenue,
-      occupancy_avg: analytics.previous.occupancy_avg,
+      lost_revenue: prevAnalytics?.lost_revenue ?? null,
+      occupancy_avg: prevAnalytics?.occupancy_avg ?? null,
     },
     source_notes: SOURCE_NOTES,
     from_cache: fromCache,
@@ -327,28 +321,37 @@ function overviewFromCachedRows(args: {
     ? stubFinanceFromRow(cachedPrev)
     : emptyFinanceBucket(previousMonthKey(month))
   // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
-  const analytics: PeriodAnalytics =
-    cachedPrev && baseAnalytics.previous.revenue == null
-      ? {
-          ...baseAnalytics,
-          previous: {
-            ...baseAnalytics.previous,
-            month: cachedPrev.month,
-            label: labelMonthPt(cachedPrev.month),
-            revenue: Number(cachedPrev.revenue) || 0,
-            attended: Number(cachedPrev.attended) || 0,
-            cancelled: Number(cachedPrev.cancelled) || 0,
-            no_shows: Number(cachedPrev.no_shows) || 0,
-            ticket_avg: cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
-            lost_revenue: estimateLostRevenue(
-              Number(cachedPrev.cancelled) || 0,
-              Number(cachedPrev.no_shows) || 0,
-              cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
-            ),
-            occupancy_avg: null,
-          },
-        }
-      : baseAnalytics
+  let analytics = baseAnalytics
+  if (cachedPrev && (baseAnalytics.previous == null || baseAnalytics.previous.revenue == null)) {
+    const prevWindow = resolveMonthWindow(cachedPrev.month)
+    const prevTicket =
+      cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null
+    const prevRevenue = Number(cachedPrev.revenue) || 0
+    const prevAttended = Number(cachedPrev.attended) || 0
+    analytics = {
+      ...baseAnalytics,
+      previous: {
+        month: cachedPrev.month,
+        label: labelMonthPt(cachedPrev.month),
+        from: prevWindow.from,
+        to: prevWindow.to,
+        revenue: prevRevenue > 0 || prevAttended > 0 ? prevRevenue : null,
+        attended: prevAttended > 0 || prevRevenue > 0 ? prevAttended : null,
+        cancelled: Number(cachedPrev.cancelled) || 0,
+        no_shows: Number(cachedPrev.no_shows) || 0,
+        ticket_avg: prevTicket,
+        lost_revenue: estimateLostRevenue(
+          Number(cachedPrev.cancelled) || 0,
+          Number(cachedPrev.no_shows) || 0,
+          prevTicket,
+        ),
+        occupancy_avg: null,
+        packages_revenue: null,
+        new_clients_period: Number(cachedPrev.new_clients) || 0,
+        return_rate: null,
+      },
+    }
+  }
   return buildOverview({
     brand,
     month,
