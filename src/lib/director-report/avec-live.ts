@@ -6,7 +6,7 @@ import {
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
-import { tryFetch0011QuarterPairFromDb } from './from-db'
+import { tryFetch0011QuarterPairFromDb, tryFetch0021MonthFromDb } from './from-db'
 import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
@@ -151,7 +151,14 @@ export function directorFullBudget(): DirectorFetchBudget {
 async function fetch0021Month(
   month: MonthKey,
   budget: DirectorFetchBudget = directorFullBudget(),
+  opts?: { warnings?: string[] },
 ): Promise<Map<string, { revenue: number; attended: number; ticketAvg: number }>> {
+  const fromDb = await tryFetch0021MonthFromDb(month)
+  if (fromDb) {
+    opts?.warnings?.push(`0021 ${month} via banco interno`)
+    return fromDb
+  }
+
   const id = resolveMapperId('professionals_revenue') ?? '0021'
   const { inicio, fim } = monthRangeBr(month)
   const { rows } = await fetchAllAvecReport(
@@ -563,7 +570,7 @@ export async function fetchLiveDirectorBlocks(
   if (monthsNeeded.size > 0) {
     const monthList = [...monthsNeeded]
     const settled = await Promise.allSettled(
-      monthList.map((m) => fetch0021Month(m, budget)),
+      monthList.map((m) => fetch0021Month(m, budget, { warnings })),
     )
     settled.forEach((r, i) => {
       const m = monthList[i]!
