@@ -19,7 +19,7 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
   Header `x-avec-secret` = `AVEC_WEBHOOK_SECRET`. Dispara sync fast `scope=kpi` (caixa/KPI — não full).
 - `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec.
   **fast** (~20 min): 0051 ontem→amanhã, 0002, 0052, revenue. **full fatiado**:
-  ops/agenda 2×/dia + retry horário; **catalog só 2×/dia** (dump 0004 sem retry horário):
+  ops/agenda/catalog **2×/dia** (dump 0004 no catalog):
   `/api/avec/sync/full/{ops,agenda,catalog}` (agenda = +21d para Contatos Agendados +7d).
   Estoque: `/api/estoque/sync` (cron separado). Manual com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
@@ -49,7 +49,7 @@ ou investigar depois.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
    Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec` (sync fast `scope=kpi` apenas).
-   Backup: `CRON_SECRET` (cron fast ~20 min + ops/agenda 2×/dia + retry horário; catalog 2×/dia).
+   Backup: `CRON_SECRET` (cron fast ~20 min + ops/agenda/catalog 2×/dia).
 5. **WhatsApp Cloud API oficial** — no Meta Developer:
    `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
    `WHATSAPP_APP_SECRET`. Webhook → `/api/webhooks/whatsapp` (campo `messages`).
