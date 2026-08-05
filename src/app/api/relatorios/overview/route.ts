@@ -7,6 +7,8 @@ import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
 /** Overview do mês — fechamento ROM (admin + financeiro). */
+export const maxDuration = 120
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireFinance(req)
