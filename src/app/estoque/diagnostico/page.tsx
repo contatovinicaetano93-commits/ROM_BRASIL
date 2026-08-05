@@ -73,8 +73,32 @@ export default function EstoqueDiagnosticoPage() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const healthRes = await apiFetch('/api/health', { cache: 'no-store' })
+        const healthJson = await healthRes.json()
+        if (cancelled) return
+        if (healthJson.error) throw new Error(healthJson.error)
+        setHealth(healthJson.data)
+
+        const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store' })
+        const statusJson = await statusRes.json()
+        if (cancelled) return
+        if (statusJson.error) throw new Error(statusJson.error)
+        if (statusJson.data?.plan) setPlan(statusJson.data.plan)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function runSync(mode: 'fast' | 'full') {
     setSyncing(mode)

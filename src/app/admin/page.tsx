@@ -204,8 +204,82 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      const errs: string[] = []
+      try {
+        try {
+          const k = await readApiJson(await apiFetch('/api/kpis', { cache: 'no-store' }))
+          if (cancelled) return
+          if (k.error) errs.push(`KPIs: ${k.error}`)
+          else setKpis(k.data as KpiData)
+        } catch (e) {
+          errs.push(`KPIs: ${e instanceof Error ? e.message : String(e)}`)
+        }
+
+        try {
+          const h = await readApiJson(await apiFetch('/api/health', { cache: 'no-store' }))
+          if (cancelled) return
+          if (h.error) errs.push(`Health: ${h.error}`)
+          else {
+            const data = h.data as HealthStatus | { ok?: boolean } | null
+            if (data && typeof data === 'object' && 'database' in data) {
+              setHealth(data as HealthStatus)
+            } else {
+              errs.push('Health: resposta parcial — atualize o login e tente de novo')
+            }
+          }
+        } catch (e) {
+          errs.push(`Health: ${e instanceof Error ? e.message : String(e)}`)
+        }
+
+        try {
+          const a = await readApiJson(await apiFetch('/api/avec/sync', { cache: 'no-store' }))
+          if (cancelled) return
+          if (a.error) errs.push(`Avec: ${a.error}`)
+          else setAvec(a.data as AvecStatus)
+        } catch (e) {
+          errs.push(`Avec: ${e instanceof Error ? e.message : String(e)}`)
+        }
+
+        try {
+          const c = await readApiJson(
+            await apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store' }),
+          )
+          if (cancelled) return
+          if (c.error) errs.push(`Contatos: ${c.error}`)
+          else setContacts((c.data as ContactRow[]) ?? [])
+        } catch (e) {
+          errs.push(`Contatos: ${e instanceof Error ? e.message : String(e)}`)
+        }
+
+        try {
+          const s = await readApiJson(await apiFetch('/api/schedule', { cache: 'no-store' }))
+          if (cancelled) return
+          if (s.error) errs.push(`Agendamentos: ${s.error}`)
+          else setSchedule((s.data as ScheduleRow[]) ?? [])
+        } catch (e) {
+          errs.push(`Agendamentos: ${e instanceof Error ? e.message : String(e)}`)
+        }
+
+        if (cancelled) return
+        if (errs.length) {
+          setError(errs.join(' · '))
+          setState('error')
+        } else {
+          setError(null)
+          setState('ok')
+        }
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+        setState('error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function testAvec() {
     setConnMsg('Testando…')

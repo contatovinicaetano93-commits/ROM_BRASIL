@@ -129,7 +129,6 @@ export default function PipelinePage() {
 
   const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
     const silent = opts?.silent === true
-    // setLoading only on user refresh (event handler path) — not on mount/effect.
     if (opts?.fresh) {
       setLoading(true)
       setError(null)
@@ -152,11 +151,39 @@ export default function PipelinePage() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch('/api/pipeline', { cache: 'no-store' })
+        const json = await res.json()
+        if (cancelled) return
+        if (json.error) throw new Error(json.error)
+        setData(json.data)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useLiveRefresh(() => {
-    void load({ silent: true })
+    void (async () => {
+      try {
+        clearApiClientCache('/api/pipeline')
+        const res = await apiFetch('/api/pipeline', { cache: 'no-store', clientCache: false })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        setData(json.data)
+      } catch {
+        // silent refresh — keep last good snapshot
+      }
+    })()
   }, 60_000)
 
   const dayLabel = data

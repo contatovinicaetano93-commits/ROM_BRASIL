@@ -8,6 +8,7 @@ import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
   buildMonthOverviewPrintHtml,
@@ -24,25 +25,25 @@ function currentMonthKey() {
 
 type OverviewPayload = MonthOverview & { sync?: AvecSyncMeta }
 
-function fmtMomDelta(
-  current: number | null | undefined,
-  previous: number | null | undefined,
-  opts?: { currency?: boolean; invert?: boolean },
-): { text: string; positive: boolean } | null {
-  if (current == null || previous == null) return null
-  const diff = current - previous
-  if (!Number.isFinite(diff)) return null
-  const abs = Math.abs(diff)
-  const formatted = opts?.currency
-    ? formatCurrency(abs)
-    : abs % 1 === 0
-      ? String(abs)
-      : abs.toFixed(1)
-  const sign = diff > 0 ? '+' : diff < 0 ? '−' : ''
-  return {
-    text: `${sign}${formatted}`,
-    positive: opts?.invert ? diff <= 0 : diff >= 0,
-  }
+function overviewLoadError(e: unknown, materialize?: boolean): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
+    ? materialize
+      ? 'Atualizar fechamento demorou demais — tente de novo em 1–2 min.'
+      : 'Overview demorou demais — tente Atualizar fechamento ou outro mês.'
+    : msg
+}
+
+async function fetchOverview(month: string, materialize?: boolean): Promise<OverviewPayload> {
+  const q = new URLSearchParams({ month })
+  if (materialize) q.set('materialize', '1')
+  const res = await apiFetch(`/api/relatorios/overview?${q}`, {
+    cache: 'no-store',
+    timeoutMs: materialize ? 280_000 : 45_000,
+  })
+  const json = await res.json()
+  if (json.error) throw new Error(json.error)
+  return json.data as OverviewPayload
 }
 
 export default function RelatoriosOverviewPage() {
@@ -58,34 +59,37 @@ export default function RelatoriosOverviewPage() {
       setLoading(true)
       setError(null)
     }
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 45_000)
     try {
-      const params = new URLSearchParams({ month })
-      if (opts?.materialize) params.set('materialize', '1')
-      const res = await apiFetch(`/api/relatorios/overview?${params}`, {
-        cache: 'no-store',
-        signal: controller.signal,
-      })
-      const json = await res.json()
-      if (json.error) throw new Error(json.error)
-      setData(json.data as OverviewPayload)
+      const payload = await fetchOverview(month, opts?.materialize)
+      setData(payload)
     } catch (e) {
       setData(null)
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        setError('Overview demorou demais (>45s). Tente de novo ou use um mês já sincronizado.')
-      } else {
-        setError(e instanceof Error ? e.message : String(e))
-      }
+      setError(overviewLoadError(e, opts?.materialize))
     } finally {
-      window.clearTimeout(timer)
       setLoading(false)
     }
   }, [month])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const payload = await fetchOverview(month)
+        if (cancelled) return
+        setData(payload)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setData(null)
+        setError(overviewLoadError(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [month])
 
   function exportCsv() {
     if (!data) return
@@ -110,66 +114,6 @@ export default function RelatoriosOverviewPage() {
 
   const incomplete = data?.completeness.status === 'incomplete'
   const inProgress = data?.completeness.status === 'in_progress'
-  const prevLabel = data?.finance_previous?.label ?? data?.analytics.previous?.label ?? 'mês anterior'
-
-  const closingCards = data
-    ? [
-        {
-          label: 'Receita',
-          value: formatCurrency(data.closing.revenue),
-          mom: fmtMomDelta(data.closing.revenue, data.finance_previous?.revenue, { currency: true }),
-        },
-        {
-          label: 'Atendidos',
-          value: String(data.closing.attended),
-          mom: fmtMomDelta(data.closing.attended, data.finance_previous?.attended),
-        },
-        {
-          label: 'Ticket',
-          value: formatCurrency(data.closing.ticket_avg),
-          mom: fmtMomDelta(data.closing.ticket_avg, data.finance_previous?.ticket_avg, {
-            currency: true,
-          }),
-        },
-        {
-          label: 'Fluxo',
-          value: formatCurrency(data.closing.cash_flow),
-          mom: fmtMomDelta(data.closing.cash_flow, data.finance_previous?.cash_flow, {
-            currency: true,
-          }),
-        },
-        {
-          label: 'Despesas',
-          value: formatCurrency(data.closing.expenses),
-          mom: fmtMomDelta(data.closing.expenses, data.finance_previous?.expenses, {
-            currency: true,
-            invert: true,
-          }),
-        },
-        {
-          label: 'CMV',
-          value: formatCurrency(data.closing.cmv),
-          mom: fmtMomDelta(data.closing.cmv, data.finance_previous?.cmv, {
-            currency: true,
-            invert: true,
-          }),
-        },
-        {
-          label: 'Cancelamentos',
-          value: String(data.closing.cancelled),
-          mom: fmtMomDelta(data.closing.cancelled, data.analytics.previous?.cancelled, {
-            invert: true,
-          }),
-        },
-        {
-          label: 'No-shows',
-          value: String(data.closing.no_shows),
-          mom: fmtMomDelta(data.closing.no_shows, data.analytics.previous?.no_shows, {
-            invert: true,
-          }),
-        },
-      ]
-    : []
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
@@ -237,15 +181,6 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
-      {data?.finance.revenue_source && data.finance.revenue_source !== 'metrics' && (
-        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          <strong>{data.label}</strong>
-          {data.finance.revenue_source === 'payments_0081'
-            ? ' — receita via fallback 0081 (formas de pagamento), não métricas diárias.'
-            : ' — aguardando faturamento no Avec (caixa do dia ainda não fechou).'}
-        </p>
-      )}
-
       {loading && !data ? (
         <p className="text-sm text-muted">Carregando overview…</p>
       ) : data ? (
@@ -277,84 +212,167 @@ export default function RelatoriosOverviewPage() {
                     ? 'Mês em andamento — o fechamento completa no último dia.'
                     : 'Mês sem buracos no acumulado diário ROM.'}
               </p>
-              <p className="mt-1 text-[0.7rem] opacity-80">
-                Deltas vs {prevLabel} (mês anterior ao mês base escolhido).
-              </p>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {closingCards.map((kpi) => (
-              <div
-                key={kpi.label}
-                className="min-w-0 overflow-hidden rounded-xl border border-border bg-card px-4 py-3"
-              >
+            {([
+              {
+                label: 'Receita',
+                value: formatCurrency(data.closing.revenue),
+                compare: momCompareLine(
+                  data.closing.revenue,
+                  data.previous_closing.revenue,
+                  data.previous_label,
+                ),
+              },
+              {
+                label: 'Atendidos',
+                value: String(data.closing.attended),
+                compare: momCompareLine(
+                  data.closing.attended,
+                  data.previous_closing.attended,
+                  data.previous_label,
+                  { kind: 'number' },
+                ),
+              },
+              {
+                label: 'Ticket',
+                value:
+                  data.closing.ticket_avg != null
+                    ? formatCurrency(data.closing.ticket_avg)
+                    : '—',
+                compare:
+                  data.closing.ticket_avg != null && data.previous_closing.ticket_avg != null
+                    ? momCompareLine(
+                        data.closing.ticket_avg,
+                        data.previous_closing.ticket_avg,
+                        data.previous_label,
+                      )
+                    : null,
+              },
+              {
+                label: 'Fluxo',
+                value: formatCurrency(data.closing.cash_flow),
+                compare: momCompareLine(
+                  data.closing.cash_flow,
+                  data.previous_closing.cash_flow,
+                  data.previous_label,
+                ),
+              },
+              {
+                label: 'Despesas',
+                value: formatCurrency(data.closing.expenses),
+                compare: momCompareLine(
+                  data.closing.expenses,
+                  data.previous_closing.expenses,
+                  data.previous_label,
+                  { invertGood: true },
+                ),
+              },
+              {
+                label: 'CMV',
+                value: formatCurrency(data.closing.cmv),
+                compare: momCompareLine(
+                  data.closing.cmv,
+                  data.previous_closing.cmv,
+                  data.previous_label,
+                  { invertGood: true },
+                ),
+              },
+              {
+                label: 'Cancelamentos',
+                value: String(data.closing.cancelled),
+                compare: momCompareLine(
+                  data.closing.cancelled,
+                  data.previous_closing.cancelled,
+                  data.previous_label,
+                  { kind: 'number', invertGood: true },
+                ),
+              },
+              {
+                label: 'No-shows',
+                value: String(data.closing.no_shows),
+                compare: momCompareLine(
+                  data.closing.no_shows,
+                  data.previous_closing.no_shows,
+                  data.previous_label,
+                  { kind: 'number', invertGood: true },
+                ),
+              },
+            ] as const).map((kpi) => (
+              <div key={kpi.label} className="rounded-xl border border-border bg-card px-4 py-3">
                 <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kpi.label}</p>
-                <p className="mt-1 max-w-full break-words text-lg font-semibold tabular-nums leading-tight [overflow-wrap:anywhere]">
-                  {kpi.value}
-                </p>
-                {kpi.mom && (
+                <p className="mt-1 text-lg font-semibold tabular-nums leading-tight">{kpi.value}</p>
+                {kpi.compare ? (
                   <p
-                    className={`mt-1 text-[0.7rem] font-medium ${
-                      kpi.mom.positive ? 'text-success' : 'text-warning'
+                    className={`mt-1.5 text-[0.7rem] font-medium leading-snug ${
+                      kpi.compare.positive ? 'text-success' : 'text-warning'
                     }`}
                   >
-                    {kpi.mom.text} vs {prevLabel}
+                    {kpi.compare.text}
                   </p>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
 
+          <p className="text-xs text-muted">
+            Comparativo vs {data.previous_label} (mesmo recorte MTD quando o mês atual está em
+            andamento). Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
+            melhor).
+          </p>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <SectionCard title="Operação (Visão analítica)">
               <ul className="flex flex-col gap-2 text-sm">
-                <li className="flex justify-between gap-3">
+                <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Ocupação média</span>
-                  <span className="min-w-0 text-right tabular-nums">
-                    {data.analytics.occupancy_avg != null
-                      ? formatPercentPoints(data.analytics.occupancy_avg * 100)
-                      : '—'}
-                    {(() => {
-                      const mom = fmtMomDelta(
-                        data.analytics.occupancy_avg != null
-                          ? data.analytics.occupancy_avg * 100
-                          : null,
-                        data.analytics.previous?.occupancy_avg != null
-                          ? data.analytics.previous.occupancy_avg * 100
-                          : null,
-                      )
-                      return mom ? (
-                        <span
-                          className={`ml-2 text-[0.7rem] ${
-                            mom.positive ? 'text-success' : 'text-warning'
-                          }`}
-                        >
-                          {mom.text} pp
-                        </span>
-                      ) : null
-                    })()}
+                  <span className="text-right">
+                    <span className="tabular-nums">
+                      {data.analytics.occupancy_avg != null
+                        ? formatPercentPoints(data.analytics.occupancy_avg * 100)
+                        : '—'}
+                    </span>
+                    {data.analytics.occupancy_avg != null &&
+                    data.previous_closing.occupancy_avg != null ? (
+                      <span
+                        className={`ml-2 text-[0.7rem] font-medium ${
+                          data.analytics.occupancy_avg - data.previous_closing.occupancy_avg >= 0
+                            ? 'text-success'
+                            : 'text-warning'
+                        }`}
+                      >
+                        {
+                          momCompareLine(
+                            data.analytics.occupancy_avg * 100,
+                            data.previous_closing.occupancy_avg * 100,
+                            data.previous_label,
+                            { kind: 'points' },
+                          )?.text
+                        }
+                      </span>
+                    ) : null}
                   </span>
                 </li>
-                <li className="flex justify-between gap-3">
+                <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Receita perdida (est.)</span>
-                  <span className="min-w-0 text-right tabular-nums">
-                    {data.analytics.lost_revenue != null
-                      ? formatCurrency(data.analytics.lost_revenue)
-                      : '—'}
+                  <span className="text-right">
+                    <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
                     {(() => {
-                      const mom = fmtMomDelta(
+                      const c = momCompareLine(
                         data.analytics.lost_revenue,
-                        data.analytics.previous?.lost_revenue,
-                        { currency: true, invert: true },
+                        data.previous_closing.lost_revenue,
+                        data.previous_label,
+                        { invertGood: true },
                       )
-                      return mom ? (
+                      return c ? (
                         <span
-                          className={`ml-2 text-[0.7rem] ${
-                            mom.positive ? 'text-success' : 'text-warning'
+                          className={`ml-2 text-[0.7rem] font-medium ${
+                            c.positive ? 'text-success' : 'text-warning'
                           }`}
                         >
-                          {mom.text}
+                          {c.text}
                         </span>
                       ) : null
                     })()}
@@ -362,10 +380,8 @@ export default function RelatoriosOverviewPage() {
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
-                  <span className="min-w-0 break-words text-right tabular-nums [overflow-wrap:anywhere]">
-                    {data.analytics.packages_sold != null && data.analytics.packages_revenue != null
-                      ? `${data.analytics.packages_sold} · ${formatCurrency(data.analytics.packages_revenue)}`
-                      : '—'}
+                  <span className="tabular-nums">
+                    {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
@@ -374,14 +390,13 @@ export default function RelatoriosOverviewPage() {
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    ·{' '}
-                    {data.analytics.new_clients_period != null
-                      ? data.analytics.new_clients_period
-                      : '—'}
+                    · {data.analytics.new_clients_period}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
-                  Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3, não soma diária)
+                  Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3 do mês, não soma
+                  diária). Retorno — = sem cohort confiável no ROM para o mês. Pacotes/retorno/novos
+                  sem delta MoM (janela Avec, não acumulado mensal ROM).
                 </li>
               </ul>
             </SectionCard>

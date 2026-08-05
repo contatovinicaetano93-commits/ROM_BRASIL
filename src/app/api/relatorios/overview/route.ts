@@ -1,14 +1,15 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { ok, okCached, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
-/** Overview do mês — fechamento ROM (admin + financeiro). */
-export const maxDuration = 120
+/** Atualizar fechamento (finance+analytics) — leitura rápida não usa este teto. */
+export const maxDuration = 300
 
+/** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireFinance(req)
@@ -20,18 +21,20 @@ export async function GET(req: NextRequest) {
     }
 
     const format = req.nextUrl.searchParams.get('format')
-    // Default: só leitura ao vivo. Materializar só com ?materialize=1 (botão Atualizar).
+    // UI: só lê (cache salon_month_metrics quando existir). Materializa com ?materialize=1.
     const materialize = req.nextUrl.searchParams.get('materialize') === '1'
-
-    const payload = await cachedFetch(
-      `relatorios:overview:v2:${month ?? 'cur'}:mat=${materialize ? 1 : 0}`,
-      async () => {
-        const overview = await computeMonthOverview({ month, materialize })
-        const sync = await loadAvecSyncMeta()
-        return { ...overview, sync }
-      },
-      materialize ? 5 : 60,
-    )
+    const cacheKey = `relatorios:overview:v2:${month ?? 'cur'}:mat=${materialize ? 1 : 0}`
+    const payload = materialize
+      ? await (async () => {
+          const overview = await computeMonthOverview({ month, materialize })
+          const sync = await loadAvecSyncMeta()
+          return { ...overview, sync }
+        })()
+      : await ttlGetOrSet(cacheKey, 60_000, async () => {
+          const overview = await computeMonthOverview({ month, materialize: false })
+          const sync = await loadAvecSyncMeta()
+          return { ...overview, sync }
+        })
 
     if (format === 'csv') {
       const csv = buildMonthOverviewCsv(payload)
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return ok(payload)
+    return materialize ? ok(payload) : okCached(payload, 45)
   } catch (e) {
     return handleError(e)
   }

@@ -403,8 +403,38 @@ export default function FinanceiroPage() {
   }, [month, compareMonth])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const kpisParams = new URLSearchParams({ month, ...(compareMonth ? { compare: compareMonth } : {}) })
+        const [kpisRes, catRes, expRes] = await Promise.all([
+          apiFetch(`/api/financeiro/kpis?${kpisParams}`, { cache: 'no-store' }),
+          apiFetch('/api/financeiro/categorias', { cache: 'no-store' }),
+          apiFetch(`/api/financeiro/despesas?month=${month}`, { cache: 'no-store' }),
+        ])
+        const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
+        if (cancelled) return
+        if (kpisJson.error) throw new Error(kpisJson.error)
+        const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta }
+        setKpis({
+          current: normalizeKpiBucket(raw.current),
+          previous: normalizeKpiBucket(raw.previous),
+        })
+        setSyncMeta(raw.sync ?? null)
+        setCategories(catJson.data ?? [])
+        setExpenses(expJson.data?.expenses ?? [])
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [month, compareMonth])
 
   function downloadReport() {
     if (!kpis) return
