@@ -64,8 +64,26 @@ export default function FinanceiroDiagnosticoPage() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch('/api/health', { cache: 'no-store' })
+        const json = await res.json()
+        if (cancelled) return
+        if (json.error) throw new Error(json.error)
+        setHealth(json.data)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <main className="mx-auto flex w-full max-w-[900px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">

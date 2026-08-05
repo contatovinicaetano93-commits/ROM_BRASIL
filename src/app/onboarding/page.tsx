@@ -75,8 +75,30 @@ export default function OnboardingPage() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      try {
+        const [pRes, vRes] = await Promise.all([
+          apiFetch('/api/onboarding/pilares', { cache: 'no-store' }),
+          apiFetch('/api/onboarding/videos', { cache: 'no-store' }),
+        ])
+        const [pJson, vJson] = await Promise.all([pRes.json(), vRes.json()])
+        if (cancelled) return
+        if (pJson.error) throw new Error(pJson.error)
+        setPillars(pJson.data ?? [])
+        setVideos(vJson.data ?? [])
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const videosByPillar = useMemo(() => {
     const map = new Map<string, OnboardingVideo[]>()

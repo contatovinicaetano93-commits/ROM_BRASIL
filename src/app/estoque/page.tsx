@@ -219,6 +219,39 @@ function formatQty(n: number): string {
 
 type CatalogStockFilter = 'all' | 'zero' | 'low'
 
+async function fetchEstoquePanels() {
+  const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store' })
+  const alertsRes = await apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' })
+  const [kpisJson, alertsJson] = await Promise.all([kpisRes.json(), alertsRes.json()])
+  if (kpisJson.error) throw new Error(kpisJson.error)
+
+  const movRes = await apiFetch('/api/estoque/movimentos', { cache: 'no-store' })
+  const prodRes = await apiFetch('/api/estoque/produtos', { cache: 'no-store' })
+  const [movJson, prodJson] = await Promise.all([movRes.json(), prodRes.json()])
+  if (movJson.error) throw new Error(movJson.error)
+  if (prodJson.error) throw new Error(prodJson.error)
+
+  const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store' })
+  const catRes = await apiFetch('/api/estoque/categorias', { cache: 'no-store' })
+  const brandRes = await apiFetch('/api/estoque/marcas', { cache: 'no-store' })
+  const [statusJson, catJson, brandJson] = await Promise.all([
+    statusRes.json(),
+    catRes.json(),
+    brandRes.json(),
+  ])
+  if (statusJson.error) throw new Error(statusJson.error)
+
+  return {
+    kpis: kpisJson.data as StockKpis,
+    alerts: (alertsJson.data ?? []) as StockAlert[],
+    movements: (movJson.data ?? []) as StockMovement[],
+    products: (prodJson.data ?? []) as StockProduct[],
+    syncStatus: (statusJson.data ?? null) as SyncStatus | null,
+    categories: (catJson.data ?? []) as NamedOption[],
+    brands: (brandJson.data ?? []) as NamedOption[],
+  }
+}
+
 export default function EstoquePage() {
   const [products, setProducts] = useState<StockProduct[]>([])
   const [categories, setCategories] = useState<NamedOption[]>([])
@@ -247,34 +280,14 @@ export default function EstoquePage() {
       setError(null)
     }
     try {
-      // Lotes pequenos: 7 Promise.all no pooler (max:1) deixavam Estoque lento / falho.
-      const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store' })
-      const alertsRes = await apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' })
-      const [kpisJson, alertsJson] = await Promise.all([kpisRes.json(), alertsRes.json()])
-      if (kpisJson.error) throw new Error(kpisJson.error)
-      setKpis(kpisJson.data)
-      setAlerts(alertsJson.data ?? [])
-
-      const movRes = await apiFetch('/api/estoque/movimentos', { cache: 'no-store' })
-      const prodRes = await apiFetch('/api/estoque/produtos', { cache: 'no-store' })
-      const [movJson, prodJson] = await Promise.all([movRes.json(), prodRes.json()])
-      if (movJson.error) throw new Error(movJson.error)
-      if (prodJson.error) throw new Error(prodJson.error)
-      setMovements(movJson.data ?? [])
-      setProducts(prodJson.data ?? [])
-
-      const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store' })
-      const catRes = await apiFetch('/api/estoque/categorias', { cache: 'no-store' })
-      const brandRes = await apiFetch('/api/estoque/marcas', { cache: 'no-store' })
-      const [statusJson, catJson, brandJson] = await Promise.all([
-        statusRes.json(),
-        catRes.json(),
-        brandRes.json(),
-      ])
-      if (statusJson.error) throw new Error(statusJson.error)
-      setSyncStatus(statusJson.data ?? null)
-      setCategories(catJson.data ?? [])
-      setBrands(brandJson.data ?? [])
+      const panels = await fetchEstoquePanels()
+      setKpis(panels.kpis)
+      setAlerts(panels.alerts)
+      setMovements(panels.movements)
+      setProducts(panels.products)
+      setSyncStatus(panels.syncStatus)
+      setCategories(panels.categories)
+      setBrands(panels.brands)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -283,11 +296,46 @@ export default function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    void load()
+    let cancelled = false
+    const applyPanels = (panels: Awaited<ReturnType<typeof fetchEstoquePanels>>) => {
+      setKpis(panels.kpis)
+      setAlerts(panels.alerts)
+      setMovements(panels.movements)
+      setProducts(panels.products)
+      setSyncStatus(panels.syncStatus)
+      setCategories(panels.categories)
+      setBrands(panels.brands)
+    }
+    void (async () => {
+      try {
+        const panels = await fetchEstoquePanels()
+        if (cancelled) return
+        applyPanels(panels)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
     // Poll leve: full reload a cada 5 min (antes 60s saturava pooler + lambdas).
-    const interval = setInterval(() => { void load({ reset: false }) }, 5 * 60_000)
-    return () => clearInterval(interval)
-  }, [load])
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          const panels = await fetchEstoquePanels()
+          if (cancelled) return
+          applyPanels(panels)
+        } catch {
+          // keep last good snapshot on background poll failure
+        }
+      })()
+    }, 5 * 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const purchaseQueue = useMemo(() => sortPurchaseQueue(alerts), [alerts])
   const queueTotalCost = useMemo(() => purchaseQueueTotalCost(purchaseQueue), [purchaseQueue])
