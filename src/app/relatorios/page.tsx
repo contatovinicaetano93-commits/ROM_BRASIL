@@ -219,7 +219,8 @@ export default function RelatoriosOverviewPage() {
             {([
               {
                 label: 'Receita',
-                value: formatCurrency(data.closing.revenue),
+                value:
+                  data.closing.revenue != null ? formatCurrency(data.closing.revenue) : '—',
                 compare: momCompareLine(
                   data.closing.revenue,
                   data.previous_closing.revenue,
@@ -228,7 +229,7 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Atendidos',
-                value: String(data.closing.attended),
+                value: data.closing.attended != null ? String(data.closing.attended) : '—',
                 compare: momCompareLine(
                   data.closing.attended,
                   data.previous_closing.attended,
@@ -253,7 +254,8 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Fluxo',
-                value: formatCurrency(data.closing.cash_flow),
+                value:
+                  data.closing.cash_flow != null ? formatCurrency(data.closing.cash_flow) : '—',
                 compare: momCompareLine(
                   data.closing.cash_flow,
                   data.previous_closing.cash_flow,

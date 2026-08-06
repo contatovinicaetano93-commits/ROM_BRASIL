@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { secretsEqual } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 
 export const AUTH_COOKIE = 'rom_session'
@@ -243,7 +244,11 @@ export async function isAuthorized(req: NextRequest, { allowHeaderTokens = true 
   // Automação: só CRON_SECRET (nunca a senha de login).
   const auth = req.headers.get('authorization')
   const cron = process.env.CRON_SECRET?.trim()
-  if (cron && (auth === `Bearer ${cron}` || req.headers.get('x-cron-secret') === cron)) return true
+  if (cron) {
+    if (auth?.startsWith('Bearer ') && secretsEqual(auth.slice('Bearer '.length), cron)) return true
+    const header = req.headers.get('x-cron-secret')
+    if (header && secretsEqual(header, cron)) return true
+  }
 
   return false
 }
