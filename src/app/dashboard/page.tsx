@@ -351,7 +351,7 @@ export default function DashboardPage() {
         />
         <InsightCard
           icon={<Percent size={15} />}
-          label={`Ocupação · Avec 30d · ${period?.label ?? '—'}`}
+          label={`Ocupação · mês calendário · ${period?.label ?? '—'}`}
           value={dashValue(
             period?.occupancy_avg != null
               ? formatPercentPoints(period.occupancy_avg * 100)
@@ -766,17 +766,23 @@ export default function DashboardPage() {
       </div>
 
       <SectionCard
-        title={`Ranking de profissionais (snapshot · ${month})`}
+        title={`Ranking de profissionais · mês calendário ${period?.label ?? month}`}
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (
           <p className="text-xs text-muted">
-            Sem ranking — depende do snapshot Avec 0021+0126 perto do fim do mês selecionado
+            Sem ranking — depende do snapshot Avec 0021+0126 no mês calendário selecionado
             {period?.snapshot_missing ? ' (snapshot ausente agora)' : ''}. Detalhe em Relatórios ou
             rode analytics-backfill.
           </p>
         ) : (
           <div className="overflow-x-auto">
+            <p className="mb-3 text-xs text-muted">
+              Escopo: {period?.from ?? '—'} → {period?.to ?? '—'}
+              {period?.mtd ? ' (mês em aberto · MTD)' : ' (mês fechado)'}
+              {performance.reference_day ? ` · snapshot ${performance.reference_day}` : ''}
+              {' · '}deltas vs mês anterior
+            </p>
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
@@ -822,8 +828,8 @@ export default function DashboardPage() {
             </table>
             {performance.compare_day && (
               <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação: snapshot {performance.reference_day} vs mês anterior (
-                {performance.compare_day})
+                Comparação mês calendário: {performance.reference_day} vs{' '}
+                {performance.compare_day} (fim do mês anterior)
               </p>
             )}
             <p className="mt-2 text-[0.65rem] text-muted">

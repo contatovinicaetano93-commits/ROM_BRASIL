@@ -144,16 +144,18 @@ export async function runAnalyticsMonthBackfill(
   let cancel_to: string | null = null
   let next_cancel_from: string | null = null
   let cancellations_done = !steps.includes('cancellations')
-  const snapOpts = { anchorDay: to, daysBack: 30 }
+  // P1 = mês calendário (ranking). P2/P3 mantêm ~30d via daysBack nos respectivos syncs.
+  const p1Opts = { anchorDay: to }
+  const p23Opts = { anchorDay: to, daysBack: 30 }
 
   if (steps.includes('p1')) {
-    await syncP1Kpis(stats, undefined, snapOpts)
+    await syncP1Kpis(stats, undefined, p1Opts)
   }
   if (steps.includes('p2')) {
-    await syncP2Kpis(stats, undefined, snapOpts)
+    await syncP2Kpis(stats, undefined, p23Opts)
   }
   if (steps.includes('p3')) {
-    await syncP3Kpis(stats, undefined, snapOpts)
+    await syncP3Kpis(stats, undefined, p23Opts)
   }
 
   if (steps.includes('cancellations')) {
