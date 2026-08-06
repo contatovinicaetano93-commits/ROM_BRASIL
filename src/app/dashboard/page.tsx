@@ -32,6 +32,7 @@ import {
   downloadTextFile,
   openPrintHtml,
 } from '@/lib/salon/month-overview-export'
+import { momCompareLine } from '@/lib/salon/mom-delta'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -295,7 +296,15 @@ export default function DashboardPage() {
                     ? 'aguardando caixa'
                     : 'sem dado'
           }
-          compare={momCurrency(period?.month_revenue, period?.previous?.revenue, period?.previous?.label)}
+          compare={
+            period?.previous?.label
+              ? momCompareLine(
+                  period?.month_revenue,
+                  period.previous.revenue,
+                  period.previous.label,
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<Users size={15} />}
@@ -309,7 +318,16 @@ export default function DashboardPage() {
                   ? 'aguardando'
                   : 'sem dado'
           }
-          compare={momNumber(period?.month_attended, period?.previous?.attended, period?.previous?.label)}
+          compare={
+            period?.previous?.label
+              ? momCompareLine(
+                  period?.month_attended,
+                  period.previous.attended,
+                  period.previous.label,
+                  { kind: 'number' },
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<TrendingUp size={15} />}
@@ -321,7 +339,15 @@ export default function DashboardPage() {
                 ? formatCurrency(period.ticket_avg)
                 : 'sem ticket'
           }
-          compare={momCurrency(period?.ticket_avg, period?.previous?.ticket_avg, period?.previous?.label)}
+          compare={
+            period?.previous?.label
+              ? momCompareLine(
+                  period?.ticket_avg,
+                  period.previous.ticket_avg,
+                  period.previous.label,
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<Percent size={15} />}
@@ -335,11 +361,14 @@ export default function DashboardPage() {
           compare={
             !loading &&
             period?.occupancy_avg != null &&
-            period.previous?.occupancy_avg != null
-              ? {
-                  text: `${fmtSignedPp((period.occupancy_avg - period.previous.occupancy_avg) * 100)} vs ${period.previous.label}`,
-                  positive: period.occupancy_avg - period.previous.occupancy_avg >= 0,
-                }
+            period.previous?.occupancy_avg != null &&
+            period.previous.label
+              ? momCompareLine(
+                  period.occupancy_avg * 100,
+                  period.previous.occupancy_avg * 100,
+                  period.previous.label,
+                  { kind: 'points' },
+                )
               : null
           }
         />
@@ -355,12 +384,16 @@ export default function DashboardPage() {
                   : '—'
                 : formatCurrency(period.lost_revenue)
           }
-          compare={momCurrency(
-            period?.lost_revenue,
-            period?.previous?.lost_revenue,
-            period?.previous?.label,
-            { invert: true },
-          )}
+          compare={
+            period?.previous?.label
+              ? momCompareLine(
+                  period?.lost_revenue,
+                  period.previous.lost_revenue,
+                  period.previous.label,
+                  { invertGood: true },
+                )
+              : null
+          }
         />
         <InsightCard
           icon={<Users size={15} />}
@@ -371,15 +404,13 @@ export default function DashboardPage() {
               : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
           }
           compare={
-            !loading && period?.previous
-              ? (() => {
-                  const cur = (period.cancelled ?? 0) + (period.no_shows ?? 0)
-                  const prev = period.previous.cancelled + period.previous.no_shows
-                  return {
-                    text: `${fmtSignedNumber(cur - prev)} vs ${period.previous.label}`,
-                    positive: cur - prev <= 0,
-                  }
-                })()
+            !loading && period?.previous?.label
+              ? momCompareLine(
+                  (period?.cancelled ?? 0) + (period?.no_shows ?? 0),
+                  period.previous.cancelled + period.previous.no_shows,
+                  period.previous.label,
+                  { kind: 'number', invertGood: true },
+                )
               : null
           }
         />
@@ -401,11 +432,11 @@ export default function DashboardPage() {
             period?.snapshot_missing ? 'sem snapshot' : 'sem pacotes',
           )}
           compare={
-            period?.packages_revenue != null
-              ? momCurrency(
+            period?.packages_revenue != null && period.previous?.label
+              ? momCompareLine(
                   period.packages_revenue,
-                  period.previous?.packages_revenue,
-                  period.previous?.label,
+                  period.previous.packages_revenue,
+                  period.previous.label,
                 )
               : null
           }
@@ -418,11 +449,12 @@ export default function DashboardPage() {
             period?.snapshot_missing ? 'sem snapshot' : 'sem P3',
           )}
           compare={
-            period?.new_clients_period != null
-              ? momNumber(
+            period?.new_clients_period != null && period.previous?.label
+              ? momCompareLine(
                   period.new_clients_period,
-                  period.previous?.new_clients_period,
-                  period.previous?.label,
+                  period.previous.new_clients_period,
+                  period.previous.label,
+                  { kind: 'number' },
                 )
               : null
           }
@@ -440,11 +472,14 @@ export default function DashboardPage() {
             !loading &&
             !period?.snapshot_missing &&
             period?.return_rate != null &&
-            period.previous?.return_rate != null
-              ? {
-                  text: `${fmtSignedPp((period.return_rate - period.previous.return_rate) * 100)} vs ${period.previous.label}`,
-                  positive: period.return_rate - period.previous.return_rate >= 0,
-                }
+            period.previous?.return_rate != null &&
+            period.previous.label
+              ? momCompareLine(
+                  period.return_rate * 100,
+                  period.previous.return_rate * 100,
+                  period.previous.label,
+                  { kind: 'points' },
+                )
               : null
           }
         />
@@ -801,56 +836,6 @@ export default function DashboardPage() {
       </SectionCard>
     </main>
   )
-}
-
-function fmtSignedCurrency(diff: number): string {
-  const rounded = Math.round(diff * 100) / 100
-  if (rounded === 0) return formatCurrency(0)
-  const sign = rounded > 0 ? '+' : '−'
-  return `${sign}${formatCurrency(Math.abs(rounded))}`
-}
-
-function fmtSignedNumber(diff: number): string {
-  if (diff === 0) return '0'
-  const sign = diff > 0 ? '+' : '−'
-  return `${sign}${Math.abs(diff)}`
-}
-
-function fmtSignedPp(diffPoints: number): string {
-  const rounded = Math.round(diffPoints * 10) / 10
-  if (rounded === 0) return '0pp'
-  const sign = rounded > 0 ? '+' : '−'
-  return `${sign}${Math.abs(rounded)}pp`
-}
-
-type MomCompare = { text: string; positive: boolean; muted?: boolean }
-
-function momCurrency(
-  current: number | null | undefined,
-  previous: number | null | undefined,
-  label: string | null | undefined,
-  opts?: { invert?: boolean },
-): MomCompare | null {
-  if (current == null || previous == null || !label) return null
-  const diff = current - previous
-  return {
-    text: `${fmtSignedCurrency(diff)} vs ${label}`,
-    positive: opts?.invert ? diff <= 0 : diff >= 0,
-  }
-}
-
-function momNumber(
-  current: number | null | undefined,
-  previous: number | null | undefined,
-  label: string | null | undefined,
-  opts?: { invert?: boolean },
-): MomCompare | null {
-  if (current == null || previous == null || !label) return null
-  const diff = current - previous
-  return {
-    text: `${fmtSignedNumber(diff)} vs ${label}`,
-    positive: opts?.invert ? diff <= 0 : diff >= 0,
-  }
 }
 
 function InsightCard({

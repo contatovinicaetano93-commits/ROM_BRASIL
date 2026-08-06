@@ -39,7 +39,7 @@ Se a sua tarefa exige quebrar uma destas, tudo bem, mas **escreva no PR que est�
 - **KPI ausente é `null`, não `0`.** A interface mostra "—" para null. Um `0` falso é pior que um buraco, porque parece medição real. Nunca `coalesce(métrica, 0)`, nunca `Number(x) || 0`, nunca `NOT NULL DEFAULT 0` em coluna de KPI.
 - **Brasil e Iguatemi são Supabase.** Não Neon, apesar dos nomes das variáveis.
 - **As duas unidades ficam em paridade.** Mudou numa, ou muda na outra, ou diz no PR que criou drift de propósito.
-- **A equipe usa WhatsApp, não Telegram.**
+- **A equipe usa WhatsApp (canal principal), não Telegram.** Telegram permanece opcional/legado.
 - **Concorrência de sync é lock distribuído em Postgres.** Contador em memória não funciona em serverless — cada invocação é um processo novo.
 
 ## Ao terminar a tarefa
@@ -62,5 +62,5 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
-- **`maxDuration = 800` em `/api/avec/sync` exige Fluid Compute na Vercel.** Não foi confirmado se está ligado. Se não estiver, todo sync full morre em 300s.
+- **`maxDuration = 800` nas rotas `/api/avec/sync*` exige Vercel Fluid Compute (Pro).** Sem Fluid, a Vercel capa em 300s — as rotas logam aviso no cold start (`warnIfLongMaxDuration`). Não baixar para 300 sem confirmar que o full cabe no budget.
 - **~30 ocorrências de `react-hooks/set-state-in-effect`** entre Brasil e Iguatemi. É correção de verdade (loop de render, estado velho), não estilo. É o que impede o lint de virar gate bloqueante.

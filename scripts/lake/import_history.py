@@ -4,8 +4,9 @@
 DB URLs (never commit secrets):
   DATABASE_URL_BRASIL  → Supabase pooler (prefer SESSION :5432; see
                          /tmp/rom-dbs/supabase-brasil.env + brasil-supabase.env.note)
-  DATABASE_URL_IGUATEMI → Neon Iguatemi (unchanged)
-  DATABASE_URL_ROMSALES → Neon RomSales (unchanged)
+  DATABASE_URL_BRASIL → Supabase Brasil (pooler *.supabase.com)
+  DATABASE_URL_IGUATEMI → Supabase Iguatemi
+  DATABASE_URL_ROMSALES → Neon RomSales (lake agregado)
 
 Do NOT use dead Neon BR (ep-long-sun-*.neon.tech).
 """

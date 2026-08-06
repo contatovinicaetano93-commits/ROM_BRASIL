@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireFinance } from '@/lib/auth'
-import { isCronAuthorized } from '@/lib/cron-auth'
+import { authorizeCronOrFinance } from '@/lib/admin-backfill-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { runRevenueBackfill, yearStartOf } from '@/lib/avec/revenue-backfill'
 
@@ -9,10 +8,7 @@ import { runRevenueBackfill, yearStartOf } from '@/lib/avec/revenue-backfill'
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return { ok: true as const }
-  const auth = await requireFinance(req)
-  if (!auth.ok) return auth
-  return { ok: true as const }
+  return authorizeCronOrFinance(req)
 }
 
 function parseIsoDay(value: unknown): string | undefined {

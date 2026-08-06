@@ -188,7 +188,13 @@ export default function HojePage() {
         <KpiCard
           icon={<Calendar size={16} />}
           label="Agendados"
-          value={loading ? '—' : String(salon?.appointments ?? 0)}
+          value={
+            loading
+              ? '—'
+              : salon?.appointments == null
+                ? '—'
+                : String(salon.appointments)
+          }
           loading={loading}
           source={avecSource}
           hint="Pessoas com agenda/comanda no dia (aberto ou pago) — conta cabeça"

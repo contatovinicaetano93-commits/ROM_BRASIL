@@ -1,9 +1,9 @@
 # ROM — Onboarding & Painel de KPIs
 
 Sistema interno da frente de caixa do ROM Club: recebe contatos de clientes por
-WhatsApp (IA de primeiro atendimento), Telegram (secretária de consulta prática
-pra equipe) e Avec (sync de agenda/clientes), e centraliza tudo num painel de
-KPIs.
+WhatsApp (canal principal da equipe — IA de primeiro atendimento e alertas) e
+Avec (sync de agenda/clientes), e centraliza tudo num painel de KPIs. Telegram
+é opcional/legado (bot de consulta para quem ainda usa).
 
 Stack: Next.js (App Router) + TypeScript + Tailwind + Postgres (Supabase via
 `postgres.js`), API-first (front-end só fala com `/api/*`). Acesso ao banco por
@@ -18,14 +18,14 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/api/webhooks/avec` — **tempo real** (push): agendamento, atendimento, cliente.
   Header `x-avec-secret` = `AVEC_WEBHOOK_SECRET`. Dispara sync fast `scope=kpi` (caixa/KPI — não full).
 - `src/app/api/avec/sync` — sync de backup com a API de Relatórios Avec.
-  **fast** (~20 min): 0051 ontem→amanhã, 0002, 0052, revenue. **full fatiado**:
+  **fast** (`5,25,45 * * * *`): 0051 ontem→amanhã, 0002, 0052, revenue. **full fatiado**:
   ops/agenda/catalog **2×/dia** (dump 0004 no catalog):
   `/api/avec/sync/full/{ops,agenda,catalog}` (agenda = +21d para Contatos Agendados +7d).
-  Estoque: `/api/estoque/sync` (cron separado). Manual com `CRON_SECRET`.
+  Estoque: `/api/estoque/sync` (`5 */3 * * *` + full diário). Manual com `CRON_SECRET`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do WhatsApp Cloud API
   (Meta), responde com IA (primeiro atendimento guiado) e loga tudo.
-- `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
-  linguagem natural, a IA responde puxando os KPIs do banco.
+- `src/app/api/webhooks/telegram` — legado/opcional: bot de consulta KPIs para
+  quem ainda usa Telegram (a equipe opera pelo WhatsApp).
 - `src/app/dashboard` — painel com contatos por dia, por canal, por status e
   taxa de conversão.
 - `src/app/contatos` — lista dos últimos contatos (todos os canais) e formulário
@@ -45,23 +45,24 @@ ou investigar depois.
 2. **Rodar `db/schema.sql`** no SQL Editor do Supabase (ou `psql`).
    Iguatemi: Supabase — ver `deploy/SETUP-IGUATEMI.md`.
 3. **Claude (Anthropic)** — `ANTHROPIC_API_KEY` em [console.anthropic.com](https://console.anthropic.com)
-   para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
+   para briefings IA e WhatsApp. Modelo padrão: `claude-sonnet-4-20250514`.
 4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
    `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
    Tempo real: `AVEC_WEBHOOK_SECRET` + URL `/api/webhooks/avec` (sync fast `scope=kpi` apenas).
-   Backup: `CRON_SECRET` (cron fast ~20 min + ops/agenda/catalog 2×/dia).
+   Backup: `CRON_SECRET` (cron fast `5,25,45` + ops/agenda/catalog 2×/dia).
 5. **WhatsApp Cloud API oficial** — no Meta Developer:
    `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
    `WHATSAPP_APP_SECRET`. Webhook → `/api/webhooks/whatsapp` (campo `messages`).
+   Alertas internos (estoque/financeiro): `FINANCE_WHATSAPP_NUMBER`, `ADMIN_WHATSAPP_NUMBER`.
    Para aftercare fora da janela 24h: template aprovado em
    `WHATSAPP_TEMPLATE_AFTERCARE`.
-6. **Criar um bot Telegram dedicado ao ROM** via `@BotFather` (2 min, token na
-   hora) e configurar o `setWebhook` apontando para
-   `/api/webhooks/telegram` com um `secret_token`.
+6. **Telegram (opcional)** — bot legado via `@BotFather` + `setWebhook` em
+   `/api/webhooks/telegram` com `secret_token`. A operação do dia é WhatsApp.
 7. Preencher `.env.local` com base no `.env.example`.
 8. **Produção:** configure `ROM_ADMIN_PASSWORD`, `ROM_STAFF_USER` / `ROM_STAFF_PASSWORD`
    (funcionário: painel sem faturamento), `CRON_SECRET`, `WHATSAPP_WEBHOOK_SECRET`
-   e `TELEGRAM_STAFF_CHAT_IDS` — sem eles, webhooks e sync ficam bloqueados em produção.
+   e `FINANCE_WHATSAPP_NUMBER` / `ADMIN_WHATSAPP_NUMBER` (alertas) — sem eles,
+   webhooks e sync ficam bloqueados ou sem alertas em produção.
 
 ## Rodando local
 

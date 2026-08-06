@@ -122,6 +122,12 @@ function fmtDelta(current: number, previous: number, unit: 'currency' | 'pp' = '
   return `${sign}${diff > 0 ? text : `-${text}`}`
 }
 
+function fmtOmieAmount(amount: number | null | undefined, omieConfigured: boolean): string {
+  if (!omieConfigured) return '—'
+  if (amount == null) return '—'
+  return formatCurrency(amount)
+}
+
 function FinanceKpiCard({
   label,
   value,
@@ -370,6 +376,7 @@ export default function FinanceiroPage() {
   const [omieSyncMsg, setOmieSyncMsg] = useState<string | null>(null)
   const [yearBackfillBusy, setYearBackfillBusy] = useState(false)
   const [yearBackfillMsg, setYearBackfillMsg] = useState<string | null>(null)
+  const [omieConfigured, setOmieConfigured] = useState(false)
   const [dailyOpen, setDailyOpen] = useSectionOpen('financeiro.section.receita-diaria.open', false)
   const [expensesOpen, setExpensesOpen] = useSectionOpen('financeiro.section.despesas.open', false)
 
@@ -387,12 +394,13 @@ export default function FinanceiroPage() {
       ])
       const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
-      const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta }
+      const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta; omie_configured?: boolean }
       setKpis({
         current: normalizeKpiBucket(raw.current),
         previous: normalizeKpiBucket(raw.previous),
       })
       setSyncMeta(raw.sync ?? null)
+      setOmieConfigured(raw.omie_configured === true)
       setCategories(catJson.data ?? [])
       setExpenses(expJson.data?.expenses ?? [])
     } catch (e) {
@@ -415,12 +423,13 @@ export default function FinanceiroPage() {
         const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
         if (cancelled) return
         if (kpisJson.error) throw new Error(kpisJson.error)
-        const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta }
+        const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta; omie_configured?: boolean }
         setKpis({
           current: normalizeKpiBucket(raw.current),
           previous: normalizeKpiBucket(raw.previous),
         })
         setSyncMeta(raw.sync ?? null)
+        setOmieConfigured(raw.omie_configured === true)
         setCategories(catJson.data ?? [])
         setExpenses(expJson.data?.expenses ?? [])
         setError(null)
@@ -837,10 +846,10 @@ export default function FinanceiroPage() {
           value={
             loading || !kpis
               ? '—'
-              : formatCurrency(kpis.current.expenses_by_cnpj?.servicos ?? 0)
+              : fmtOmieAmount(kpis.current.expenses_by_cnpj?.servicos, omieConfigured)
           }
           delta={
-            kpis
+            kpis && omieConfigured
               ? fmtDelta(
                   kpis.current.expenses_by_cnpj?.servicos ?? 0,
                   kpis.previous.expenses_by_cnpj?.servicos ?? 0,
@@ -849,7 +858,7 @@ export default function FinanceiroPage() {
           }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
-            kpis
+            kpis && omieConfigured
               ? (kpis.current.expenses_by_cnpj?.servicos ?? 0) <=
                 (kpis.previous.expenses_by_cnpj?.servicos ?? 0)
               : null
@@ -862,10 +871,10 @@ export default function FinanceiroPage() {
           value={
             loading || !kpis
               ? '—'
-              : formatCurrency(kpis.current.expenses_by_cnpj?.comercio ?? 0)
+              : fmtOmieAmount(kpis.current.expenses_by_cnpj?.comercio, omieConfigured)
           }
           delta={
-            kpis
+            kpis && omieConfigured
               ? fmtDelta(
                   kpis.current.expenses_by_cnpj?.comercio ?? 0,
                   kpis.previous.expenses_by_cnpj?.comercio ?? 0,
@@ -874,7 +883,7 @@ export default function FinanceiroPage() {
           }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
-            kpis
+            kpis && omieConfigured
               ? (kpis.current.expenses_by_cnpj?.comercio ?? 0) <=
                 (kpis.previous.expenses_by_cnpj?.comercio ?? 0)
               : null
@@ -921,14 +930,14 @@ export default function FinanceiroPage() {
             <div className="rounded-xl border border-border/60 bg-surface/40 px-3 py-3">
               <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços (salão)</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">
-                {formatCurrency(kpis.current.expenses_by_cnpj?.servicos ?? 0)}
+                {fmtOmieAmount(kpis.current.expenses_by_cnpj?.servicos, omieConfigured)}
               </p>
               <p className="mt-0.5 text-[0.65rem] text-muted">Unha, corte, coloração…</p>
             </div>
             <div className="rounded-xl border border-border/60 bg-surface/40 px-3 py-3">
               <p className="text-[0.65rem] uppercase tracking-wide text-muted">Comércio (produtos)</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">
-                {formatCurrency(kpis.current.expenses_by_cnpj?.comercio ?? 0)}
+                {fmtOmieAmount(kpis.current.expenses_by_cnpj?.comercio, omieConfigured)}
               </p>
               <p className="mt-0.5 text-[0.65rem] text-muted">Revenda / insumos de prateleira</p>
             </div>

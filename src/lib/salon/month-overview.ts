@@ -37,14 +37,14 @@ export interface MonthOverview {
   finance: FinanceKpis['current']
   analytics: PeriodAnalytics
   closing: {
-    revenue: number
-    attended: number
+    revenue: number | null
+    attended: number | null
     cancelled: number
     no_shows: number
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
+    cash_flow: number | null
     days_expected: number
     days_present: number
     days_missing: string[]
@@ -54,14 +54,14 @@ export interface MonthOverview {
   /** Totais do mês comparado (MTD alinhado) — para deltas nos cards de Relatórios. */
   previous_label: string
   previous_closing: {
-    revenue: number
-    attended: number
+    revenue: number | null
+    attended: number | null
     cancelled: number
     no_shows: number
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
+    cash_flow: number | null
     lost_revenue: number | null
     occupancy_avg: number | null
   }
@@ -99,15 +99,27 @@ function previousMonthKey(monthKey: string): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+function metricOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
-  const revenue = Number(row.revenue) || 0
-  const expenses = Number(row.expenses) || 0
-  const cmv = Number(row.cmv) || 0
-  const attended = Number(row.attended) || 0
+  const revenueRaw = metricOrNull(row.revenue)
+  const expenses = metricOrNull(row.expenses) ?? 0
+  const cmv = metricOrNull(row.cmv) ?? 0
+  const attendedRaw = metricOrNull(row.attended)
+  const revenue = revenueRaw ?? 0
+  const attended = attendedRaw ?? 0
   const gross_margin =
-    revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
+    revenueRaw != null && revenueRaw > 0
+      ? Math.round(((revenueRaw - expenses) / revenueRaw) * 1000) / 10
+      : null
   const margin_after_cmv =
-    revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null
+    revenueRaw != null && revenueRaw > 0
+      ? Math.round(((revenueRaw - expenses - cmv) / revenueRaw) * 1000) / 10
+      : null
   const range = monthRange(row.month)
   return {
     month: row.month,
@@ -115,7 +127,7 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     from: range.from,
     to: range.to,
     revenue,
-    revenue_source: revenue > 0 ? 'metrics' : 'empty',
+    revenue_source: revenueRaw == null ? 'empty' : revenueRaw > 0 ? 'metrics' : 'empty',
     expenses,
     expenses_by_cnpj: {
       total: expenses,
@@ -130,14 +142,15 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE, cmv },
     margin_after_cmv,
     gross_margin,
-    cash_flow: Number(row.cash_flow) || 0,
+    cash_flow:
+      revenueRaw != null ? Math.round((revenueRaw - expenses) * 100) / 100 : 0,
     payment_mix: [],
     payment_reconciliation: {
-      revenue,
+      revenue: revenueRaw ?? 0,
       payments_total: 0,
-      delta: -revenue,
-      tolerance: Math.max(1, Math.round(revenue * 0.01 * 100) / 100),
-      status: revenue > 0 ? 'missing_payments' : 'aligned',
+      delta: revenueRaw != null ? -revenueRaw : 0,
+      tolerance: revenueRaw != null ? Math.max(1, Math.round(revenueRaw * 0.01 * 100) / 100) : 1,
+      status: revenueRaw != null && revenueRaw > 0 ? 'missing_payments' : 'aligned',
     },
     fiscal_split: {
       gross_paid: 0,
@@ -219,13 +232,23 @@ export function analyticsFromMonthPayload(payload: unknown): PeriodAnalytics | n
 /** Analytics mínimo a partir da linha de fechamento — sem bater P1/P2/P3 ao vivo. */
 export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytics {
   const window = resolveMonthWindow(row.month)
-  const revenue = Number(row.revenue) || 0
-  const attended = Number(row.attended) || 0
-  const cancelled = Number(row.cancelled) || 0
-  const no_shows = Number(row.no_shows) || 0
+  const revenue = metricOrNull(row.revenue)
+  const attended = metricOrNull(row.attended)
+  const cancelled = metricOrNull(row.cancelled) ?? 0
+  const no_shows = metricOrNull(row.no_shows) ?? 0
   const ticket_avg = row.ticket_avg != null ? Number(row.ticket_avg) : null
-  const monthRevenue = revenue > 0 || attended > 0 ? revenue : null
-  const monthAttended = attended > 0 || revenue > 0 ? attended : null
+  const monthRevenue =
+    revenue == null && attended == null
+      ? null
+      : (revenue ?? 0) > 0 || (attended ?? 0) > 0
+        ? (revenue ?? 0)
+        : null
+  const monthAttended =
+    revenue == null && attended == null
+      ? null
+      : (revenue ?? 0) > 0 || (attended ?? 0) > 0
+        ? (attended ?? 0)
+        : null
   return {
     month: row.month,
     label: labelMonthPt(row.month),
@@ -276,14 +299,17 @@ function buildOverview(args: {
     finance: finance.current,
     analytics,
     closing: {
-      revenue: finance.current.revenue,
-      attended: finance.current.attended,
+      revenue: analytics.month_revenue,
+      attended: analytics.month_attended,
       cancelled: analytics.cancelled,
       no_shows: analytics.no_shows,
       ticket_avg: finance.current.ticket_avg,
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
-      cash_flow: finance.current.cash_flow,
+      cash_flow:
+        analytics.month_revenue != null
+          ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
+          : null,
       days_expected: completeness.days_expected,
       days_present: completeness.days_present,
       days_missing: completeness.days_missing,
@@ -292,14 +318,17 @@ function buildOverview(args: {
     },
     previous_label: finance.previous.label,
     previous_closing: {
-      revenue: finance.previous.revenue,
-      attended: finance.previous.attended,
+      revenue: prevAnalytics?.revenue ?? null,
+      attended: prevAnalytics?.attended ?? null,
       cancelled: prevAnalytics?.cancelled ?? 0,
       no_shows: prevAnalytics?.no_shows ?? 0,
       ticket_avg: finance.previous.ticket_avg,
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
-      cash_flow: finance.previous.cash_flow,
+      cash_flow:
+        prevAnalytics?.revenue != null
+          ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
+          : null,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
       occupancy_avg: prevAnalytics?.occupancy_avg ?? null,
     },
@@ -326,8 +355,8 @@ function overviewFromCachedRows(args: {
     const prevWindow = resolveMonthWindow(cachedPrev.month)
     const prevTicket =
       cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null
-    const prevRevenue = Number(cachedPrev.revenue) || 0
-    const prevAttended = Number(cachedPrev.attended) || 0
+    const prevRevenue = metricOrNull(cachedPrev.revenue)
+    const prevAttended = metricOrNull(cachedPrev.attended)
     analytics = {
       ...baseAnalytics,
       previous: {
@@ -335,14 +364,18 @@ function overviewFromCachedRows(args: {
         label: labelMonthPt(cachedPrev.month),
         from: prevWindow.from,
         to: prevWindow.to,
-        revenue: prevRevenue > 0 || prevAttended > 0 ? prevRevenue : null,
-        attended: prevAttended > 0 || prevRevenue > 0 ? prevAttended : null,
-        cancelled: Number(cachedPrev.cancelled) || 0,
-        no_shows: Number(cachedPrev.no_shows) || 0,
+        revenue:
+          prevRevenue != null && (prevRevenue > 0 || (prevAttended ?? 0) > 0) ? prevRevenue : prevRevenue,
+        attended:
+          prevAttended != null && (prevAttended > 0 || (prevRevenue ?? 0) > 0)
+            ? prevAttended
+            : prevAttended,
+        cancelled: metricOrNull(cachedPrev.cancelled) ?? 0,
+        no_shows: metricOrNull(cachedPrev.no_shows) ?? 0,
         ticket_avg: prevTicket,
         lost_revenue: estimateLostRevenue(
-          Number(cachedPrev.cancelled) || 0,
-          Number(cachedPrev.no_shows) || 0,
+          metricOrNull(cachedPrev.cancelled) ?? 0,
+          metricOrNull(cachedPrev.no_shows) ?? 0,
           prevTicket,
         ),
         occupancy_avg: null,
