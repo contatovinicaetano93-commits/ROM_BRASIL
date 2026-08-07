@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
-import { fmtScheduleParts } from '@/lib/salon/format'
+import { fmtScheduleParts, toSalonDateIso } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
 import {
@@ -271,7 +271,14 @@ export default function PipelinePage() {
           count={loading ? 0 : (data?.counts.courtesy ?? 0)}
           tone="sky"
           items={loading ? [] : (data?.courtesy ?? [])}
-          timeFrom={(item) => item.last_done_at ?? item.scheduled_at}
+          timeFrom={(item) => {
+            // last_done_at em aberto pode ser visita anterior — só vale se for do dia.
+            const day = data?.day
+            if (item.last_done_at && day && toSalonDateIso(item.last_done_at) === day) {
+              return item.last_done_at
+            }
+            return item.scheduled_at ?? item.last_done_at
+          }}
           emptyLabel={loading ? 'Carregando…' : 'Nenhum teste ou cortesia hoje.'}
           showKind
         />

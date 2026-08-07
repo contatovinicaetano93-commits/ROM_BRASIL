@@ -508,8 +508,15 @@ export async function listTodayPipeline(day: string): Promise<{
   }
 
   courtesy.sort((a, b) => {
-    const aIso = a.last_done_at ?? a.scheduled_at ?? ''
-    const bIso = b.last_done_at ?? b.scheduled_at ?? ''
+    // last_done_at em aberto pode ser visita anterior — só vale se for do dia.
+    const aIso =
+      (a.last_done_at && toSalonDateIso(a.last_done_at) === day ? a.last_done_at : null) ??
+      a.scheduled_at ??
+      ''
+    const bIso =
+      (b.last_done_at && toSalonDateIso(b.last_done_at) === day ? b.last_done_at : null) ??
+      b.scheduled_at ??
+      ''
     return aIso.localeCompare(bIso)
   })
 
