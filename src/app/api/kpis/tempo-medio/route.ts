@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const month = req.nextUrl.searchParams.get('month')?.trim()
     const referenceDay =
       month && /^\d{4}-\d{2}$/.test(month) ? monthToDateRange(month).to : todayIso()
-    const cacheKey = `kpis:tm:v1:${referenceDay}`
+    const cacheKey = `kpis:tm:v2:${referenceDay}`
     const data = await ttlGetOrSet(cacheKey, 120_000, () => fetchTmComparison(referenceDay))
     return okCached(
       {

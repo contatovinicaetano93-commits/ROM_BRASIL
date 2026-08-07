@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
 
     const data = await ttlGetOrSet(
-      `kpis:dashboard:v2:${month ?? 'latest'}`,
+      `kpis:dashboard:v3:${month ?? 'latest'}`,
       45_000,
       async () => {
         // 1) Contact KPIs
