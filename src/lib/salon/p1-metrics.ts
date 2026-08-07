@@ -166,7 +166,7 @@ function addDaysIso(day: string, delta: number): string {
 
 /**
  * Último dia civil do mês imediatamente anterior a `day` (YYYY-MM-DD).
- * Usado no ranking MoM (snapshot atual vs EOM do mês passado).
+ * Preferir `resolvePreviousComparableWindow` para deltas MTD alinhados.
  */
 export function previousCalendarMonthEnd(day: string): string {
   const y = Number(day.slice(0, 4))

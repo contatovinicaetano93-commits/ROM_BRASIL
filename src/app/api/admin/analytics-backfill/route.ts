@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
           ? Math.floor(Number(cancelMaxDaysRaw))
           : undefined
 
+    const asOf = parseIsoDay(body.asOf)
     const results = []
     for (const month of unique) {
       results.push(
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
           steps: effectiveSteps,
           cancelFrom,
           cancelMaxDays,
+          asOf,
         }),
       )
     }
