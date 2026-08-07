@@ -10,9 +10,12 @@ import { todayIso } from '@/lib/salon/format'
 import {
   getLatestSalonP1Daily,
   getSalonP1DailyNear,
-  previousCalendarMonthEnd,
   type P1ProfessionalRow,
 } from '@/lib/salon/p1-metrics'
+import {
+  resolveMonthWindow,
+  resolvePreviousComparableWindow,
+} from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { asJsonArray } from '@/lib/sql-json'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
 
     const data = await ttlGetOrSet(
-      `kpis:dashboard:v1:${month ?? 'latest'}`,
+      `kpis:dashboard:v2:${month ?? 'latest'}`,
       45_000,
       async () => {
         // 1) Contact KPIs
@@ -73,6 +76,8 @@ export async function GET(req: NextRequest) {
           month: string | null
           reference_day: string | null
           compare_day: string | null
+          compare_label: string | null
+          compare_mtd_aligned: boolean
           professionals: Array<
             P1ProfessionalRow & {
               delta: { revenue: number; attended: number; occupancy: number | null } | null
@@ -85,12 +90,16 @@ export async function GET(req: NextRequest) {
             month,
             reference_day: null,
             compare_day: null,
+            compare_label: null,
+            compare_mtd_aligned: false,
             professionals: [],
           }
         } else {
           const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
-          const compareTarget = previousCalendarMonthEnd(latest.day)
-          const compare = await getSalonP1DailyNear(compareTarget, { maxSkewDays: 14 })
+          // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
+          const window = resolveMonthWindow(month ?? latest.day.slice(0, 7), latest.day)
+          const prevWindow = resolvePreviousComparableWindow(window)
+          const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
           const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
           const compareByName = new Map(comparePros.map((p) => [normalizeProName(p.name), p]))
 
@@ -117,6 +126,8 @@ export async function GET(req: NextRequest) {
             month,
             reference_day: latest.day,
             compare_day: compare && compare.day !== latest.day ? compare.day : null,
+            compare_label: prevWindow.label,
+            compare_mtd_aligned: prevWindow.mtd_aligned,
             professionals,
           }
         }
