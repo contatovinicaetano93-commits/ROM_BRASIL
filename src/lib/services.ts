@@ -508,16 +508,19 @@ export async function listTodayPipeline(day: string): Promise<{
   }
 
   courtesy.sort((a, b) => {
-    // last_done_at em aberto pode ser visita anterior — só vale se for do dia.
-    const aIso =
-      (a.last_done_at && toSalonDateIso(a.last_done_at) === day ? a.last_done_at : null) ??
-      a.scheduled_at ??
-      ''
-    const bIso =
-      (b.last_done_at && toSalonDateIso(b.last_done_at) === day ? b.last_done_at : null) ??
-      b.scheduled_at ??
-      ''
-    return aIso.localeCompare(bIso)
+    // postgres.js devolve Date em timestamptz — normalizar antes do localeCompare.
+    const key = (row: ScheduledServiceRow) => {
+      const raw =
+        (row.last_done_at && toSalonDateIso(row.last_done_at) === day
+          ? row.last_done_at
+          : null) ??
+        row.scheduled_at ??
+        row.last_done_at ??
+        ''
+      if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? '' : raw.toISOString()
+      return typeof raw === 'string' ? raw : String(raw ?? '')
+    }
+    return key(a).localeCompare(key(b))
   })
 
   return { scheduled, courtesy, completed }
