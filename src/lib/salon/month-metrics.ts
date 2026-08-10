@@ -202,6 +202,21 @@ async function listPresentDays(from: string, to: string): Promise<string[]> {
   }
 }
 
+/** Soma operacional de salon_daily_metrics numa janela (MTD↔MTD / mês fechado). */
+export async function sumSalonDailyRange(from: string, to: string) {
+  return sumDailyTotals(from, to)
+}
+
+/** Despesas operacionais na janela (finance_expenses.expense_date; exclui Omie não-operacional). */
+export async function sumSalonExpensesRange(from: string, to: string): Promise<number> {
+  return sumExpenses(from, to)
+}
+
+/** CMV proxy (saídas de estoque) na janela. */
+export async function sumSalonCmvRange(from: string, to: string): Promise<number> {
+  return sumStockCogs(from, to)
+}
+
 async function sumDailyTotals(from: string, to: string) {
   const sql = getSql()
   try {
@@ -255,14 +270,46 @@ async function sumDailyTotals(from: string, to: string) {
 async function sumExpenses(from: string, to: string): Promise<number> {
   const sql = getSql()
   try {
+    // Mesmo filtro operacional de finance.sumExpenses / sumExpensesByCnpj —
+    // TED, lucro, mútuos e categorias 2.16/2.17/2.24/0.01 não entram no P&L.
     const rows = (await sql`
       select coalesce(sum(amount), 0)::float as total
       from finance_expenses
       where expense_date >= ${from}::date and expense_date <= ${to}::date
+        and not (
+          coalesce(source, 'manual') = 'omie'
+          and (
+            coalesce(omie_category_code, '') like '2.16%'
+            or coalesce(omie_category_code, '') like '2.17%'
+            or coalesce(omie_category_code, '') like '2.24%'
+            or coalesce(omie_category_code, '') like '0.01%'
+            or description ilike '%TED entre contas%'
+            or description ilike '%Adiantamento de Lucro%'
+            or description ilike '%Distribuição de Lucro%'
+            or description ilike '%Distribuicao de Lucro%'
+            or description ilike '%Mutuo %'
+            or description ilike '%Mútuo %'
+          )
+        )
     `) as { total: number }[]
     return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
   } catch {
-    return 0
+    try {
+      const rows = (await sql`
+        select coalesce(sum(amount), 0)::float as total
+        from finance_expenses
+        where expense_date >= ${from}::date and expense_date <= ${to}::date
+          and description not ilike '%TED entre contas%'
+          and description not ilike '%Adiantamento de Lucro%'
+          and description not ilike '%Distribuição de Lucro%'
+          and description not ilike '%Distribuicao de Lucro%'
+          and description not ilike '%Mutuo %'
+          and description not ilike '%Mútuo %'
+      `) as { total: number }[]
+      return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
+    } catch {
+      return 0
+    }
   }
 }
 

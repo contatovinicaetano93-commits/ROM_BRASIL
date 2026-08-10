@@ -509,47 +509,61 @@ export default function FinanceiroPage() {
     setOmieSyncing(true)
     setOmieSyncMsg(null)
     try {
-      const res = await apiFetch('/api/financeiro/omie/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month }),
-      })
-      const json = await res.json()
-      if (json.error) throw new Error(json.error)
-      const data = json.data as {
-        skipped?: boolean
-        reason?: string
-        note?: string
-        created?: number
-        updated?: number
-        skipped_cancelled?: number
-        skipped_non_operating?: number
-        removed?: number
-        fetched?: number
-        error?: string
-        kinds?: { kind: string; label: string; fetched: number; created: number; updated: number; error?: string }[]
+      // Mês a mês (Vercel ~300s) — um POST YTD inteiro estoura timeout.
+      const endKey = (kpis?.current.month || month).slice(0, 7)
+      const year = Number(endKey.slice(0, 4))
+      const endM = Number(endKey.slice(5, 7))
+      const months: string[] = []
+      for (let m = 1; m <= endM; m += 1) {
+        months.push(`${year}-${String(m).padStart(2, '0')}`)
       }
-      if (data.skipped) {
-        setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
-        return
+
+      let fetched = 0
+      let created = 0
+      let updated = 0
+      const errors: string[] = []
+
+      // 1 CNPJ por request — mês inteiro (2 CNPJs) estoura maxDuration=300s no BR.
+      const kinds = ['servicos', 'comercio'] as const
+      const steps = months.length * kinds.length
+      let step = 0
+
+      for (const m of months) {
+        for (const kind of kinds) {
+          step += 1
+          setOmieSyncMsg(`Omie ${m}/${kind} (${step}/${steps})…`)
+          const res = await apiFetch('/api/financeiro/omie/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: m, kind }),
+            timeoutMs: 280_000,
+          })
+          const json = await res.json()
+          if (json.error) throw new Error(json.error)
+          const data = json.data as {
+            skipped?: boolean
+            note?: string
+            fetched?: number
+            created?: number
+            updated?: number
+            error?: string
+          }
+          if (data.skipped) {
+            setOmieSyncMsg(
+              data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.',
+            )
+            return
+          }
+          fetched += data.fetched ?? 0
+          created += data.created ?? 0
+          updated += data.updated ?? 0
+          if (data.error) errors.push(`${m}/${kind}: ${data.error}`)
+        }
       }
-      if (data.error && !(data.fetched && data.fetched > 0)) throw new Error(data.error)
-      const kindBits =
-        data.kinds
-          ?.map(
-            (k) =>
-              `${k.label}: ${k.fetched} título(s) (+${k.created}/${k.updated})` +
-              (k.error ? ` ⚠ ${k.error}` : ''),
-          )
-          .join(' · ') ?? null
+
       setOmieSyncMsg(
-        kindBits ??
-          `Omie: ${data.fetched ?? 0} título(s) · +${data.created ?? 0} novos · ${data.updated ?? 0} atualizados` +
-            (data.skipped_cancelled ? ` · ${data.skipped_cancelled} cancelados` : '') +
-            (data.skipped_non_operating
-              ? ` · ${data.skipped_non_operating} transferências/não-operacionais ignorados`
-              : '') +
-            (data.removed ? ` · ${data.removed} removidos` : ''),
+        `Omie YTD (${months.length} mês(es)): ${fetched} título(s) · +${created} novos · ${updated} atualizados` +
+          (errors.length ? ` ⚠ ${errors.join(' · ')}` : ''),
       )
       await load()
     } catch (e) {
@@ -684,10 +698,10 @@ export default function FinanceiroPage() {
             onClick={syncOmieExpenses}
             disabled={omieSyncing}
             className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-50"
-            title="Puxa Contas a Pagar dos 2 CNPJs Omie (Serviços + Comércio)"
+            title="Puxa Contas a Pagar Omie do ano (jan→mês atual), 2 CNPJs: Serviços + Comércio"
           >
             <RefreshCw size={14} className={omieSyncing ? 'animate-spin' : undefined} />
-            {omieSyncing ? 'Puxando Omie…' : 'Puxar despesas Omie'}
+            {omieSyncing ? 'Puxando Omie (ano)…' : 'Puxar despesas Omie (ano)'}
           </button>
         </div>
       </div>
@@ -748,7 +762,9 @@ export default function FinanceiroPage() {
           {' ('}
           {kpis.previous.from.slice(8, 10)}–{kpis.previous.to.slice(8, 10)}
           {')'}
-          . No mês corrente o anterior é cortado no mesmo dia (janela comparável).
+          . No mês corrente o anterior é cortado no mesmo dia (janela comparável) —
+          receita e despesas dos cards. A lista Contas a Pagar abaixo continua no mês
+          calendário cheio (Omie).
         </p>
       )}
 

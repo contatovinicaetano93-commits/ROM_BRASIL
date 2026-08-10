@@ -16,7 +16,13 @@ import {
   type OmieCnpjKind,
   type OmieCredentials,
 } from '@/lib/omie/client'
-import { omieBrToIso, omieFullMonthRange, omieIsoToBr } from '@/lib/omie/dates'
+import {
+  omieBrToIso,
+  omieFullMonthRange,
+  omieIsoToBr,
+  omieRecentSyncMonthKeys,
+  omieYearMonthKeysThrough,
+} from '@/lib/omie/dates'
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import {
   deleteOmieExpenseByExternalId,
@@ -326,10 +332,16 @@ async function syncKindForMonth(
   }
 }
 
-async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSyncResult> {
+async function syncOmieExpensesForMonthUnlocked(
+  month: string,
+  opts?: { kind?: OmieCnpjKind },
+): Promise<OmieSyncResult> {
   const range = omieFullMonthRange(month)
   const mock = isOmieMock()
-  const configuredList = listConfiguredOmieCredentials()
+  const kindFilter = opts?.kind
+  const configuredList = listConfiguredOmieCredentials().filter((c) =>
+    kindFilter ? c.kind === kindFilter : true,
+  )
   const configured = configuredList.length > 0 || mock
 
   const empty: OmieSyncResult = {
@@ -351,15 +363,17 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
   if (!configured) {
     return {
       ...empty,
-      error:
-        'Configure OMIE_SERVICOS_APP_KEY/SECRET e OMIE_COMERCIO_APP_KEY/SECRET',
+      error: kindFilter
+        ? `Credenciais Omie ${kindFilter} não configuradas`
+        : 'Configure OMIE_SERVICOS_APP_KEY/SECRET e OMIE_COMERCIO_APP_KEY/SECRET',
     }
   }
 
   await ensureOmieExpenseSchema()
 
+  const kindsToRun = kindFilter ? ([kindFilter] as OmieCnpjKind[]) : OMIE_CNPJ_KINDS
   const targets: (OmieCredentials | null)[] = mock
-    ? OMIE_CNPJ_KINDS.map((kind) => ({ kind, appKey: 'mock', appSecret: 'mock' }))
+    ? kindsToRun.map((kind) => ({ kind, appKey: 'mock', appSecret: 'mock' }))
     : configuredList
 
   const kinds: OmieSyncKindResult[] = []
@@ -390,43 +404,78 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
   }
 }
 
-export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncResult> {
+export async function syncOmieExpensesForMonth(
+  month: string,
+  opts?: { kind?: OmieCnpjKind },
+): Promise<OmieSyncResult> {
+  const kindSuffix = opts?.kind ? `-${opts.kind}` : ''
   return withSyncLock(
     SYNC_LOCK_KEYS.omie,
-    () => syncOmieExpensesForMonthUnlocked(month),
-    { ttlMs: 6 * 60 * 1000, owner: `omie-${month}` },
+    () => syncOmieExpensesForMonthUnlocked(month, opts),
+    { ttlMs: 6 * 60 * 1000, owner: `omie-${month}${kindSuffix}` },
   )
 }
 
-async function syncOmieExpensesRecentUnlocked(): Promise<{
+async function syncOmieExpensesRecentUnlocked(anchor = todayIso()): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
+  scope: 'recent'
+  months: string[]
 }> {
   if (!isOmieConfigured() && !isOmieMock()) {
-    return { runs: [], configured: false }
+    return { runs: [], configured: false, scope: 'recent', months: [] }
   }
 
-  const today = todayIso()
-  const current = today.slice(0, 7)
-  const [y, m] = current.split('-').map(Number)
-  const prevDate = new Date(Date.UTC(y!, m! - 2, 1))
-  const previous = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`
-
-  // Unlocked internals — um único lease cobre mês anterior + atual.
-  const runs = [
-    await syncOmieExpensesForMonthUnlocked(previous),
-    await syncOmieExpensesForMonthUnlocked(current),
-  ]
-  return { runs, configured: true }
+  // Cron diário cabe em maxDuration=300s: atual + anterior + 1 YTD em rodízio.
+  const ordered = omieRecentSyncMonthKeys(anchor)
+  const runs: OmieSyncResult[] = []
+  for (const month of ordered) {
+    runs.push(await syncOmieExpensesForMonthUnlocked(month))
+  }
+  return { runs, configured: true, scope: 'recent', months: ordered }
 }
 
-/** Cron: mês atual + mês anterior (títulos reabertos / alterados). */
+async function syncOmieExpensesYearToDateUnlocked(anchor = todayIso()): Promise<{
+  runs: OmieSyncResult[]
+  configured: boolean
+  scope: 'ytd'
+  months: string[]
+}> {
+  if (!isOmieConfigured() && !isOmieMock()) {
+    return { runs: [], configured: false, scope: 'ytd', months: [] }
+  }
+
+  const ordered = omieYearMonthKeysThrough(anchor)
+  const runs: OmieSyncResult[] = []
+  for (const month of ordered) {
+    runs.push(await syncOmieExpensesForMonthUnlocked(month))
+  }
+  return { runs, configured: true, scope: 'ytd', months: ordered }
+}
+
+/** Cron: atual + anterior + 1 mês YTD (rotação diária). */
 export async function syncOmieExpensesRecent(): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
+  scope: 'recent'
+  months: string[]
 }> {
   return withSyncLock(SYNC_LOCK_KEYS.omie, () => syncOmieExpensesRecentUnlocked(), {
-    ttlMs: 6 * 60 * 1000,
+    ttlMs: 8 * 60 * 1000,
     owner: 'omie-recent',
   })
+}
+
+/** YTD completo — preferir botão Financeiro (mês a mês no cliente). */
+export async function syncOmieExpensesYearToDate(anchor?: string): Promise<{
+  runs: OmieSyncResult[]
+  configured: boolean
+  scope: 'ytd'
+  months: string[]
+}> {
+  return withSyncLock(
+    SYNC_LOCK_KEYS.omie,
+    () => syncOmieExpensesYearToDateUnlocked(anchor ?? todayIso()),
+    { ttlMs: 14 * 60 * 1000, owner: 'omie-ytd' },
+  )
 }

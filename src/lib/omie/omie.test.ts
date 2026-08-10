@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { omieBrToIso, omieFullMonthRange, omieIsoToBr } from '@/lib/omie/dates'
+import {
+  omieBrToIso,
+  omieFullMonthRange,
+  omieIsoToBr,
+  omieRecentSyncMonthKeys,
+  omieYearMonthKeysThrough,
+} from '@/lib/omie/dates'
 import { normalizeOmieTitulo } from '@/lib/omie/sync'
 import type { OmieTituloEncontrado } from '@/lib/omie/types'
 
@@ -13,6 +19,29 @@ describe('omie dates', () => {
   it('monta mês cheio', () => {
     expect(omieFullMonthRange('2026-02')).toEqual({ from: '2026-02-01', to: '2026-02-28' })
     expect(omieFullMonthRange('2024-02')).toEqual({ from: '2024-02-01', to: '2024-02-29' })
+  })
+
+  it('lista meses YTD até o âncora', () => {
+    expect(omieYearMonthKeysThrough('2026-08-10')).toEqual([
+      '2026-01',
+      '2026-02',
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+    ])
+    expect(omieYearMonthKeysThrough('2026-01')).toEqual(['2026-01'])
+  })
+
+  it('cron recent: atual + anterior + 1 antigo', () => {
+    const keys = omieRecentSyncMonthKeys('2026-08-10')
+    expect(keys[0]).toBe('2026-08')
+    expect(keys[1]).toBe('2026-07')
+    expect(keys).toHaveLength(3)
+    expect(keys[2]).not.toBe('2026-08')
+    expect(keys[2]).not.toBe('2026-07')
   })
 })
 
