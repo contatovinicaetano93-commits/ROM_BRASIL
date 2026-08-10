@@ -3,6 +3,7 @@ import {
   omieBrToIso,
   omieFullMonthRange,
   omieIsoToBr,
+  omieRecentSyncMonthKeys,
   omieYearMonthKeysThrough,
 } from '@/lib/omie/dates'
 import { normalizeOmieTitulo } from '@/lib/omie/sync'
@@ -32,6 +33,15 @@ describe('omie dates', () => {
       '2026-08',
     ])
     expect(omieYearMonthKeysThrough('2026-01')).toEqual(['2026-01'])
+  })
+
+  it('cron recent: atual + anterior + 1 antigo', () => {
+    const keys = omieRecentSyncMonthKeys('2026-08-10')
+    expect(keys[0]).toBe('2026-08')
+    expect(keys[1]).toBe('2026-07')
+    expect(keys).toHaveLength(3)
+    expect(keys[2]).not.toBe('2026-08')
+    expect(keys[2]).not.toBe('2026-07')
   })
 })
 

@@ -20,6 +20,7 @@ import {
   omieBrToIso,
   omieFullMonthRange,
   omieIsoToBr,
+  omieRecentSyncMonthKeys,
   omieYearMonthKeysThrough,
 } from '@/lib/omie/dates'
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
@@ -403,6 +404,25 @@ export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncR
   )
 }
 
+async function syncOmieExpensesRecentUnlocked(anchor = todayIso()): Promise<{
+  runs: OmieSyncResult[]
+  configured: boolean
+  scope: 'recent'
+  months: string[]
+}> {
+  if (!isOmieConfigured() && !isOmieMock()) {
+    return { runs: [], configured: false, scope: 'recent', months: [] }
+  }
+
+  // Cron diário cabe em maxDuration=300s: atual + anterior + 1 YTD em rodízio.
+  const ordered = omieRecentSyncMonthKeys(anchor)
+  const runs: OmieSyncResult[] = []
+  for (const month of ordered) {
+    runs.push(await syncOmieExpensesForMonthUnlocked(month))
+  }
+  return { runs, configured: true, scope: 'recent', months: ordered }
+}
+
 async function syncOmieExpensesYearToDateUnlocked(anchor = todayIso()): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
@@ -413,14 +433,7 @@ async function syncOmieExpensesYearToDateUnlocked(anchor = todayIso()): Promise<
     return { runs: [], configured: false, scope: 'ytd', months: [] }
   }
 
-  // Jan → mês corrente: cobre MoM de fluxo/despesas em qualquer mês do ano.
-  // Ordem: mês atual e anterior primeiro (frescor), depois o restante do YTD.
-  const months = omieYearMonthKeysThrough(anchor)
-  const current = months[months.length - 1]!
-  const previous = months.length >= 2 ? months[months.length - 2]! : null
-  const older = months.filter((m) => m !== current && m !== previous)
-  const ordered = [current, ...(previous ? [previous] : []), ...older.reverse()]
-
+  const ordered = omieYearMonthKeysThrough(anchor)
   const runs: OmieSyncResult[] = []
   for (const month of ordered) {
     runs.push(await syncOmieExpensesForMonthUnlocked(month))
@@ -428,20 +441,20 @@ async function syncOmieExpensesYearToDateUnlocked(anchor = todayIso()): Promise<
   return { runs, configured: true, scope: 'ytd', months: ordered }
 }
 
-/** Cron / backfill: Contas a Pagar Omie do ano até o mês corrente (YTD). */
+/** Cron: atual + anterior + 1 mês YTD (rotação diária). */
 export async function syncOmieExpensesRecent(): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
-  scope: 'ytd'
+  scope: 'recent'
   months: string[]
 }> {
-  return withSyncLock(SYNC_LOCK_KEYS.omie, () => syncOmieExpensesYearToDateUnlocked(), {
-    ttlMs: 14 * 60 * 1000,
-    owner: 'omie-ytd',
+  return withSyncLock(SYNC_LOCK_KEYS.omie, () => syncOmieExpensesRecentUnlocked(), {
+    ttlMs: 8 * 60 * 1000,
+    owner: 'omie-recent',
   })
 }
 
-/** Alias explícito — mesmo lease do cron YTD. */
+/** YTD completo — preferir botão Financeiro (mês a mês no cliente). */
 export async function syncOmieExpensesYearToDate(anchor?: string): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
