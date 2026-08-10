@@ -332,10 +332,16 @@ async function syncKindForMonth(
   }
 }
 
-async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSyncResult> {
+async function syncOmieExpensesForMonthUnlocked(
+  month: string,
+  opts?: { kind?: OmieCnpjKind },
+): Promise<OmieSyncResult> {
   const range = omieFullMonthRange(month)
   const mock = isOmieMock()
-  const configuredList = listConfiguredOmieCredentials()
+  const kindFilter = opts?.kind
+  const configuredList = listConfiguredOmieCredentials().filter((c) =>
+    kindFilter ? c.kind === kindFilter : true,
+  )
   const configured = configuredList.length > 0 || mock
 
   const empty: OmieSyncResult = {
@@ -357,15 +363,17 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
   if (!configured) {
     return {
       ...empty,
-      error:
-        'Configure OMIE_SERVICOS_APP_KEY/SECRET e OMIE_COMERCIO_APP_KEY/SECRET',
+      error: kindFilter
+        ? `Credenciais Omie ${kindFilter} não configuradas`
+        : 'Configure OMIE_SERVICOS_APP_KEY/SECRET e OMIE_COMERCIO_APP_KEY/SECRET',
     }
   }
 
   await ensureOmieExpenseSchema()
 
+  const kindsToRun = kindFilter ? ([kindFilter] as OmieCnpjKind[]) : OMIE_CNPJ_KINDS
   const targets: (OmieCredentials | null)[] = mock
-    ? OMIE_CNPJ_KINDS.map((kind) => ({ kind, appKey: 'mock', appSecret: 'mock' }))
+    ? kindsToRun.map((kind) => ({ kind, appKey: 'mock', appSecret: 'mock' }))
     : configuredList
 
   const kinds: OmieSyncKindResult[] = []
@@ -396,11 +404,15 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
   }
 }
 
-export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncResult> {
+export async function syncOmieExpensesForMonth(
+  month: string,
+  opts?: { kind?: OmieCnpjKind },
+): Promise<OmieSyncResult> {
+  const kindSuffix = opts?.kind ? `-${opts.kind}` : ''
   return withSyncLock(
     SYNC_LOCK_KEYS.omie,
-    () => syncOmieExpensesForMonthUnlocked(month),
-    { ttlMs: 6 * 60 * 1000, owner: `omie-${month}` },
+    () => syncOmieExpensesForMonthUnlocked(month, opts),
+    { ttlMs: 6 * 60 * 1000, owner: `omie-${month}${kindSuffix}` },
   )
 }
 

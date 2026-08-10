@@ -523,33 +523,42 @@ export default function FinanceiroPage() {
       let updated = 0
       const errors: string[] = []
 
-      for (let i = 0; i < months.length; i += 1) {
-        const m = months[i]!
-        setOmieSyncMsg(`Omie ${m} (${i + 1}/${months.length})…`)
-        const res = await apiFetch('/api/financeiro/omie/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ month: m }),
-          timeoutMs: 280_000,
-        })
-        const json = await res.json()
-        if (json.error) throw new Error(json.error)
-        const data = json.data as {
-          skipped?: boolean
-          note?: string
-          fetched?: number
-          created?: number
-          updated?: number
-          error?: string
+      // 1 CNPJ por request — mês inteiro (2 CNPJs) estoura maxDuration=300s no BR.
+      const kinds = ['servicos', 'comercio'] as const
+      const steps = months.length * kinds.length
+      let step = 0
+
+      for (const m of months) {
+        for (const kind of kinds) {
+          step += 1
+          setOmieSyncMsg(`Omie ${m}/${kind} (${step}/${steps})…`)
+          const res = await apiFetch('/api/financeiro/omie/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: m, kind }),
+            timeoutMs: 280_000,
+          })
+          const json = await res.json()
+          if (json.error) throw new Error(json.error)
+          const data = json.data as {
+            skipped?: boolean
+            note?: string
+            fetched?: number
+            created?: number
+            updated?: number
+            error?: string
+          }
+          if (data.skipped) {
+            setOmieSyncMsg(
+              data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.',
+            )
+            return
+          }
+          fetched += data.fetched ?? 0
+          created += data.created ?? 0
+          updated += data.updated ?? 0
+          if (data.error) errors.push(`${m}/${kind}: ${data.error}`)
         }
-        if (data.skipped) {
-          setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
-          return
-        }
-        fetched += data.fetched ?? 0
-        created += data.created ?? 0
-        updated += data.updated ?? 0
-        if (data.error) errors.push(`${m}: ${data.error}`)
       }
 
       setOmieSyncMsg(
