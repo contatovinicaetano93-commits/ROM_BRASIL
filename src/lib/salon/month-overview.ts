@@ -308,10 +308,8 @@ function buildOverview(args: {
       ticket_avg: finance.current.ticket_avg,
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
-      cash_flow:
-        analytics.month_revenue != null
-          ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
-          : null,
+      // Mesma regra do Financeiro: null sem caixa conhecido (não −despesas com receita 0).
+      cash_flow: finance.current.cash_flow,
       days_expected: completeness.days_expected,
       days_present: completeness.days_present,
       days_missing: completeness.days_missing,
@@ -327,10 +325,7 @@ function buildOverview(args: {
       ticket_avg: finance.previous.ticket_avg,
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
-      cash_flow:
-        prevAnalytics?.revenue != null
-          ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
-          : null,
+      cash_flow: finance.previous.cash_flow,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
       occupancy_avg: prevAnalytics?.occupancy_avg ?? null,
     },
