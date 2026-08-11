@@ -7,31 +7,83 @@ export interface P3CurvePoint {
 
 export interface SalonP3Daily {
   day: string
-  return_rate: number
-  new_clients_period: number
+  /** null = taxa ainda não sincronizada (não interpretar como 0%). */
+  return_rate: number | null
+  /** null = novos ainda não sincronizados (não interpretar como 0). */
+  new_clients_period: number | null
   revenue_curve: P3CurvePoint[]
+  updated_at: string
+}
+
+type SalonP3DailyRow = {
+  day: string
+  return_rate: number | null
+  new_clients_period: number | null
+  has_return_rate?: boolean | null
+  has_new_clients?: boolean | null
+  revenue_curve: P3CurvePoint[] | unknown
   updated_at: string
 }
 
 let p3TableReady: Promise<void> | null = null
 
+/** Mapeia linha DB → domínio (flags evitam 0% / 0 novos falsos). */
+export function mapSalonP3DailyRow(row: SalonP3DailyRow): SalonP3Daily {
+  const hasReturn =
+    row.has_return_rate === true ||
+    // Legado pré-flag: só confia em taxa > 0 (0% sem flag = desconhecido).
+    (row.has_return_rate == null && row.return_rate != null && Number(row.return_rate) > 0)
+  const hasNew =
+    row.has_new_clients === true ||
+    (row.has_new_clients == null &&
+      row.new_clients_period != null &&
+      Number(row.new_clients_period) > 0)
+
+  return {
+    day: String(row.day).slice(0, 10),
+    return_rate: hasReturn ? Number(row.return_rate) : null,
+    new_clients_period: hasNew ? Number(row.new_clients_period) : null,
+    revenue_curve: (row.revenue_curve as P3CurvePoint[]) ?? [],
+    updated_at: String(row.updated_at),
+  }
+}
+
 export async function ensureSalonP3Table() {
   if (!p3TableReady) {
     p3TableReady = (async () => {
       const sql = getSql()
-      const exists = (await sql`
-        select to_regclass('public.salon_p3_daily') is not null as ok
-      `) as { ok: boolean }[]
-      if (exists[0]?.ok) return
-
       await sql`
         create table if not exists salon_p3_daily (
           day date primary key,
-          return_rate numeric(6,4) not null default 0,
-          new_clients_period int not null default 0,
+          return_rate numeric(6,4),
+          new_clients_period int,
           revenue_curve jsonb not null default '[]',
+          has_return_rate boolean not null default false,
+          has_new_clients boolean not null default false,
           updated_at timestamptz not null default now()
         )
+      `
+      await sql`alter table salon_p3_daily add column if not exists has_return_rate boolean not null default false`
+      await sql`alter table salon_p3_daily add column if not exists has_new_clients boolean not null default false`
+      // Tabelas antigas: return_rate / new_clients eram NOT NULL DEFAULT 0.
+      await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => {})
+      await sql`alter table salon_p3_daily alter column new_clients_period drop not null`.catch(
+        () => {},
+      )
+      // Backfill conservador: valores > 0 → conhecidos; 0 legado fica desconhecido.
+      await sql`
+        update salon_p3_daily
+        set has_return_rate = true
+        where has_return_rate = false
+          and return_rate is not null
+          and return_rate > 0
+      `
+      await sql`
+        update salon_p3_daily
+        set has_new_clients = true
+        where has_new_clients = false
+          and new_clients_period is not null
+          and new_clients_period > 0
       `
     })().catch((err) => {
       p3TableReady = null
@@ -52,30 +104,59 @@ export async function upsertSalonP3Daily(
   await ensureSalonP3Table()
   const sql = getSql()
   const existing = (await sql`
-    select * from salon_p3_daily where day = ${day}::date limit 1
-  `) as SalonP3Daily[]
+    select
+      day::text as day,
+      return_rate::float as return_rate,
+      new_clients_period,
+      has_return_rate,
+      has_new_clients,
+      revenue_curve,
+      updated_at
+    from salon_p3_daily where day = ${day}::date limit 1
+  `) as SalonP3DailyRow[]
   const cur = existing[0]
 
-  const return_rate = patch.return_rate ?? Number(cur?.return_rate ?? 0)
-  const new_clients_period = patch.new_clients_period ?? Number(cur?.new_clients_period ?? 0)
+  const has_return_rate =
+    patch.return_rate !== undefined ? true : Boolean(cur?.has_return_rate)
+  const return_rate =
+    patch.return_rate !== undefined
+      ? patch.return_rate
+      : cur?.return_rate != null
+        ? Number(cur.return_rate)
+        : null
+
+  const has_new_clients =
+    patch.new_clients_period !== undefined ? true : Boolean(cur?.has_new_clients)
+  const new_clients_period =
+    patch.new_clients_period !== undefined
+      ? patch.new_clients_period
+      : cur?.new_clients_period != null
+        ? Number(cur.new_clients_period)
+        : null
+
   const revenue_curve =
     patch.revenue_curve ?? (cur?.revenue_curve as P3CurvePoint[] | undefined) ?? []
 
   await sql`
     insert into salon_p3_daily (
-      day, return_rate, new_clients_period, revenue_curve, updated_at
+      day, return_rate, new_clients_period, revenue_curve,
+      has_return_rate, has_new_clients, updated_at
     )
     values (
       ${day}::date,
       ${return_rate},
       ${new_clients_period},
       ${revenue_curve},
+      ${has_return_rate},
+      ${has_new_clients},
       now()
     )
     on conflict (day) do update set
       return_rate = excluded.return_rate,
       new_clients_period = excluded.new_clients_period,
       revenue_curve = excluded.revenue_curve,
+      has_return_rate = excluded.has_return_rate,
+      has_new_clients = excluded.has_new_clients,
       updated_at = now()
   `
 }
@@ -88,24 +169,29 @@ export async function getSalonP3DailyNear(
   targetDay: string,
   opts?: { maxSkewDays?: number },
 ): Promise<SalonP3Daily | null> {
-  const sql = getSql()
   try {
+    await ensureSalonP3Table()
+    const sql = getSql()
     const rows = (await sql`
       select
         day::text as day,
         return_rate::float as return_rate,
         new_clients_period,
+        has_return_rate,
+        has_new_clients,
         revenue_curve,
         updated_at
       from salon_p3_daily
       where day <= ${targetDay}::date
       order by day desc
       limit 1
-    `) as SalonP3Daily[]
+    `) as SalonP3DailyRow[]
     const row = rows[0] ?? null
-    if (!row || opts?.maxSkewDays == null) return row
+    if (!row) return null
+    const mapped = mapSalonP3DailyRow(row)
+    if (opts?.maxSkewDays == null) return mapped
     const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
-    return row.day >= minDay ? row : null
+    return mapped.day >= minDay ? mapped : null
   } catch {
     return null
   }
