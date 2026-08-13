@@ -149,7 +149,7 @@ describe('period-analytics', () => {
     expect(result.month_revenue).toBeTypeOf('number')
     expect(result.month_attended).toBeTypeOf('number')
     expect(result.previous).not.toBeNull()
-    expect(result.previous?.month).toBe('2026-06')
+    expect(result.previous?.month).toBe('2025-07')
     expect(result.previous?.ticket_avg).toBeTypeOf('number')
     expect(result.previous?.occupancy_avg).toBe(0.7)
     expect(result.previous?.packages_revenue).toBe(800)

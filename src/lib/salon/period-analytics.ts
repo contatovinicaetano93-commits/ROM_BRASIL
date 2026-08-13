@@ -13,7 +13,7 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
-import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -176,7 +176,7 @@ export interface PeriodAnalytics {
   month_attended: number | null
   /** true se a janela atual é MTD (mês corrente). */
   mtd: boolean
-  /** Mês anterior alinhado (MTD→mesmo dia; mês fechado→mês cheio). */
+  /** Período comparado (YoY por padrão; mês escolhido se informado). */
   previous: PeriodMonthTotals | null
 }
 
@@ -186,10 +186,11 @@ export interface PeriodAnalytics {
  */
 export async function computePeriodAnalytics(opts?: {
   month?: string
+  compareMonth?: string | null
 }): Promise<PeriodAnalytics> {
   const window = resolveMonthWindow(opts?.month ?? todayIso().slice(0, 7))
   const { month, from, to } = window
-  const prevWindow = resolvePreviousComparableWindow(window)
+  const prevWindow = resolveComparableWindow(window, opts?.compareMonth)
   const nearOpts = { maxSkewDays: 14 }
   // Sequencial no pooler max:1 — Promise.all(5) × 2 lotes competia com outras
   // lambdas e o Overview ficava em “Carregando…” até abortar.

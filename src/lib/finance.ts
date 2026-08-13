@@ -8,7 +8,7 @@ import { omieFullMonthRange } from '@/lib/omie/dates'
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
-import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -706,18 +706,7 @@ export async function computeFinanceKpis(opts?: {
     normalizeMonthKey(opts?.month) ?? currentMonthKey(todayIso())
   const currentWindow = resolveMonthWindow(current)
   const compareKey = normalizeMonthKey(opts?.compareMonth)
-  const prevWindow = compareKey
-    ? (() => {
-        const w = resolveMonthWindow(compareKey, currentWindow.to)
-        return {
-          month: w.month,
-          from: w.from,
-          to: w.to,
-          label: labelMonthPt(w.month),
-          mtd_aligned: false,
-        }
-      })()
-    : resolvePreviousComparableWindow(currentWindow)
+  const prevWindow = resolveComparableWindow(currentWindow, compareKey)
   const currentLabel = currentWindow.mtd
     ? `${labelMonthPt(current)} (até dia ${Number(currentWindow.to.slice(8, 10))})`
     : labelMonthPt(current)

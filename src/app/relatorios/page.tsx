@@ -8,6 +8,7 @@ import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { yearAgoMonthKey } from '@/lib/salon/month-window'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
@@ -34,12 +35,16 @@ function overviewLoadError(e: unknown, materialize?: boolean): string {
     : msg
 }
 
-async function fetchOverview(month: string, materialize?: boolean): Promise<OverviewPayload> {
+async function fetchOverview(
+  month: string,
+  opts?: { materialize?: boolean; compareMonth?: string },
+): Promise<OverviewPayload> {
   const q = new URLSearchParams({ month })
-  if (materialize) q.set('materialize', '1')
+  if (opts?.materialize) q.set('materialize', '1')
+  if (opts?.compareMonth) q.set('compare', opts.compareMonth)
   const res = await apiFetch(`/api/relatorios/overview?${q}`, {
     cache: 'no-store',
-    timeoutMs: materialize ? 280_000 : 45_000,
+    timeoutMs: opts?.materialize ? 280_000 : 45_000,
   })
   const json = await res.json()
   if (json.error) throw new Error(json.error)
@@ -49,6 +54,7 @@ async function fetchOverview(month: string, materialize?: boolean): Promise<Over
 export default function RelatoriosOverviewPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(currentMonthKey)
+  const [compareMonth, setCompareMonth] = useState('')
   const [data, setData] = useState<OverviewPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +66,10 @@ export default function RelatoriosOverviewPage() {
       setError(null)
     }
     try {
-      const payload = await fetchOverview(month, opts?.materialize)
+      const payload = await fetchOverview(month, {
+        materialize: opts?.materialize,
+        compareMonth,
+      })
       setData(payload)
     } catch (e) {
       setData(null)
@@ -68,13 +77,13 @@ export default function RelatoriosOverviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [month])
+  }, [month, compareMonth])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const payload = await fetchOverview(month)
+        const payload = await fetchOverview(month, { compareMonth })
         if (cancelled) return
         setData(payload)
         setError(null)
@@ -89,7 +98,7 @@ export default function RelatoriosOverviewPage() {
     return () => {
       cancelled = true
     }
-  }, [month])
+  }, [month, compareMonth])
 
   function exportCsv() {
     if (!data) return
@@ -136,6 +145,22 @@ export default function RelatoriosOverviewPage() {
                 setMonth(m)
               }}
               aria-label="Mês do overview"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
+            <MonthYearField
+              value={compareMonth}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setCompareMonth(m)
+              }}
+              allowEmpty
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              maxMonth={month}
+              aria-label="Comparar com"
             />
           </label>
           <button
@@ -275,7 +300,7 @@ export default function RelatoriosOverviewPage() {
                 value:
                   data.closing.cash_flow != null
                     ? formatCurrency(data.closing.cash_flow)
-                    : data.analytics.mtd && !(data.closing.revenue > 0)
+                    : data.analytics.mtd && !(data.closing.revenue != null && data.closing.revenue > 0)
                       ? 'aguardando caixa'
                       : '—',
                 compare: momCompareLine(
