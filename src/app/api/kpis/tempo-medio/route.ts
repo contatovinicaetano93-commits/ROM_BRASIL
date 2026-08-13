@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return okCached(
       {
         ...data,
-        note: 'TM = 1ª vez que o ROM viu a comanda aberta no salão até a 1ª vez que viu Pago (intervalo do sync). Catálogo 0223 não entra.',
+        note: 'TM = 1ª vista no salão (ou após hora marcada) até o 0051 só mostrar Pago. Não fecha se ainda houver linha aberta no mesmo dia. Catálogo 0223 não entra.',
       },
       60,
     )
