@@ -37,4 +37,22 @@ describe('normalizeAvecWebhookBody', () => {
     expect(n.price).toBe(90)
     expect(n.scheduled_at).toBeTruthy()
   })
+
+  it('preserva rótulo Avec em status_raw (Em Atendimento / Aguardando)', () => {
+    const emAtendimento = normalizeAvecWebhookBody({
+      event: 'appointment.updated',
+      client_id: '99',
+      status: 'Em Atendimento',
+    })
+    expect(emAtendimento.status).toBeUndefined()
+    expect(emAtendimento.status_raw).toBe('em atendimento')
+
+    const aguardando = normalizeAvecWebhookBody({
+      event: 'appointment.updated',
+      client_id: '99',
+      status: 'Aguardando',
+    })
+    expect(aguardando.status).toBeUndefined()
+    expect(aguardando.status_raw).toBe('aguardando')
+  })
 })

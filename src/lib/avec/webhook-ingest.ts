@@ -21,8 +21,9 @@ import {
   parseAvecDateTime,
   defaultCadenceDaysForServiceName,
 } from '@/lib/avec/normalize'
-import { toSalonDateIso } from '@/lib/salon/format'
+import { toSalonDateIso, todayIso } from '@/lib/salon/format'
 import {
+  isAvecInSalonOpenStatus,
   isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
@@ -30,6 +31,13 @@ import {
   COMANDA_SERVICE_NAME,
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
+import {
+  addCalendarDaysYmd,
+  markComandaOpenedSeen,
+  markComandaPaidSeen,
+  rollupComandaDurations,
+  shouldStartComandaClock,
+} from '@/lib/salon/visit-spans'
 
 const EVENT_ALIASES: Record<string, string> = {
   'client.upsert': 'client.upsert',
@@ -98,6 +106,8 @@ export type NormalizedAvecWebhook = {
   professional_name?: string
   price?: number
   status?: 'novo' | 'importado' | 'em_atendimento' | 'agendado' | 'convertido' | 'perdido'
+  /** Status Avec original (ex. "em atendimento"), antes do mapa ROM. */
+  status_raw?: string
 }
 
 /** Normaliza payloads Avec / Zapier / Make / bridge manual para o formato ROM. */
@@ -238,6 +248,7 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     professional_name,
     price: priceNum && priceNum > 0 ? priceNum : undefined,
     status,
+    status_raw: statusRaw,
   }
 }
 
@@ -329,6 +340,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
+    await noteComandaSpan({
+      contactId: contact.id,
+      kind: 'paid',
+      day: toSalonDateIso(payload.completed_at ?? payload.scheduled_at ?? '') ?? todayIso(),
+    })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
     // Sem horário = comanda/encaixe → ancora agora; Pipeline coloca em "No salão".
     const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
@@ -349,6 +365,13 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       await scheduleService(service.id, when, payload.professional_name, { origin })
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
+      await noteComandaSpan({
+        contactId: contact.id,
+        kind: 'open',
+        origin,
+        status: payload.status_raw ?? payload.status,
+        day: toSalonDateIso(when),
+      })
     }
   } else if (event === 'service.completed' && payload.service_name) {
     const services = await listServices(contact.id)
@@ -367,6 +390,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
+    await noteComandaSpan({
+      contactId: contact.id,
+      kind: 'paid',
+      day: toSalonDateIso(payload.completed_at ?? '') ?? todayIso(),
+    })
   }
 
   await logEvent({
@@ -378,4 +406,41 @@ export async function ingestAvecWebhook(rawBody: unknown) {
   })
 
   return { contact_id: contact.id, event, realtime: true as const }
+}
+
+async function noteComandaSpan(opts: {
+  contactId: string
+  kind: 'open' | 'paid'
+  origin?: ScheduleOrigin
+  status?: string
+  day?: string | null
+}) {
+  try {
+    const today = todayIso()
+    const yesterday = addCalendarDaysYmd(today, -1)
+    const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today
+    if (opts.kind === 'open') {
+      if (
+        !shouldStartComandaClock({
+          apptDay: day,
+          today,
+          yesterday,
+          isPaid: false,
+          isLost: false,
+          isOpenComanda: true,
+          inSalonOpen: isAvecInSalonOpenStatus(opts.status ?? ''),
+          scheduleOrigin: opts.origin ?? 'agenda',
+        })
+      ) {
+        return
+      }
+      await markComandaOpenedSeen(opts.contactId, day)
+      return
+    }
+    if (day !== today && day !== yesterday) return
+    await markComandaPaidSeen(opts.contactId, day, new Date(), yesterday)
+    await rollupComandaDurations([today, yesterday])
+  } catch {
+    // TM não derruba o webhook.
+  }
 }

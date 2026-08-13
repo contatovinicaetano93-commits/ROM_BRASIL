@@ -81,6 +81,7 @@ import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 import {
   isAvecCancelledStatus,
+  isAvecInSalonOpenStatus,
   isAvecNegativeOutcomeStatus,
   isAvecNoShowStatus,
   isAvecOpenComandaStatus,
@@ -91,6 +92,12 @@ import {
   COMANDA_SERVICE_NAME,
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
+import {
+  markComandaOpenedSeen,
+  markComandaPaidSeen,
+  rollupComandaDurations,
+  shouldStartComandaClock,
+} from '@/lib/salon/visit-spans'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -568,6 +575,17 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   /** Agendados por dia = cabeças (contato único), não linhas 0051. */
   const bookedHeadsByDay = new Map<string, Set<string>>()
   const rowsByDay = new Map<string, number>()
+  /** contactId → dias (fast 0051 cobre ontem+hoje; um Map por contato perderia o outro dia). */
+  const comandaOpenSeen = new Map<string, Set<string>>()
+  const comandaPaidSeen = new Map<string, Set<string>>()
+  const rememberComandaDay = (into: Map<string, Set<string>>, contactId: string, day: string) => {
+    let days = into.get(contactId)
+    if (!days) {
+      days = new Set()
+      into.set(contactId, days)
+    }
+    days.add(day)
+  }
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -653,6 +671,24 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         heads.add(contact.id)
       }
 
+      if (
+        shouldStartComandaClock({
+          apptDay,
+          today,
+          yesterday,
+          isPaid,
+          isLost: isLostOutcome,
+          isOpenComanda,
+          inSalonOpen: isAvecInSalonOpenStatus(status),
+          scheduleOrigin,
+        })
+      ) {
+        rememberComandaDay(comandaOpenSeen, contact.id, apptDay!)
+      }
+      if (isPaid && apptDay && (apptDay === today || apptDay === yesterday)) {
+        rememberComandaDay(comandaPaidSeen, contact.id, apptDay)
+      }
+
       if (serviceName && scheduledAt) {
         const service = await findOrCreateService(contact.id, serviceName)
         const isNew = servicesCreatedRecently(service)
@@ -706,6 +742,22 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     } catch (e) {
       stats.errors.push(`agendamento: ${e instanceof Error ? e.message : String(e)}`)
     }
+  }
+
+  try {
+    for (const [contactId, days] of comandaOpenSeen) {
+      for (const day of days) {
+        await markComandaOpenedSeen(contactId, day)
+      }
+    }
+    for (const [contactId, days] of comandaPaidSeen) {
+      for (const day of [...days].sort()) {
+        await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+      }
+    }
+    await rollupComandaDurations([today, yesterday])
+  } catch (e) {
+    stats.errors.push(`tm comanda: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   // Reconcilia órfãos de hoje + KPI Agendados por dia (hoje/ontem + dias com linha).
@@ -767,8 +819,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   /** Mix do dia (Cérebro NOVOS·RECORRENTES): 0002 total_visitas na ultima_visita. */
   const returningByDay = new Map<string, number>()
   const newByDay = new Map<string, number>()
-  let durationSumMinutes = 0
-  let durationCount = 0
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -791,12 +841,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
 
       const attendedDay = att.attendedAt ? toSalonDateIso(att.attendedAt) : visitDay
       if (!attendedDay || attendedDay < attendanceFrom || attendedDay > today) continue
-
-      // TM do dia: duração real 0002 (início+fim) — 0223 é catálogo sem data.
-      if (att.durationMinutes != null && att.attendedAt && toSalonDateIso(att.attendedAt) === today) {
-        durationSumMinutes += att.durationMinutes
-        durationCount++
-      }
 
       if (!att.avecClientId && !att.phone) {
         stats.warnings.push('atendimento: linha sem avec_client_id e sem telefone — ignorada')
@@ -872,16 +916,10 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   if (result.truncated || stats.aborted) {
     stats.warnings.push(
       stats.aborted
-        ? 'mix 0002: abort no orçamento — novos/recorrentes/TM não atualizados (evita zerar)'
-        : 'mix 0002: truncado — novos/recorrentes/TM não atualizados (evita zerar)',
+        ? 'mix 0002: abort no orçamento — novos/recorrentes não atualizados (evita zerar)'
+        : 'mix 0002: truncado — novos/recorrentes não atualizados (evita zerar)',
     )
   } else {
-    if (durationCount > 0) {
-      await upsertSalonMetrics(today, {
-        service_duration_sum_minutes: durationSumMinutes,
-        service_duration_count: durationCount,
-      })
-    }
     if (mode === 'fast') {
       // Fast 0002 cobre ontem+hoje — gravar mix dos dois dias (não só today).
       for (const day of [addCalendarDaysYmd(today, -1), today]) {
@@ -1333,7 +1371,7 @@ async function syncReturningFrom0002(
 
 /**
  * TM atendimento — 0223 (`tempo`) é catálogo sem filtro de data.
- * Não grava como KPI do dia (fonte: 0002 com duração real). Snapshot só no full.
+ * Não grava como KPI do dia (fonte: spans open→Pago). Snapshot só no full.
  */
 async function syncDurationFrom0223(
   stats: AvecSyncStats,
