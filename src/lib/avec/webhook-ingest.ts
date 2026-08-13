@@ -23,6 +23,7 @@ import {
 } from '@/lib/avec/normalize'
 import { toSalonDateIso, todayIso } from '@/lib/salon/format'
 import {
+  isAvecInSalonOpenStatus,
   isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
@@ -35,6 +36,7 @@ import {
   markComandaOpenedSeen,
   markComandaPaidSeen,
   rollupComandaDurations,
+  shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 
 const EVENT_ALIASES: Record<string, string> = {
@@ -104,6 +106,8 @@ export type NormalizedAvecWebhook = {
   professional_name?: string
   price?: number
   status?: 'novo' | 'importado' | 'em_atendimento' | 'agendado' | 'convertido' | 'perdido'
+  /** Status Avec original (ex. "em atendimento"), antes do mapa ROM. */
+  status_raw?: string
 }
 
 /** Normaliza payloads Avec / Zapier / Make / bridge manual para o formato ROM. */
@@ -244,6 +248,7 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     professional_name,
     price: priceNum && priceNum > 0 ? priceNum : undefined,
     status,
+    status_raw: statusRaw,
   }
 }
 
@@ -364,7 +369,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
         contactId: contact.id,
         kind: 'open',
         origin,
-        status: payload.status,
+        status: payload.status_raw ?? payload.status,
         day: toSalonDateIso(when),
       })
     }
@@ -415,12 +420,24 @@ async function noteComandaSpan(opts: {
     const yesterday = addCalendarDaysYmd(today, -1)
     const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today
     if (opts.kind === 'open') {
-      const inSalon = opts.status === 'em_atendimento'
-      if (!inSalon && opts.origin !== 'comanda') return
-      if (day !== today && day !== yesterday) return
+      if (
+        !shouldStartComandaClock({
+          apptDay: day,
+          today,
+          yesterday,
+          isPaid: false,
+          isLost: false,
+          isOpenComanda: true,
+          inSalonOpen: isAvecInSalonOpenStatus(opts.status ?? ''),
+          scheduleOrigin: opts.origin ?? 'agenda',
+        })
+      ) {
+        return
+      }
       await markComandaOpenedSeen(opts.contactId, day)
       return
     }
+    if (day !== today && day !== yesterday) return
     await markComandaPaidSeen(opts.contactId, day, new Date(), yesterday)
     await rollupComandaDurations([today, yesterday])
   } catch {

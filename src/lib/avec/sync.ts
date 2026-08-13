@@ -575,8 +575,17 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   /** Agendados por dia = cabeças (contato único), não linhas 0051. */
   const bookedHeadsByDay = new Map<string, Set<string>>()
   const rowsByDay = new Map<string, number>()
-  const comandaOpenSeen = new Map<string, string>()
-  const comandaPaidSeen = new Map<string, string>()
+  /** contactId → dias (fast 0051 cobre ontem+hoje; um Map por contato perderia o outro dia). */
+  const comandaOpenSeen = new Map<string, Set<string>>()
+  const comandaPaidSeen = new Map<string, Set<string>>()
+  const rememberComandaDay = (into: Map<string, Set<string>>, contactId: string, day: string) => {
+    let days = into.get(contactId)
+    if (!days) {
+      days = new Set()
+      into.set(contactId, days)
+    }
+    days.add(day)
+  }
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -674,10 +683,10 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           scheduleOrigin,
         })
       ) {
-        comandaOpenSeen.set(contact.id, apptDay!)
+        rememberComandaDay(comandaOpenSeen, contact.id, apptDay!)
       }
       if (isPaid && apptDay && (apptDay === today || apptDay === yesterday)) {
-        comandaPaidSeen.set(contact.id, apptDay)
+        rememberComandaDay(comandaPaidSeen, contact.id, apptDay)
       }
 
       if (serviceName && scheduledAt) {
@@ -736,11 +745,15 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 
   try {
-    for (const [contactId, day] of comandaOpenSeen) {
-      await markComandaOpenedSeen(contactId, day)
+    for (const [contactId, days] of comandaOpenSeen) {
+      for (const day of days) {
+        await markComandaOpenedSeen(contactId, day)
+      }
     }
-    for (const [contactId, day] of comandaPaidSeen) {
-      await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+    for (const [contactId, days] of comandaPaidSeen) {
+      for (const day of [...days].sort()) {
+        await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+      }
     }
     await rollupComandaDurations([today, yesterday])
   } catch (e) {
