@@ -63,28 +63,34 @@ export async function ensureSalonP3Table() {
           updated_at timestamptz not null default now()
         )
       `
-      await sql`alter table salon_p3_daily add column if not exists has_return_rate boolean not null default false`
-      await sql`alter table salon_p3_daily add column if not exists has_new_clients boolean not null default false`
-      // Tabelas antigas: return_rate / new_clients eram NOT NULL DEFAULT 0.
-      await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => {})
-      await sql`alter table salon_p3_daily alter column new_clients_period drop not null`.catch(
-        () => {},
-      )
-      // Backfill conservador: valores > 0 → conhecidos; 0 legado fica desconhecido.
-      await sql`
-        update salon_p3_daily
-        set has_return_rate = true
-        where has_return_rate = false
-          and return_rate is not null
-          and return_rate > 0
-      `
-      await sql`
-        update salon_p3_daily
-        set has_new_clients = true
-        where has_new_clients = false
-          and new_clients_period is not null
-          and new_clients_period > 0
-      `
+      const cols = (await sql`
+        select column_name
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'salon_p3_daily'
+          and column_name in ('has_return_rate', 'has_new_clients')
+      `) as { column_name: string }[]
+      const names = new Set(cols.map((c) => c.column_name))
+      if (!names.has('has_return_rate')) {
+        await sql`alter table salon_p3_daily add column has_return_rate boolean not null default false`
+        await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => {})
+        await sql`
+          update salon_p3_daily
+          set has_return_rate = true
+          where return_rate is not null and return_rate > 0
+        `
+      }
+      if (!names.has('has_new_clients')) {
+        await sql`alter table salon_p3_daily add column has_new_clients boolean not null default false`
+        await sql`alter table salon_p3_daily alter column new_clients_period drop not null`.catch(
+          () => {},
+        )
+        await sql`
+          update salon_p3_daily
+          set has_new_clients = true
+          where new_clients_period is not null and new_clients_period > 0
+        `
+      }
     })().catch((err) => {
       p3TableReady = null
       throw err
@@ -170,7 +176,7 @@ export async function getSalonP3DailyNear(
   opts?: { maxSkewDays?: number },
 ): Promise<SalonP3Daily | null> {
   try {
-    await ensureSalonP3Table()
+    // Leitura sem DDL — Visão não pode pagar ensure+UPDATE a cada GET.
     const sql = getSql()
     const rows = (await sql`
       select
