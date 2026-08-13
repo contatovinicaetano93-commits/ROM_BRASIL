@@ -79,7 +79,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'despesas',
     source: 'rom_manual',
-    note: 'Cadastro manual no Financeiro ROM.',
+    note: 'Omie Contas a Pagar (por vencimento, CNPJs serviços/comércio) + lançamentos manuais. Exclui não-operacionais.',
   },
   {
     field: 'CMV',
@@ -143,7 +143,9 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     margin_after_cmv,
     gross_margin,
     cash_flow:
-      revenueRaw != null ? Math.round((revenueRaw - expenses) * 100) / 100 : 0,
+      revenueRaw != null && revenueRaw > 0
+        ? Math.round((revenueRaw - expenses) * 100) / 100
+        : null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: revenueRaw ?? 0,
@@ -182,7 +184,7 @@ function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE },
     margin_after_cmv: null,
     gross_margin: null,
-    cash_flow: 0,
+    cash_flow: null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: 0,
@@ -307,7 +309,7 @@ function buildOverview(args: {
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
       cash_flow:
-        analytics.month_revenue != null
+        analytics.month_revenue != null && analytics.month_revenue > 0
           ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
           : null,
       days_expected: completeness.days_expected,
@@ -326,7 +328,7 @@ function buildOverview(args: {
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
       cash_flow:
-        prevAnalytics?.revenue != null
+        prevAnalytics?.revenue != null && prevAnalytics.revenue > 0
           ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
           : null,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
