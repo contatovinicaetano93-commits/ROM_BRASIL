@@ -7,7 +7,11 @@ import {
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
-import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
+import {
+  formatMonthWindowLabel,
+  resolveMonthWindow,
+  resolveComparableWindow,
+} from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -704,9 +708,7 @@ export async function computeFinanceKpis(opts?: {
   const currentWindow = resolveMonthWindow(current)
   const compareKey = normalizeMonthKey(opts?.compareMonth)
   const prevWindow = resolveComparableWindow(currentWindow, compareKey)
-  const currentLabel = currentWindow.mtd
-    ? `${labelMonthPt(current)} (até dia ${Number(currentWindow.to.slice(8, 10))})`
-    : labelMonthPt(current)
+  const currentLabel = formatMonthWindowLabel(current, currentWindow.to, currentWindow.mtd)
   // Sequencial: bucket atual depois comparado — reduz pico no pooler.
   const currentBucket = await buildBucket(current, {
     from: currentWindow.from,

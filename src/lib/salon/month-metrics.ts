@@ -202,42 +202,46 @@ async function listPresentDays(from: string, to: string): Promise<string[]> {
   }
 }
 
-async function sumDailyTotals(from: string, to: string) {
+async function queryDailyTotals(from: string, to: string) {
   const sql = getSql()
+  const rows = (await sql`
+    select
+      coalesce(sum(revenue), 0)::float as revenue,
+      coalesce(sum(attended), 0)::int as attended,
+      coalesce(sum(cancelled), 0)::int as cancelled,
+      coalesce(sum(no_shows), 0)::int as no_shows,
+      coalesce(sum(appointments), 0)::int as appointments,
+      coalesce(sum(new_clients), 0)::int as new_clients,
+      coalesce(sum(returning_clients), 0)::int as returning_clients
+    from salon_daily_metrics
+    where day >= ${from}::date and day <= ${to}::date
+  `) as {
+    revenue: number
+    attended: number
+    cancelled: number
+    no_shows: number
+    appointments: number
+    new_clients: number
+    returning_clients: number
+  }[]
+  const r = rows[0]
+  const revenue = Math.round(Number(r?.revenue ?? 0) * 100) / 100
+  const attended = Number(r?.attended ?? 0) || 0
+  return {
+    revenue,
+    attended,
+    cancelled: Number(r?.cancelled ?? 0) || 0,
+    no_shows: Number(r?.no_shows ?? 0) || 0,
+    appointments: Number(r?.appointments ?? 0) || 0,
+    new_clients: Number(r?.new_clients ?? 0) || 0,
+    returning_clients: Number(r?.returning_clients ?? 0) || 0,
+    ticket_avg: attended > 0 ? Math.round((revenue / attended) * 100) / 100 : null,
+  }
+}
+
+async function sumDailyTotals(from: string, to: string) {
   try {
-    const rows = (await sql`
-      select
-        coalesce(sum(revenue), 0)::float as revenue,
-        coalesce(sum(attended), 0)::int as attended,
-        coalesce(sum(cancelled), 0)::int as cancelled,
-        coalesce(sum(no_shows), 0)::int as no_shows,
-        coalesce(sum(appointments), 0)::int as appointments,
-        coalesce(sum(new_clients), 0)::int as new_clients,
-        coalesce(sum(returning_clients), 0)::int as returning_clients
-      from salon_daily_metrics
-      where day >= ${from}::date and day <= ${to}::date
-    `) as {
-      revenue: number
-      attended: number
-      cancelled: number
-      no_shows: number
-      appointments: number
-      new_clients: number
-      returning_clients: number
-    }[]
-    const r = rows[0]
-    const revenue = Math.round(Number(r?.revenue ?? 0) * 100) / 100
-    const attended = Number(r?.attended ?? 0) || 0
-    return {
-      revenue,
-      attended,
-      cancelled: Number(r?.cancelled ?? 0) || 0,
-      no_shows: Number(r?.no_shows ?? 0) || 0,
-      appointments: Number(r?.appointments ?? 0) || 0,
-      new_clients: Number(r?.new_clients ?? 0) || 0,
-      returning_clients: Number(r?.returning_clients ?? 0) || 0,
-      ticket_avg: attended > 0 ? Math.round((revenue / attended) * 100) / 100 : null,
-    }
+    return await queryDailyTotals(from, to)
   } catch {
     return {
       revenue: 0,
@@ -252,41 +256,70 @@ async function sumDailyTotals(from: string, to: string) {
   }
 }
 
+export interface SalonWindowTotals {
+  revenue: number
+  attended: number
+  cancelled: number
+  no_shows: number
+  ticket_avg: number | null
+  expenses: number
+  cmv: number
+  cash_flow: number
+}
+
+/**
+ * Soma diária no recorte (MTD ou mês cheio). null se receita, despesas ou CMV falhar —
+ * o overview não deve trocar cache válido por R$ 0.
+ */
+export async function readSalonWindowTotals(
+  from: string,
+  to: string,
+): Promise<SalonWindowTotals | null> {
+  try {
+    const daily = await queryDailyTotals(from, to)
+    const [expenses, cmv] = await Promise.all([sumExpenses(from, to), sumStockCogs(from, to)])
+    return {
+      revenue: daily.revenue,
+      attended: daily.attended,
+      cancelled: daily.cancelled,
+      no_shows: daily.no_shows,
+      ticket_avg: daily.ticket_avg,
+      expenses,
+      cmv,
+      cash_flow: Math.round((daily.revenue - expenses) * 100) / 100,
+    }
+  } catch {
+    return null
+  }
+}
+
 async function sumExpenses(from: string, to: string): Promise<number> {
   const sql = getSql()
-  try {
-    const rows = (await sql`
-      select coalesce(sum(amount), 0)::float as total
-      from finance_expenses
-      where expense_date >= ${from}::date and expense_date <= ${to}::date
-    `) as { total: number }[]
-    return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
-  } catch {
-    return 0
-  }
+  const rows = (await sql`
+    select coalesce(sum(amount), 0)::float as total
+    from finance_expenses
+    where expense_date >= ${from}::date and expense_date <= ${to}::date
+  `) as { total: number }[]
+  return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
 }
 
 async function sumStockCogs(from: string, to: string): Promise<number> {
   const sql = getSql()
-  try {
-    // 0044 frequentemente manda cost=null nas saídas — fallback qty × custo do produto.
-    const rows = (await sql`
-      select coalesce(sum(
-        coalesce(
-          sm.cost,
-          sm.quantity * coalesce(sp.unit_cost, sp.avg_cost, 0)
-        )
-      ), 0)::float as cmv
-      from stock_movements sm
-      left join stock_products sp on sp.id = sm.product_id
-      where sm.type = 'saida'
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
-    `) as { cmv: number }[]
-    return Math.round(Number(rows[0]?.cmv ?? 0) * 100) / 100
-  } catch {
-    return 0
-  }
+  // 0044 frequentemente manda cost=null nas saídas — fallback qty × custo do produto.
+  const rows = (await sql`
+    select coalesce(sum(
+      coalesce(
+        sm.cost,
+        sm.quantity * coalesce(sp.unit_cost, sp.avg_cost, 0)
+      )
+    ), 0)::float as cmv
+    from stock_movements sm
+    left join stock_products sp on sp.id = sm.product_id
+    where sm.type = 'saida'
+      and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
+      and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
+  `) as { cmv: number }[]
+  return Math.round(Number(rows[0]?.cmv ?? 0) * 100) / 100
 }
 
 export async function getMonthCompleteness(monthKey: string): Promise<MonthCompleteness> {
@@ -322,8 +355,8 @@ export async function materializeSalonMonthMetrics(
   const [completeness, totals, expenses, cmv] = await Promise.all([
     getMonthCompleteness(monthKey),
     sumDailyTotals(from, to),
-    sumExpenses(from, to),
-    sumStockCogs(from, to),
+    sumExpenses(from, to).catch(() => 0),
+    sumStockCogs(from, to).catch(() => 0),
   ])
   const cash_flow = Math.round((totals.revenue - expenses) * 100) / 100
   const missingDays = completeness.days_missing.map((d) => String(d).slice(0, 10))
