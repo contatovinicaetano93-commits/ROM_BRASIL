@@ -275,7 +275,7 @@ export default function RelatoriosOverviewPage() {
                 value:
                   data.closing.cash_flow != null
                     ? formatCurrency(data.closing.cash_flow)
-                    : data.analytics.mtd && data.closing.revenue == null
+                    : data.analytics.mtd && !(data.closing.revenue > 0)
                       ? 'aguardando caixa'
                       : '—',
                 compare: momCompareLine(

@@ -167,18 +167,10 @@ export async function upsertSalonP3Daily(
   `
 }
 
-/**
- * Snapshot P3 mais recente ≤ targetDay.
- * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
- */
-export async function getSalonP3DailyNear(
-  targetDay: string,
-  opts?: { maxSkewDays?: number },
-): Promise<SalonP3Daily | null> {
+async function selectSalonP3DailyNear(targetDay: string): Promise<SalonP3DailyRow[]> {
+  const sql = getSql()
   try {
-    // Leitura sem DDL — Visão não pode pagar ensure+UPDATE a cada GET.
-    const sql = getSql()
-    const rows = (await sql`
+    return (await sql`
       select
         day::text as day,
         return_rate::float as return_rate,
@@ -192,6 +184,35 @@ export async function getSalonP3DailyNear(
       order by day desc
       limit 1
     `) as SalonP3DailyRow[]
+  } catch {
+    // Schema pré-flag: colunas só existem após ensure no upsert / migration 029.
+    // Sem fallback o catch externo devolve null e a Visão some com P3 legado.
+    return (await sql`
+      select
+        day::text as day,
+        return_rate::float as return_rate,
+        new_clients_period,
+        revenue_curve,
+        updated_at
+      from salon_p3_daily
+      where day <= ${targetDay}::date
+      order by day desc
+      limit 1
+    `) as SalonP3DailyRow[]
+  }
+}
+
+/**
+ * Snapshot P3 mais recente ≤ targetDay.
+ * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
+ */
+export async function getSalonP3DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP3Daily | null> {
+  try {
+    // Leitura sem DDL — Visão não pode pagar ensure+UPDATE a cada GET.
+    const rows = await selectSalonP3DailyNear(targetDay)
     const row = rows[0] ?? null
     if (!row) return null
     const mapped = mapSalonP3DailyRow(row)

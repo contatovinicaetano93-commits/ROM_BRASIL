@@ -309,7 +309,7 @@ function buildOverview(args: {
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
       cash_flow:
-        analytics.month_revenue != null
+        analytics.month_revenue != null && analytics.month_revenue > 0
           ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
           : null,
       days_expected: completeness.days_expected,
@@ -328,7 +328,7 @@ function buildOverview(args: {
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
       cash_flow:
-        prevAnalytics?.revenue != null
+        prevAnalytics?.revenue != null && prevAnalytics.revenue > 0
           ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
           : null,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
