@@ -576,8 +576,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   /** Agendados por dia = cabeças (contato único), não linhas 0051. */
   const bookedHeadsByDay = new Map<string, Set<string>>()
   const rowsByDay = new Map<string, number>()
-  const comandaOpenSeen = new Map<string, string>()
-  const comandaPaidSeen = new Map<string, string>()
+  /** Abertas 0051 por contato — Set de dias: o fast cobre ontem+hoje. */
+  const comandaOpenSeen = new Map<string, Set<string>>()
+  const comandaPaidSeen = new Map<string, Set<string>>()
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -676,10 +677,20 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           scheduledAt,
         })
       ) {
-        comandaOpenSeen.set(contact.id, apptDay!)
+        let openDays = comandaOpenSeen.get(contact.id)
+        if (!openDays) {
+          openDays = new Set()
+          comandaOpenSeen.set(contact.id, openDays)
+        }
+        openDays.add(apptDay!)
       }
       if (isPaid && apptDay && (apptDay === today || apptDay === yesterday)) {
-        comandaPaidSeen.set(contact.id, apptDay)
+        let paidDays = comandaPaidSeen.get(contact.id)
+        if (!paidDays) {
+          paidDays = new Set()
+          comandaPaidSeen.set(contact.id, paidDays)
+        }
+        paidDays.add(apptDay)
       }
 
       if (serviceName && scheduledAt) {
@@ -738,19 +749,27 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 
   try {
-    for (const [contactId, day] of comandaOpenSeen) {
-      await markComandaOpenedSeen(contactId, day)
-    }
-    for (const [contactId, day] of comandaPaidSeen) {
-      if (
-        !shouldCloseComandaClock({
-          stillOpenInBatch: comandaOpenSeen.get(contactId) === day,
-          isPaid: true,
-        })
-      ) {
-        continue
+    for (const [contactId, days] of comandaOpenSeen) {
+      for (const day of days) {
+        await markComandaOpenedSeen(contactId, day)
       }
-      await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+    }
+    // Truncado/abort: keep-set incompleto — não fechar por ausência de linha aberta.
+    if (!result.truncated && !stats.aborted) {
+      for (const [contactId, days] of comandaPaidSeen) {
+        const openDays = comandaOpenSeen.get(contactId)
+        for (const day of days) {
+          if (
+            !shouldCloseComandaClock({
+              stillOpenInBatch: openDays?.has(day) === true,
+              isPaid: true,
+            })
+          ) {
+            continue
+          }
+          await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+        }
+      }
     }
     await rollupComandaDurations([today, yesterday])
   } catch (e) {
