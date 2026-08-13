@@ -125,7 +125,9 @@ export function buildFinanceCompareCsv(opts: {
       'Fluxo (receita − despesas)',
       csvMoney(cur.cash_flow),
       csvMoney(prev.cash_flow),
-      csvMoney(cur.cash_flow - prev.cash_flow),
+      cur.cash_flow != null && prev.cash_flow != null
+        ? csvMoney(cur.cash_flow - prev.cash_flow)
+        : '—',
     ),
     csvRow('CMV (saídas de estoque)', csvMoney(cur.cmv), csvMoney(prev.cmv), csvMoney(cur.cmv - prev.cmv)),
     csvRow(

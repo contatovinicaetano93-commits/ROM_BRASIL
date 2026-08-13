@@ -1,5 +1,7 @@
 'use client'
 
+import { todayIso } from '@/lib/salon/format'
+
 const MONTHS_PT = [
   { value: '01', label: 'Jan' },
   { value: '02', label: 'Fev' },
@@ -15,43 +17,56 @@ const MONTHS_PT = [
   { value: '12', label: 'Dez' },
 ] as const
 
-function yearOptions(centerYear: number) {
-  const start = centerYear - 3
-  const end = centerYear + 1
-  return Array.from({ length: end - start + 1 }, (_, i) => String(start + i))
-}
-
 const selectClass =
   'rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold'
+
+function clampMonth(value: string, minMonth: string, maxMonth: string): string {
+  if (value < minMonth) return minMonth
+  if (value > maxMonth) return maxMonth
+  return value
+}
 
 /** Seletor mês + ano em português (valor interno YYYY-MM). */
 export function MonthYearField({
   value,
   onChange,
   allowEmpty = false,
-  emptyLabel = 'Automático',
+  emptyLabel = 'Automático (ano passado)',
+  minMonth,
+  maxMonth,
+  pickMonth,
   'aria-label': ariaLabel,
 }: {
   value: string
   onChange: (next: string) => void
   allowEmpty?: boolean
   emptyLabel?: string
+  /** Inclusive YYYY-MM. Omit for a 3-year lookback from maxMonth. */
+  minMonth?: string
+  /** Inclusive YYYY-MM — default mês corrente. */
+  maxMonth?: string
+  /** Mês aberto ao sair de “Automático”. */
+  pickMonth?: string
   'aria-label'?: string
 }) {
-  const nowYear = new Date().getFullYear()
-  const years = yearOptions(nowYear)
+  const today = todayIso()
+  const cap = maxMonth ?? today.slice(0, 7)
+  const maxYear = Number(cap.slice(0, 4))
+  const minYear = minMonth ? Number(minMonth.slice(0, 4)) : maxYear - 3
+  const floor = minMonth ?? `${String(minYear).padStart(4, '0')}-01`
+  const years = Array.from({ length: Math.max(1, maxYear - minYear + 1) }, (_, i) => String(minYear + i))
   const isEmpty = allowEmpty && !value
   const month = isEmpty ? '' : value.slice(5, 7)
   const year = isEmpty ? '' : value.slice(0, 4)
 
   function emit(nextMonth: string, nextYear: string) {
     if (!/^\d{2}$/.test(nextMonth) || !/^\d{4}$/.test(nextYear)) return
-    onChange(`${nextYear}-${nextMonth}`)
+    onChange(clampMonth(`${nextYear}-${nextMonth}`, floor, cap))
   }
 
-  function pickCurrentMonth() {
-    const fallbackMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-    emit(fallbackMonth, String(nowYear))
+  function pick() {
+    const fallback = pickMonth && /^\d{4}-\d{2}$/.test(pickMonth) ? pickMonth : cap
+    onChange(clampMonth(fallback, floor, cap))
   }
 
   if (isEmpty) {
@@ -59,7 +74,7 @@ export function MonthYearField({
       <select
         value="__auto__"
         onChange={(e) => {
-          if (e.target.value === '__pick__') pickCurrentMonth()
+          if (e.target.value === '__pick__') pick()
         }}
         className={selectClass}
         aria-label={ariaLabel}
@@ -74,7 +89,7 @@ export function MonthYearField({
     <div className="flex flex-wrap items-center gap-1.5" aria-label={ariaLabel}>
       <select
         value={month}
-        onChange={(e) => emit(e.target.value, year || String(nowYear))}
+        onChange={(e) => emit(e.target.value, year || String(maxYear))}
         className={selectClass}
         aria-label={`${ariaLabel ?? 'Período'} — mês`}
       >
@@ -103,7 +118,7 @@ export function MonthYearField({
           onClick={() => onChange('')}
           className="rounded-full border border-border px-2.5 py-1.5 text-[0.65rem] uppercase tracking-wide text-muted transition-colors hover:bg-card hover:text-foreground"
         >
-          {emptyLabel}
+          Automático
         </button>
       )}
     </div>

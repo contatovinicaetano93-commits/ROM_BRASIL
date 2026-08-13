@@ -17,7 +17,7 @@ import {
   type MonthCompleteness,
   type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 export interface MonthOverviewSourceNote {
@@ -79,7 +79,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'despesas',
     source: 'rom_manual',
-    note: 'Cadastro manual no Financeiro ROM.',
+    note: 'Omie Contas a Pagar (por vencimento, CNPJs serviços/comércio) + lançamentos manuais. Exclui não-operacionais.',
   },
   {
     field: 'CMV',
@@ -92,12 +92,6 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
     note: 'Snapshot Avec (P1/P2/P3) mais próximo do fim do mês — não é soma diária ROM.',
   },
 ]
-
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-}
 
 function metricOrNull(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -143,7 +137,9 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     margin_after_cmv,
     gross_margin,
     cash_flow:
-      revenueRaw != null ? Math.round((revenueRaw - expenses) * 100) / 100 : 0,
+      revenueRaw != null && revenueRaw > 0
+        ? Math.round((revenueRaw - expenses) * 100) / 100
+        : null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: revenueRaw ?? 0,
@@ -182,7 +178,7 @@ function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE },
     margin_after_cmv: null,
     gross_margin: null,
-    cash_flow: 0,
+    cash_flow: null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: 0,
@@ -307,7 +303,7 @@ function buildOverview(args: {
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
       cash_flow:
-        analytics.month_revenue != null
+        analytics.month_revenue != null && analytics.month_revenue > 0
           ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
           : null,
       days_expected: completeness.days_expected,
@@ -326,7 +322,7 @@ function buildOverview(args: {
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
       cash_flow:
-        prevAnalytics?.revenue != null
+        prevAnalytics?.revenue != null && prevAnalytics.revenue > 0
           ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
           : null,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
@@ -342,16 +338,19 @@ function overviewFromCachedRows(args: {
   month: string
   cached: SalonMonthMetricsRow
   cachedPrev: SalonMonthMetricsRow | null
+  compareMonth: string
 }): MonthOverview {
-  const { brand, month, cached, cachedPrev } = args
+  const { brand, month, cached, cachedPrev, compareMonth } = args
   const baseAnalytics =
     analyticsFromMonthPayload(cached.payload) ?? analyticsFromMonthRow(cached)
   const previous = cachedPrev
     ? stubFinanceFromRow(cachedPrev)
-    : emptyFinanceBucket(previousMonthKey(month))
-  // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
+    : emptyFinanceBucket(compareMonth)
+  // Payload materializado (MoM antigo ou outro compare) só vale se for o mês comparado agora.
   let analytics = baseAnalytics
-  if (cachedPrev && (baseAnalytics.previous == null || baseAnalytics.previous.revenue == null)) {
+  const payloadPrev = baseAnalytics.previous
+  const payloadMatchesCompare = payloadPrev?.month === compareMonth
+  if (cachedPrev && (!payloadMatchesCompare || payloadPrev?.revenue == null)) {
     const prevWindow = resolveMonthWindow(cachedPrev.month)
     const prevTicket =
       cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null
@@ -384,6 +383,8 @@ function overviewFromCachedRows(args: {
         return_rate: null,
       },
     }
+  } else if (!payloadMatchesCompare) {
+    analytics = { ...baseAnalytics, previous: null }
   }
   return buildOverview({
     brand,
@@ -406,11 +407,12 @@ function overviewFromCachedRows(args: {
 export async function computeMonthOverview(opts?: {
   month?: string
   materialize?: boolean
+  compareMonth?: string | null
 }): Promise<MonthOverview> {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
   const wantMaterialize = opts?.materialize === true
-  const prevMonth = previousMonthKey(month)
+  const prevMonth = resolveComparableWindow(resolveMonthWindow(month), opts?.compareMonth).month
 
   if (!wantMaterialize) {
     let cached = await getSalonMonthMetrics(month)
@@ -426,7 +428,7 @@ export async function computeMonthOverview(opts?: {
     }
 
     if (cached) {
-      return overviewFromCachedRows({ brand, month, cached, cachedPrev })
+      return overviewFromCachedRows({ brand, month, cached, cachedPrev, compareMonth: prevMonth })
     }
 
     // Último recurso: completeness vazia (UI pede Atualizar fechamento).
@@ -470,8 +472,8 @@ export async function computeMonthOverview(opts?: {
 
   // Atualizar fechamento — caminho completo (pode levar ~1–2 min no IG).
   // Sequencial: finance e analytics juntos saturavam o pooler e davam timeout.
-  const finance = await computeFinanceKpis({ month })
-  const analytics = await computePeriodAnalytics({ month })
+  const finance = await computeFinanceKpis({ month, compareMonth: opts?.compareMonth ?? undefined })
+  const analytics = await computePeriodAnalytics({ month, compareMonth: opts?.compareMonth })
   const completeness = await getMonthCompleteness(month)
 
   let materializedAt: string | null = null

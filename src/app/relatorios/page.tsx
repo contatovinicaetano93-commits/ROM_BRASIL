@@ -8,6 +8,7 @@ import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { COMPARE_MONTHS_FROM, yearAgoMonthKey } from '@/lib/salon/month-window'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
@@ -34,12 +35,16 @@ function overviewLoadError(e: unknown, materialize?: boolean): string {
     : msg
 }
 
-async function fetchOverview(month: string, materialize?: boolean): Promise<OverviewPayload> {
+async function fetchOverview(
+  month: string,
+  opts?: { materialize?: boolean; compareMonth?: string },
+): Promise<OverviewPayload> {
   const q = new URLSearchParams({ month })
-  if (materialize) q.set('materialize', '1')
+  if (opts?.materialize) q.set('materialize', '1')
+  if (opts?.compareMonth) q.set('compare', opts.compareMonth)
   const res = await apiFetch(`/api/relatorios/overview?${q}`, {
     cache: 'no-store',
-    timeoutMs: materialize ? 280_000 : 45_000,
+    timeoutMs: opts?.materialize ? 280_000 : 45_000,
   })
   const json = await res.json()
   if (json.error) throw new Error(json.error)
@@ -49,6 +54,7 @@ async function fetchOverview(month: string, materialize?: boolean): Promise<Over
 export default function RelatoriosOverviewPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(currentMonthKey)
+  const [compareMonth, setCompareMonth] = useState('')
   const [data, setData] = useState<OverviewPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +66,10 @@ export default function RelatoriosOverviewPage() {
       setError(null)
     }
     try {
-      const payload = await fetchOverview(month, opts?.materialize)
+      const payload = await fetchOverview(month, {
+        materialize: opts?.materialize,
+        compareMonth,
+      })
       setData(payload)
     } catch (e) {
       setData(null)
@@ -68,13 +77,13 @@ export default function RelatoriosOverviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [month])
+  }, [month, compareMonth])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const payload = await fetchOverview(month)
+        const payload = await fetchOverview(month, { compareMonth })
         if (cancelled) return
         setData(payload)
         setError(null)
@@ -89,7 +98,7 @@ export default function RelatoriosOverviewPage() {
     return () => {
       cancelled = true
     }
-  }, [month])
+  }, [month, compareMonth])
 
   function exportCsv() {
     if (!data) return
@@ -138,6 +147,23 @@ export default function RelatoriosOverviewPage() {
               aria-label="Mês do overview"
             />
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
+            <MonthYearField
+              value={compareMonth}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setCompareMonth(m)
+              }}
+              allowEmpty
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              minMonth={COMPARE_MONTHS_FROM}
+              maxMonth={month}
+              aria-label="Comparar com"
+            />
+          </label>
           <button
             type="button"
             onClick={() => void load({ materialize: true })}
@@ -181,6 +207,13 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
+      {data && data.analytics.mtd && data.closing.revenue == null && (
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          Aguardando faturamento pago no Avec neste mês — receita, fluxo e MoM aparecem quando houver
+          caixa conhecido. Não é falha de sync de agenda.
+        </p>
+      )}
+
       {loading && !data ? (
         <p className="text-sm text-muted">Carregando overview…</p>
       ) : data ? (
@@ -220,7 +253,13 @@ export default function RelatoriosOverviewPage() {
               {
                 label: 'Receita',
                 value:
-                  data.closing.revenue != null ? formatCurrency(data.closing.revenue) : '—',
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? formatCurrency(data.closing.revenue)
+                    : data.closing.revenue === 0
+                      ? 'sem receita'
+                      : data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : '—',
                 compare: momCompareLine(
                   data.closing.revenue,
                   data.previous_closing.revenue,
@@ -229,7 +268,12 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Atendidos',
-                value: data.closing.attended != null ? String(data.closing.attended) : '—',
+                value:
+                  data.closing.attended != null
+                    ? String(data.closing.attended)
+                    : data.analytics.mtd
+                      ? 'aguardando caixa'
+                      : '—',
                 compare: momCompareLine(
                   data.closing.attended,
                   data.previous_closing.attended,
@@ -255,7 +299,11 @@ export default function RelatoriosOverviewPage() {
               {
                 label: 'Fluxo',
                 value:
-                  data.closing.cash_flow != null ? formatCurrency(data.closing.cash_flow) : '—',
+                  data.closing.cash_flow != null
+                    ? formatCurrency(data.closing.cash_flow)
+                    : data.analytics.mtd && !(data.closing.revenue != null && data.closing.revenue > 0)
+                      ? 'aguardando caixa'
+                      : '—',
                 compare: momCompareLine(
                   data.closing.cash_flow,
                   data.previous_closing.cash_flow,
@@ -360,7 +408,9 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Receita perdida (est.)</span>
                   <span className="text-right">
-                    <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                    <span className="tabular-nums">
+                      {formatCurrency(data.analytics.lost_revenue)}
+                    </span>
                     {(() => {
                       const c = momCompareLine(
                         data.analytics.lost_revenue,
