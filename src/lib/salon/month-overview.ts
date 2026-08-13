@@ -562,31 +562,12 @@ async function overlayLiveWindowTotals(
   const comparable = resolveComparableWindow(currentWindow, compareMonth)
   const currentTotals = await readSalonWindowTotals(currentWindow.from, currentWindow.to)
   const previousTotals = await readSalonWindowTotals(comparable.from, comparable.to)
-  if (!currentTotals && !previousTotals) return overview
-  const fallbackCurrent: SalonWindowTotals = {
-    revenue: Number(overview.closing.revenue) || 0,
-    attended: Number(overview.closing.attended) || 0,
-    cancelled: overview.closing.cancelled,
-    no_shows: overview.closing.no_shows,
-    ticket_avg: overview.closing.ticket_avg,
-    expenses: overview.closing.expenses,
-    cmv: overview.closing.cmv,
-    cash_flow: overview.closing.cash_flow ?? 0,
-  }
-  const fallbackPrevious: SalonWindowTotals = {
-    revenue: Number(overview.previous_closing.revenue) || 0,
-    attended: Number(overview.previous_closing.attended) || 0,
-    cancelled: overview.previous_closing.cancelled,
-    no_shows: overview.previous_closing.no_shows,
-    ticket_avg: overview.previous_closing.ticket_avg,
-    expenses: overview.previous_closing.expenses,
-    cmv: overview.previous_closing.cmv,
-    cash_flow: overview.previous_closing.cash_flow ?? 0,
-  }
+  // Um lado só mistura rótulo MTD com totais de mês cheio do cache.
+  if (!currentTotals || !previousTotals) return overview
   return applyWindowTotalsToOverview(
     overview,
-    { ...currentWindow, totals: currentTotals ?? fallbackCurrent },
-    { ...comparable, totals: previousTotals ?? fallbackPrevious },
+    { ...currentWindow, totals: currentTotals },
+    { ...comparable, totals: previousTotals },
   )
 }
 
