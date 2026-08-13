@@ -7,7 +7,7 @@ import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { todayIso } from '@/lib/salon/format'
 
 /**
- * TM mês/trimestre — duração real (Avec 0002 início/fim); catálogo 0223 não entra no KPI.
+ * TM mês/trimestre — 1ª vista aberta no salão → 1ª vista Pago; catálogo 0223 não entra no KPI.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return okCached(
       {
         ...data,
-        note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
+        note: 'TM = 1ª vez que o ROM viu a comanda aberta no salão até a 1ª vez que viu Pago (intervalo do sync). Catálogo 0223 não entra.',
       },
       60,
     )
