@@ -25,7 +25,7 @@ import {
   formatPercentPoints,
   todayIso,
 } from '@/lib/salon/format'
-import { yearAgoMonthKey } from '@/lib/salon/month-window'
+import { COMPARE_MONTHS_FROM, yearAgoMonthKey } from '@/lib/salon/month-window'
 import { formatKpiSources } from '@/lib/kpi-source'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
 import posthog from 'posthog-js'
@@ -652,6 +652,7 @@ export default function FinanceiroPage() {
               allowEmpty
               emptyLabel="Automático (ano passado)"
               pickMonth={yearAgoMonthKey(month)}
+              minMonth={COMPARE_MONTHS_FROM}
               maxMonth={month}
               aria-label="Comparar com"
             />

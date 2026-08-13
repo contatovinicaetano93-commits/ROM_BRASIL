@@ -8,7 +8,7 @@ import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
-import { yearAgoMonthKey } from '@/lib/salon/month-window'
+import { COMPARE_MONTHS_FROM, yearAgoMonthKey } from '@/lib/salon/month-window'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
@@ -159,6 +159,7 @@ export default function RelatoriosOverviewPage() {
               allowEmpty
               emptyLabel="Automático (ano passado)"
               pickMonth={yearAgoMonthKey(month)}
+              minMonth={COMPARE_MONTHS_FROM}
               maxMonth={month}
               aria-label="Comparar com"
             />

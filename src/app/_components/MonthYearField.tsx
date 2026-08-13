@@ -1,6 +1,5 @@
 'use client'
 
-import { COMPARE_MONTHS_FROM } from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 const MONTHS_PT = [
@@ -33,7 +32,7 @@ export function MonthYearField({
   onChange,
   allowEmpty = false,
   emptyLabel = 'Automático (ano passado)',
-  minMonth = COMPARE_MONTHS_FROM,
+  minMonth,
   maxMonth,
   pickMonth,
   'aria-label': ariaLabel,
@@ -42,7 +41,7 @@ export function MonthYearField({
   onChange: (next: string) => void
   allowEmpty?: boolean
   emptyLabel?: string
-  /** Inclusive YYYY-MM — default Jan/2025. */
+  /** Inclusive YYYY-MM. Omit for a 3-year lookback from maxMonth. */
   minMonth?: string
   /** Inclusive YYYY-MM — default mês corrente. */
   maxMonth?: string
@@ -52,21 +51,22 @@ export function MonthYearField({
 }) {
   const today = todayIso()
   const cap = maxMonth ?? today.slice(0, 7)
-  const minYear = Number(minMonth.slice(0, 4))
   const maxYear = Number(cap.slice(0, 4))
-  const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => String(minYear + i))
+  const minYear = minMonth ? Number(minMonth.slice(0, 4)) : maxYear - 3
+  const floor = minMonth ?? `${String(minYear).padStart(4, '0')}-01`
+  const years = Array.from({ length: Math.max(1, maxYear - minYear + 1) }, (_, i) => String(minYear + i))
   const isEmpty = allowEmpty && !value
   const month = isEmpty ? '' : value.slice(5, 7)
   const year = isEmpty ? '' : value.slice(0, 4)
 
   function emit(nextMonth: string, nextYear: string) {
     if (!/^\d{2}$/.test(nextMonth) || !/^\d{4}$/.test(nextYear)) return
-    onChange(clampMonth(`${nextYear}-${nextMonth}`, minMonth, cap))
+    onChange(clampMonth(`${nextYear}-${nextMonth}`, floor, cap))
   }
 
   function pick() {
     const fallback = pickMonth && /^\d{4}-\d{2}$/.test(pickMonth) ? pickMonth : cap
-    onChange(clampMonth(fallback, minMonth, cap))
+    onChange(clampMonth(fallback, floor, cap))
   }
 
   if (isEmpty) {

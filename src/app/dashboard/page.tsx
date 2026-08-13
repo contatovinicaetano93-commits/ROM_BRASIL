@@ -34,7 +34,7 @@ import {
   openPrintHtml,
 } from '@/lib/salon/month-overview-export'
 import { momCompareLine } from '@/lib/salon/mom-delta'
-import { yearAgoMonthKey } from '@/lib/salon/month-window'
+import { COMPARE_MONTHS_FROM, yearAgoMonthKey } from '@/lib/salon/month-window'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -245,6 +245,7 @@ export default function DashboardPage() {
               allowEmpty
               emptyLabel="Automático (ano passado)"
               pickMonth={yearAgoMonthKey(month)}
+              minMonth={COMPARE_MONTHS_FROM}
               maxMonth={month}
               aria-label="Comparar com"
             />

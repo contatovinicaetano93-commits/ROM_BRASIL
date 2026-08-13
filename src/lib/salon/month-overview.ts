@@ -17,7 +17,7 @@ import {
   type MonthCompleteness,
   type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
-import { resolveMonthWindow, resolveComparableWindow, yearAgoMonthKey } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 export interface MonthOverviewSourceNote {
@@ -338,16 +338,19 @@ function overviewFromCachedRows(args: {
   month: string
   cached: SalonMonthMetricsRow
   cachedPrev: SalonMonthMetricsRow | null
+  compareMonth: string
 }): MonthOverview {
-  const { brand, month, cached, cachedPrev } = args
+  const { brand, month, cached, cachedPrev, compareMonth } = args
   const baseAnalytics =
     analyticsFromMonthPayload(cached.payload) ?? analyticsFromMonthRow(cached)
   const previous = cachedPrev
     ? stubFinanceFromRow(cachedPrev)
-    : emptyFinanceBucket(yearAgoMonthKey(month))
-  // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
+    : emptyFinanceBucket(compareMonth)
+  // Payload materializado (MoM antigo ou outro compare) só vale se for o mês comparado agora.
   let analytics = baseAnalytics
-  if (cachedPrev && (baseAnalytics.previous == null || baseAnalytics.previous.revenue == null)) {
+  const payloadPrev = baseAnalytics.previous
+  const payloadMatchesCompare = payloadPrev?.month === compareMonth
+  if (cachedPrev && (!payloadMatchesCompare || payloadPrev?.revenue == null)) {
     const prevWindow = resolveMonthWindow(cachedPrev.month)
     const prevTicket =
       cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null
@@ -380,6 +383,8 @@ function overviewFromCachedRows(args: {
         return_rate: null,
       },
     }
+  } else if (!payloadMatchesCompare) {
+    analytics = { ...baseAnalytics, previous: null }
   }
   return buildOverview({
     brand,
@@ -423,7 +428,7 @@ export async function computeMonthOverview(opts?: {
     }
 
     if (cached) {
-      return overviewFromCachedRows({ brand, month, cached, cachedPrev })
+      return overviewFromCachedRows({ brand, month, cached, cachedPrev, compareMonth: prevMonth })
     }
 
     // Último recurso: completeness vazia (UI pede Atualizar fechamento).
