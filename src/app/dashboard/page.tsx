@@ -695,8 +695,8 @@ export default function DashboardPage() {
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Base ativa (não é o mês): {funnelContacts.toLocaleString('pt-BR')} · importados
-                Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
+                Base ativa na janela: {funnelContacts.toLocaleString('pt-BR')} · importados
+                Avec: {importedContacts.toLocaleString('pt-BR')} · total na janela:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>
             )}
