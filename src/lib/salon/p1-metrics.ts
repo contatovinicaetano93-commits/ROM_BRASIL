@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { coalesceProfessionalsOccupancy } from '@/lib/director-report/match-pro'
 
 export interface P1ProfessionalRow {
   name: string
@@ -101,6 +102,15 @@ export async function upsertSalonP1Daily(
   `
 }
 
+function mapSalonP1Row(row: SalonP1Daily | null | undefined): SalonP1Daily | null {
+  if (!row) return null
+  const professionals = Array.isArray(row.professionals) ? row.professionals : []
+  return {
+    ...row,
+    professionals: coalesceProfessionalsOccupancy(professionals),
+  }
+}
+
 export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null> {
   const sql = getSql()
   try {
@@ -116,7 +126,7 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
       where day = ${day}::date
       limit 1
     `) as SalonP1Daily[]
-    return rows[0] ?? null
+    return mapSalonP1Row(rows[0])
   } catch {
     return null
   }
@@ -149,10 +159,10 @@ export async function getSalonP1DailyNear(
       order by day desc
       limit 1
     `) as SalonP1Daily[]
-    const row = rows[0] ?? null
-    if (!row || opts?.maxSkewDays == null) return row
+    const mapped = mapSalonP1Row(rows[0])
+    if (!mapped || opts?.maxSkewDays == null) return mapped
     const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
-    return row.day >= minDay ? row : null
+    return mapped.day >= minDay ? mapped : null
   } catch {
     return null
   }
@@ -194,7 +204,7 @@ export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
       order by day desc
       limit 1
     `) as SalonP1Daily[]
-    return rows[0] ?? null
+    return mapSalonP1Row(rows[0])
   } catch {
     return null
   }
