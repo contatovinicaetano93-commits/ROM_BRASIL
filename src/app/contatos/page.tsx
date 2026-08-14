@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
+import { useClientSession } from '../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
 import {
@@ -185,6 +186,9 @@ export default function ContatosPage() {
 
 function ContatosPageContent() {
   const searchParams = useSearchParams()
+  const { session } = useClientSession()
+  const canOpenVisao =
+    session != null && (!session.auth_enabled || Boolean(session.can_view_revenue))
   const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
   const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
   const [queue, setQueue] = useState<ReactivateQueue>('overdue')
@@ -195,7 +199,8 @@ function ContatosPageContent() {
     scheduled: number
     novos: number
     sem_servicos: number
-  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0 })
+    base_ativa: number
+  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0, base_ativa: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -249,6 +254,8 @@ function ContatosPageContent() {
               novos: q.novos,
               sem_servicos:
                 typeof q.sem_servicos === 'number' ? q.sem_servicos : prev.sem_servicos,
+              base_ativa:
+                typeof q.base_ativa === 'number' ? q.base_ativa : prev.base_ativa,
             }))
           }
           return
@@ -295,6 +302,7 @@ function ContatosPageContent() {
               scheduled: q.scheduled,
               novos: typeof q.novos === 'number' ? q.novos : 0,
               sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
+              base_ativa: typeof q.base_ativa === 'number' ? q.base_ativa : 0,
             })
           } else if (mode === 'novos' && typeof total === 'number') {
             setQueueCounts((prev) => ({ ...prev, novos: total }))
@@ -371,6 +379,22 @@ function ContatosPageContent() {
             {' · '}
             {countLabel}
           </p>
+          {queueCounts.base_ativa > 0 ? (
+            <p className="mt-1 text-[0.7rem] text-muted">
+              Base ativa: {queueCounts.base_ativa.toLocaleString('pt-BR')}
+              {canOpenVisao ? (
+                <>
+                  {' · '}
+                  <Link
+                    href="/dashboard"
+                    className="text-gold/90 underline-offset-2 hover:underline"
+                  >
+                    ver Funil CRM
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         <div className="shrink-0 lg:w-72">
           <PrimaryButton onClick={() => setFormOpen(true)}>
