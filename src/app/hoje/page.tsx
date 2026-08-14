@@ -178,6 +178,7 @@ export default function HojePage() {
             }
             loading={loading}
             source={avecSource}
+            hint="Quanto entrou no caixa hoje (comandas pagas)."
             warn={
               !loading &&
               (salon?.revenue == null || Number(salon.revenue) === 0) &&
@@ -197,7 +198,7 @@ export default function HojePage() {
           }
           loading={loading}
           source={avecSource}
-          hint="Pessoas com agenda/comanda no dia (aberto ou pago) — conta cabeça"
+          hint="Quantas pessoas têm horário ou comanda no dia (conta cabeça)."
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -215,19 +216,20 @@ export default function HojePage() {
           }
           loading={loading}
           source={avecSource}
-          hint="Visitas/comandas fechadas no caixa Avec"
+          hint="Quantas visitas já foram pagas/fechadas no caixa hoje."
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
-          label="No-shows"
+          label="Faltas"
           value={loading ? '—' : salon?.no_shows == null ? '—' : String(salon.no_shows)}
           loading={loading}
           warn={(salon?.no_shows ?? 0) > 0 && salon?.no_shows != null}
           source={avecSource}
+          hint="Clientes com horário que não vieram (no-show)."
         />
         <KpiCard
           icon={<Clock size={16} />}
-          label="TM atendimento"
+          label="Tempo no salão"
           value={
             loading
               ? '—'
@@ -241,12 +243,13 @@ export default function HojePage() {
               ? formatKpiSources('avec', 'incomplete')
               : avecSource
           }
+          hint="Média de minutos da entrada no salão até o pagamento."
         />
       </div>
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando o sync ver a mesma pessoa aberta no salão e depois Pago.
+          Tempo médio aparece quando o sync vê a pessoa no salão e depois o pagamento fechado.
         </p>
       )}
 
