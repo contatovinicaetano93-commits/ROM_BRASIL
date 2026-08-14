@@ -72,6 +72,7 @@ import {
   getSalonMetrics,
   upsertSalonMetrics,
 } from '@/lib/salon/metrics'
+import { computeDayClientMix } from '@/lib/salon/day-client-mix'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis } from '@/lib/avec/sync-p2'
