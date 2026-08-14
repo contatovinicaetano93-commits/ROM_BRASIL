@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
+import { useClientSession } from '../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
 import {
@@ -185,6 +186,9 @@ export default function ContatosPage() {
 
 function ContatosPageContent() {
   const searchParams = useSearchParams()
+  const { session } = useClientSession()
+  const canOpenVisao =
+    session != null && (!session.auth_enabled || Boolean(session.can_view_revenue))
   const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
   const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
   const [queue, setQueue] = useState<ReactivateQueue>('overdue')
@@ -378,13 +382,17 @@ function ContatosPageContent() {
           {queueCounts.base_ativa > 0 ? (
             <p className="mt-1 text-[0.7rem] text-muted">
               Base ativa: {queueCounts.base_ativa.toLocaleString('pt-BR')}
-              {' · '}
-              <Link
-                href="/dashboard"
-                className="text-gold/90 underline-offset-2 hover:underline"
-              >
-                ver Funil CRM
-              </Link>
+              {canOpenVisao ? (
+                <>
+                  {' · '}
+                  <Link
+                    href="/dashboard"
+                    className="text-gold/90 underline-offset-2 hover:underline"
+                  >
+                    ver Funil CRM
+                  </Link>
+                </>
+              ) : null}
             </p>
           ) : null}
         </div>
