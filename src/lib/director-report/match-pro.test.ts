@@ -56,8 +56,8 @@ describe('firstNameCompatible / namesLooselyMatch', () => {
   })
 
   it('não casa prenome com token do meio', () => {
-    expect(firstNameCompatible('dani', 'dantas')).toBe(true) // dantas starts with dani — but
-    // namesLooselyMatch must not use that as first-token of MARCIEL DANTAS
+    expect(firstNameCompatible('dani', 'dantas')).toBe(false)
+    // namesLooselyMatch must not use DANTAS as first-token of MARCIEL DANTAS
     expect(
       namesLooselyMatch(
         occupancyMergeKey('DANI.MARINIELLO'),
@@ -113,6 +113,29 @@ describe('firstNameCompatible / namesLooselyMatch', () => {
       namesLooselyMatch(occupancyMergeKey('JANDER'), occupancyMergeKey('JANAINA SANTANA')),
     ).toBe(false)
   })
+
+  it('não casa prenomes distintos que só compartilham radical', () => {
+    expect(firstNameCompatible('paulo', 'paula')).toBe(false)
+    expect(firstNameCompatible('carla', 'carlos')).toBe(false)
+    expect(firstNameCompatible('marcos', 'marcia')).toBe(false)
+    expect(firstNameCompatible('joao', 'joaquim')).toBe(false)
+    expect(firstNameCompatible('maria', 'mariana')).toBe(false)
+    expect(
+      namesLooselyMatch(occupancyMergeKey('Paulo Silva'), occupancyMergeKey('Paula Silva')),
+    ).toBe(false)
+    expect(
+      namesLooselyMatch(occupancyMergeKey('Carla Silva'), occupancyMergeKey('Carlos Silva')),
+    ).toBe(false)
+    expect(
+      namesLooselyMatch(occupancyMergeKey('Marcos Silva'), occupancyMergeKey('Marcia Silva')),
+    ).toBe(false)
+    expect(
+      namesLooselyMatch(occupancyMergeKey('João Silva'), occupancyMergeKey('Joaquim Silva')),
+    ).toBe(false)
+    expect(
+      namesLooselyMatch(occupancyMergeKey('Maria Silva'), occupancyMergeKey('Mariana Silva')),
+    ).toBe(false)
+  })
 })
 
 describe('findNearProInMap', () => {
@@ -145,6 +168,13 @@ describe('findNearProInMap', () => {
       ['lucas sales', { name: 'Lucas Sales' }],
     ])
     expect(findNearProInMap(byPro, 'Lucas')).toBeNull()
+  })
+
+  it('não funde Carlos/Carla no ingest 0021 quando só um já está no mapa', () => {
+    const byPro = new Map([
+      [occupancyMergeKey('Carlos Silva'), { name: 'Carlos Silva' }],
+    ])
+    expect(findNearProInMap(byPro, 'Carla Silva')).toBeNull()
   })
 })
 

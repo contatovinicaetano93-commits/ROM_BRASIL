@@ -82,11 +82,14 @@ function editDistanceAtMost1(a: string, b: string): boolean {
   return true
 }
 
-function sharedPrefixLen(a: string, b: string): number {
-  const n = Math.min(a.length, b.length)
-  let i = 0
-  while (i < n && a[i] === b[i]) i++
-  return i
+/** Paulo/Paula, Mario/Maria, Alexandre/Alexandra — 1 letra de gênero, pessoas distintas. */
+function genderedGivenNamePair(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  if (a.slice(0, -1) !== b.slice(0, -1)) return false
+  const x = a[a.length - 1]!
+  const y = b[b.length - 1]!
+  const pair = x < y ? `${x}${y}` : `${y}${x}`
+  return pair === 'ae' || pair === 'ao'
 }
 
 /** Prenome / apelido vs primeiro token do nome completo. */
@@ -94,14 +97,28 @@ export function firstNameCompatible(nick: string, first: string, minPrefix = 3):
   if (!nick || !first) return false
   if (nick === first) return true
   const [short, long] = nick.length <= first.length ? [nick, first] : [first, nick]
-  if (long.startsWith(short) && short.length >= minPrefix) return true
-  if (long.endsWith(short) && short.length >= 4) return true
-  // manu↔manoel: prefixo compartilhado ≥60% do apelido (evita jander↔janaina = 50%)
-  if (short.length >= 4 && long.length >= 4) {
-    const shared = sharedPrefixLen(short, long)
-    if (shared >= 3 && shared / short.length >= 0.6) return true
+  const extra = long.length - short.length
+  // Truncagem (dani↔daniela, rafa↔rafael, jander↔janderson). Apelido curto (≤4)
+  // ou nome claramente mais longo (+3) — evita maria↔mariana (prefixo quase inteiro).
+  if (
+    extra >= 1 &&
+    long.startsWith(short) &&
+    short.length >= minPrefix &&
+    (short.length <= 4 || extra >= 3)
+  ) {
+    return true
   }
-  if (short.length >= 5 && long.length >= 5 && editDistanceAtMost1(short, long)) return true
+  if (extra >= 2 && long.endsWith(short) && short.length >= 4) return true
+  // manu↔manoel: apelido fonético, não é truncagem (manu não prefixa manoel).
+  if (short === 'manu' && long === 'manoel') return true
+  if (
+    short.length >= 5 &&
+    long.length >= 5 &&
+    editDistanceAtMost1(short, long) &&
+    !genderedGivenNamePair(short, long)
+  ) {
+    return true
+  }
   return false
 }
 
