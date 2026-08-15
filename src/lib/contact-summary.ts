@@ -50,8 +50,8 @@ export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
   /**
-   * Funil CRM (Visão): mesma regra de `funnel_contacts` no mês corrente.
-   * Não é fila de trabalho — só referência + link.
+   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
+   * status ≠ importado. Não é fila de trabalho — só referência + link.
    */
   base_ativa: number
 }
@@ -716,7 +716,7 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Funil CRM — mesma regra de `funnel_contacts` em Visão (mês corrente, não é fila). */
+/** Entrada no mês — mesma regra de `funnel_contacts` em Visão (não é fila). */
 export async function countBaseAtiva(): Promise<number> {
   const sql = getSql()
   const { from, to } = resolveMonthWindow(todayIso().slice(0, 7))
@@ -732,7 +732,7 @@ export async function countBaseAtiva(): Promise<number> {
   return Number(rows[0]?.n) || 0
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço) + base ativa. */
+/** Totais das filas Contatos (reativar + Sem vínculo + sem serviço) + entrada no mês. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
