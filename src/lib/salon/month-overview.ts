@@ -270,7 +270,8 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     booking_channels: [],
     acquisition: [],
     return_rate: null,
-    new_clients_period: Number(row.new_clients) || 0,
+    // Não inventar a partir de sum(day.new_clients) — mix diário não é 1ª visita.
+    new_clients_period: null,
     top_professionals: [],
     top_services: [],
     month_revenue: monthRevenue,
