@@ -445,7 +445,7 @@ export default function DashboardPage() {
         />
         <InsightCard
           icon={<Sparkles size={15} />}
-          label="Novos · Avec 30d"
+          label="1ª visita · Avec 30d"
           value={dashValue(
             period?.new_clients_period != null ? String(period.new_clients_period) : null,
             period?.snapshot_missing ? 'sem snapshot' : 'sem P3',
