@@ -384,7 +384,7 @@ function overviewFromCachedRows(args: {
         ),
         occupancy_avg: null,
         packages_revenue: null,
-        new_clients_period: Number(cachedPrev.new_clients) || 0,
+        new_clients_period: null,
         return_rate: null,
       },
     }
