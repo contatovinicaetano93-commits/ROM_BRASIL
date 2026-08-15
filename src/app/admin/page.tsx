@@ -9,6 +9,7 @@ import { SetupChecklist } from './SetupChecklist'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import type { RomSeedPreset } from '@/lib/brand'
+import { todayIso } from '@/lib/salon/format'
 import {
   deriveAvecSyncUi,
   formatAvecUserMessage,
@@ -142,7 +143,9 @@ export default function AdminPage() {
       const errs: string[] = []
 
       try {
-        const k = await readApiJson(await apiFetch('/api/kpis', { cache: 'no-store' }))
+        const k = await readApiJson(
+          await apiFetch(`/api/kpis?month=${todayIso().slice(0, 7)}`, { cache: 'no-store' }),
+        )
         if (k.error) errs.push(`KPIs: ${k.error}`)
         else setKpis(k.data as KpiData)
       } catch (e) {
@@ -209,7 +212,9 @@ export default function AdminPage() {
       const errs: string[] = []
       try {
         try {
-          const k = await readApiJson(await apiFetch('/api/kpis', { cache: 'no-store' }))
+          const k = await readApiJson(
+            await apiFetch(`/api/kpis?month=${todayIso().slice(0, 7)}`, { cache: 'no-store' }),
+          )
           if (cancelled) return
           if (k.error) errs.push(`KPIs: ${k.error}`)
           else setKpis(k.data as KpiData)
@@ -484,7 +489,7 @@ export default function AdminPage() {
           ) : kpis ? (
             <div className="space-y-3 text-sm">
               <Row
-                label="Funil ativo (sem importado)"
+                label="Entrada no mês (funil CRM)"
                 value={String(kpis.conversion?.funnel_contacts ?? 0)}
                 highlight
               />
