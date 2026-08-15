@@ -269,7 +269,8 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     booking_channels: [],
     acquisition: [],
     return_rate: null,
-    new_clients_period: Number(row.new_clients) || 0,
+    // Não inventar a partir de sum(day.new_clients) — mix diário não é 1ª visita real.
+    new_clients_period: null,
     top_professionals: [],
     top_services: [],
     month_revenue: monthRevenue,
@@ -377,7 +378,7 @@ function overviewFromCachedRows(args: {
         ),
         occupancy_avg: null,
         packages_revenue: null,
-        new_clients_period: Number(cachedPrev.new_clients) || 0,
+        new_clients_period: null,
         return_rate: null,
       },
     }
