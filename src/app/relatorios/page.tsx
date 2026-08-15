@@ -181,6 +181,13 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
+      {data && data.analytics.mtd && data.closing.revenue == null && (
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          Aguardando faturamento pago no Avec neste mês — receita, fluxo e MoM aparecem quando houver
+          caixa conhecido. Não é falha de sync de agenda.
+        </p>
+      )}
+
       {loading && !data ? (
         <p className="text-sm text-muted">Carregando overview…</p>
       ) : data ? (
@@ -220,7 +227,13 @@ export default function RelatoriosOverviewPage() {
               {
                 label: 'Receita',
                 value:
-                  data.closing.revenue != null ? formatCurrency(data.closing.revenue) : '—',
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? formatCurrency(data.closing.revenue)
+                    : data.closing.revenue === 0
+                      ? 'sem receita'
+                      : data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : '—',
                 compare: momCompareLine(
                   data.closing.revenue,
                   data.previous_closing.revenue,
@@ -229,7 +242,12 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Atendidos',
-                value: data.closing.attended != null ? String(data.closing.attended) : '—',
+                value:
+                  data.closing.attended != null
+                    ? String(data.closing.attended)
+                    : data.analytics.mtd
+                      ? 'aguardando caixa'
+                      : '—',
                 compare: momCompareLine(
                   data.closing.attended,
                   data.previous_closing.attended,
@@ -255,7 +273,11 @@ export default function RelatoriosOverviewPage() {
               {
                 label: 'Fluxo',
                 value:
-                  data.closing.cash_flow != null ? formatCurrency(data.closing.cash_flow) : '—',
+                  data.closing.cash_flow != null
+                    ? formatCurrency(data.closing.cash_flow)
+                    : data.analytics.mtd && data.closing.revenue == null
+                      ? 'aguardando caixa'
+                      : '—',
                 compare: momCompareLine(
                   data.closing.cash_flow,
                   data.previous_closing.cash_flow,
@@ -360,7 +382,9 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Receita perdida (est.)</span>
                   <span className="text-right">
-                    <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                    <span className="tabular-nums">
+                      {formatCurrency(data.analytics.lost_revenue)}
+                    </span>
                     {(() => {
                       const c = momCompareLine(
                         data.analytics.lost_revenue,
@@ -392,7 +416,10 @@ export default function RelatoriosOverviewPage() {
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    ·{' '}
+                    {data.analytics.new_clients_period != null
+                      ? data.analytics.new_clients_period
+                      : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">

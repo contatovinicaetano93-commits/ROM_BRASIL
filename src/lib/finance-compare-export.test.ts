@@ -112,6 +112,15 @@ describe('finance-compare-export', () => {
     expect(bars[3]?.previous).toBe(63_986.11)
   })
 
+  it('financeCompareMoneyBars omite Fluxo quando cash_flow é null', () => {
+    const emptyFlux: FinanceKpis = {
+      current: { ...sample.current, cash_flow: null, revenue_source: 'empty' },
+      previous: { ...sample.previous, cash_flow: null, revenue_source: 'empty' },
+    }
+    const bars = financeCompareMoneyBars(emptyFlux)
+    expect(bars.map((b) => b.label)).toEqual(['Receita', 'Despesas', 'CMV'])
+  })
+
   it('alignDailyRevenue alinha pelo dia do mês', () => {
     const aligned = alignDailyRevenue(sample.current.daily, sample.previous.daily)
     expect(aligned[0]).toEqual({ day: 1, current: 160_550.35, previous: 50_000 })

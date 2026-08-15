@@ -79,7 +79,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'despesas',
     source: 'rom_manual',
-    note: 'Cadastro manual no Financeiro ROM.',
+    note: 'Omie Contas a Pagar (por vencimento, CNPJs serviços/comércio) + lançamentos manuais. Exclui não-operacionais.',
   },
   {
     field: 'CMV',
@@ -143,7 +143,9 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     margin_after_cmv,
     gross_margin,
     cash_flow:
-      revenueRaw != null ? Math.round((revenueRaw - expenses) * 100) / 100 : 0,
+      revenueRaw != null && revenueRaw > 0
+        ? Math.round((revenueRaw - expenses) * 100) / 100
+        : null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: revenueRaw ?? 0,
@@ -182,7 +184,7 @@ function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE },
     margin_after_cmv: null,
     gross_margin: null,
-    cash_flow: 0,
+    cash_flow: null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: 0,
@@ -267,7 +269,8 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     booking_channels: [],
     acquisition: [],
     return_rate: null,
-    new_clients_period: Number(row.new_clients) || 0,
+    // Não inventar a partir de sum(day.new_clients) — mix diário não é 1ª visita real.
+    new_clients_period: null,
     top_professionals: [],
     top_services: [],
     month_revenue: monthRevenue,
@@ -306,10 +309,8 @@ function buildOverview(args: {
       ticket_avg: finance.current.ticket_avg,
       expenses: finance.current.expenses,
       cmv: finance.current.cmv,
-      cash_flow:
-        analytics.month_revenue != null
-          ? Math.round((analytics.month_revenue - finance.current.expenses) * 100) / 100
-          : null,
+      // Mesma regra do Financeiro: null sem caixa conhecido (não −despesas com receita 0).
+      cash_flow: finance.current.cash_flow,
       days_expected: completeness.days_expected,
       days_present: completeness.days_present,
       days_missing: completeness.days_missing,
@@ -325,10 +326,7 @@ function buildOverview(args: {
       ticket_avg: finance.previous.ticket_avg,
       expenses: finance.previous.expenses,
       cmv: finance.previous.cmv,
-      cash_flow:
-        prevAnalytics?.revenue != null
-          ? Math.round((prevAnalytics.revenue - finance.previous.expenses) * 100) / 100
-          : null,
+      cash_flow: finance.previous.cash_flow,
       lost_revenue: prevAnalytics?.lost_revenue ?? null,
       occupancy_avg: prevAnalytics?.occupancy_avg ?? null,
     },
@@ -380,7 +378,7 @@ function overviewFromCachedRows(args: {
         ),
         occupancy_avg: null,
         packages_revenue: null,
-        new_clients_period: Number(cachedPrev.new_clients) || 0,
+        new_clients_period: null,
         return_rate: null,
       },
     }
