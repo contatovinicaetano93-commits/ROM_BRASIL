@@ -664,6 +664,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             doneAt: scheduledAt,
             professionalName: appt.professional,
             lastPrice: appt.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (isLostOutcome) {
@@ -830,6 +831,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (
@@ -843,6 +845,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt: service.scheduled_at,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (att.professional || att.price != null) {
@@ -925,6 +928,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else if (
               service.scheduled_at &&
@@ -934,6 +938,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt: service.scheduled_at,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else {
               await applyVisitDayToService(service.id, day, {
