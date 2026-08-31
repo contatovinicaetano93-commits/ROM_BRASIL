@@ -3,6 +3,11 @@ import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { DUE_SOON_DAYS, NOVOS_WINDOW_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import {
+  ACTIVATED_QUEUE_WINDOW_DAYS,
+  countPendingActivatedContacts,
+  listPendingActivatedContacts,
+} from '@/lib/salon/reactivation-kpi'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
@@ -15,6 +20,8 @@ export interface ContactListItem extends ContactRow {
   top_action: string | null
   /** Próximo horário na janela Agendados (hoje → +SCHEDULED_SOON_DAYS). */
   next_scheduled_at: string | null
+  /** Último outreach de reativação (fila Ativados). */
+  outreach_at?: string | null
 }
 
 export interface ListContactsWithSummaryOpts {
@@ -42,12 +49,14 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela + sem serviço. */
+/** Filas da tela Contatos — urgência + novos da janela + sem serviço + ativados. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
+  /** Reativados pelo painel aguardando agenda/visita Avec (30d). */
+  ativados: number
 }
 
 export interface ContactListResult {
@@ -710,15 +719,34 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço). */
+/** Totais das filas Contatos (reativar + novos da janela + sem serviço + ativados). */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos, sem_servicos] = await Promise.all([
+  const [urgency, novos, sem_servicos, ativados] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
     countContactsWithoutServices({ day: opts?.day }),
+    countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS),
   ])
-  return { ...urgency, novos, sem_servicos }
+  return { ...urgency, novos, sem_servicos, ativados }
+}
+
+/** Lista contatos na fila Ativados (outreach pelo painel, aguardando Avec). */
+export async function listActivatedContacts(opts?: {
+  limit?: number
+}): Promise<ContactListResult> {
+  const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+  const pending = await listPendingActivatedContacts({ limit })
+  const outreachAt = new Map(pending.map((p) => [p.contact_id, p.contacted_at]))
+  const ids = pending.map((p) => p.contact_id)
+  const byContact = await loadServicesByContactIds(ids)
+  const contacts = await orderContactsByIds(ids)
+  const items = withUrgency(contacts, byContact).map((item) => ({
+    ...item,
+    outreach_at: outreachAt.get(item.id) ?? null,
+  }))
+  const total = await countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS)
+  return { items, total }
 }
