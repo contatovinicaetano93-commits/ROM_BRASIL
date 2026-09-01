@@ -42,9 +42,10 @@ interface Contact {
   urgency_score: number
   top_action: string | null
   next_scheduled_at?: string | null
+  outreach_at?: string | null
 }
 
-type ListMode = 'reactivate' | 'novos' | 'sem_servicos' | 'search'
+type ListMode = 'reactivate' | 'ativados' | 'novos' | 'sem_servicos' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
 type ContactsSyncMeta = {
@@ -79,7 +80,14 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
   return action || 'Sem sinal de retorno'
 }
 
-function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos') {
+function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' | 'ativados') {
+  if (queue === 'ativados') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-300">
+        <Clock size={10} /> Aguardando agenda
+      </span>
+    )
+  }
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
@@ -135,16 +143,21 @@ function channelLabel(channel: string): string {
   }
 }
 
-function logOutreach(contactId: string) {
+function logOutreach(contactId: string, listMode: 'reactivate' | 'sem_servicos' | 'novos') {
   void apiFetch('/api/reactivation/outreach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contactId,
       surface: 'contact_list',
+      listMode,
       lastDoneAtAtSend: null,
     }),
   }).catch(() => {})
+}
+
+function daysSinceOutreach(iso: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000))
 }
 
 function whatsappHrefFor(c: Contact): string | null {
@@ -161,6 +174,7 @@ const URL_STATUSES = new Set(['novo', 'em_atendimento', 'agendado', 'convertido'
 
 function initialModeFromSearch(searchParams: URLSearchParams): ListMode {
   if (searchParams.get('queue') === 'novos') return 'novos'
+  if (searchParams.get('queue') === 'ativados') return 'ativados'
   const ch = searchParams.get('channel')?.trim().toLowerCase() ?? ''
   const st = searchParams.get('status')?.trim().toLowerCase() ?? ''
   if (URL_CHANNELS.has(ch) || URL_STATUSES.has(st)) return 'search'
@@ -195,7 +209,8 @@ function ContatosPageContent() {
     scheduled: number
     novos: number
     sem_servicos: number
-  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0 })
+    ativados: number
+  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0, ativados: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -249,6 +264,7 @@ function ContatosPageContent() {
               novos: q.novos,
               sem_servicos:
                 typeof q.sem_servicos === 'number' ? q.sem_servicos : prev.sem_servicos,
+              ativados: typeof q.ativados === 'number' ? q.ativados : prev.ativados,
             }))
           }
           return
@@ -265,6 +281,8 @@ function ContatosPageContent() {
         if (mode === 'reactivate') {
           params.set('pending', 'true')
           params.set('queue', queue)
+        } else if (mode === 'ativados') {
+          params.set('queue', 'ativados')
         } else if (mode === 'novos') {
           params.set('queue', 'novos')
           if (novosDay) params.set('day', novosDay)
@@ -295,7 +313,10 @@ function ContatosPageContent() {
               scheduled: q.scheduled,
               novos: typeof q.novos === 'number' ? q.novos : 0,
               sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
+              ativados: typeof q.ativados === 'number' ? q.ativados : 0,
             })
+          } else if (mode === 'ativados' && typeof total === 'number') {
+            setQueueCounts((prev) => ({ ...prev, ativados: total }))
           } else if (mode === 'novos' && typeof total === 'number') {
             setQueueCounts((prev) => ({ ...prev, novos: total }))
           } else if (mode === 'sem_servicos' && typeof total === 'number') {
@@ -331,7 +352,11 @@ function ContatosPageContent() {
           ? `${visible.length} sem serviço${
               totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
             }`
-          : `${visible.length} na fila${
+          : mode === 'ativados'
+            ? `${visible.length} ativado${visible.length === 1 ? '' : 's'}${
+                totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+              }`
+            : `${visible.length} na fila${
               totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
             }`
 
@@ -344,7 +369,9 @@ function ContatosPageContent() {
         ? `Nenhum lead novo nos últimos ${NOVOS_WINDOW_DAYS} dias.`
         : mode === 'sem_servicos'
           ? 'Ninguém fora do funil — todo contato tem retorno previsto.'
-          : queue === 'overdue'
+          : mode === 'ativados'
+            ? 'Ninguém aguardando retorno — use Reativar na fila ao lado.'
+            : queue === 'overdue'
             ? 'Nenhum atrasado (cadência vencida com visita registrada).'
             : queue === 'due_soon'
               ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
@@ -359,7 +386,9 @@ function ContatosPageContent() {
           <p className="mt-0.5 text-xs text-muted">
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
-              : mode === 'novos'
+              : mode === 'ativados'
+                ? 'Chamados pelo painel — aguardando agenda ou visita na Avec (30 dias)'
+                : mode === 'novos'
                 ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda`
                 : mode === 'sem_servicos'
                   ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
@@ -407,11 +436,12 @@ function ContatosPageContent() {
       <div
         role="tablist"
         aria-label="Modo da lista"
-        className="grid grid-cols-4 rounded-2xl border border-border bg-card p-1"
+        className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1 sm:grid-cols-5"
       >
         {(
           [
             { id: 'reactivate' as const, label: 'Reativar' },
+            { id: 'ativados' as const, label: 'Ativados', count: queueCounts.ativados },
             { id: 'novos' as const, label: 'Novos' },
             { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
@@ -430,7 +460,9 @@ function ContatosPageContent() {
               }`}
             >
               {tab.label}
-              {tab.id === 'novos' ? (
+              {'count' in tab && typeof tab.count === 'number' ? (
+                <span className="ml-1 tabular-nums opacity-80">{tab.count}</span>
+              ) : tab.id === 'novos' ? (
                 <span className="ml-1 tabular-nums opacity-80">{queueCounts.novos}</span>
               ) : tab.id === 'sem_servicos' ? (
                 <span className="ml-1 tabular-nums opacity-80">{queueCounts.sem_servicos}</span>
@@ -439,6 +471,14 @@ function ContatosPageContent() {
           )
         })}
       </div>
+
+      {mode === 'ativados' && (
+        <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+          Entra aqui ao clicar Reativar (fila Reativar ou ficha) ou Chamar em Sem serviço. Sai
+          automaticamente quando o sync Avec registrar agenda ou visita — ou após 30 dias sem
+          retorno.
+        </p>
+      )}
 
       {mode === 'reactivate' && (
         <div className="flex flex-col gap-2">
@@ -604,11 +644,19 @@ function ContatosPageContent() {
                 ? fmtScheduleParts(c.created_at)
                 : null
             const secondaryLine =
-              mode === 'novos'
+              mode === 'ativados' && c.outreach_at
+                ? `Ativado há ${daysSinceOutreach(c.outreach_at)}d · ${serviceLine(c, q)}`
+                : mode === 'novos'
                 ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.date} ${createdParts.time}` : ''}`
                 : mode === 'sem_servicos'
                   ? `${channelLabel(c.channel)}${createdParts ? ` · entrou ${createdParts.date}` : ''}`
                   : serviceLine(c, mode === 'reactivate' ? queue : q)
+            const outreachListMode: 'reactivate' | 'sem_servicos' | 'novos' =
+              mode === 'novos'
+                ? 'novos'
+                : mode === 'sem_servicos'
+                  ? 'sem_servicos'
+                  : 'reactivate'
             return (
               <div key={c.id}>
                 {dayHeader && (
@@ -628,7 +676,9 @@ function ContatosPageContent() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
                         {urgencyBadge(
-                          mode === 'novos'
+                          mode === 'ativados'
+                            ? 'ativados'
+                            : mode === 'novos'
                             ? 'novos'
                             : mode === 'sem_servicos'
                               ? 'sem_servicos'
@@ -656,7 +706,7 @@ function ContatosPageContent() {
                       href={wa}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={() => logOutreach(c.id)}
+                      onClick={() => logOutreach(c.id, outreachListMode)}
                       aria-label={
                         mode === 'novos' || mode === 'sem_servicos'
                           ? `Chamar ${c.name || 'contato'} no WhatsApp`
