@@ -26,6 +26,15 @@ export function toSalonDateIso(
   }).format(d)
 }
 
+/** ISO ordenável — postgres.js devolve Date em timestamptz (não chamar localeCompare direto). */
+export function toSortableIso(value: unknown): string {
+  if (value == null || value === '') return ''
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : value.toISOString()
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toISOString()
+  return String(value)
+}
+
 export function salonDateAtLocalIso(
   ymd: string,
   hour = 12,
