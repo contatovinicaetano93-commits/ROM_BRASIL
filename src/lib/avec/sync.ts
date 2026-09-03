@@ -17,6 +17,7 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  recordServiceVisit,
   clearServiceSchedule,
   clearOrphanSchedulesForDay,
   ensureServiceCadence,
@@ -664,6 +665,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             doneAt: scheduledAt,
             professionalName: appt.professional,
             lastPrice: appt.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (isLostOutcome) {
@@ -830,6 +832,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (
@@ -843,14 +846,36 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt: service.scheduled_at,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (att.professional || att.price != null) {
-          await patchServiceVisitMeta(service.id, {
+          const patched = await patchServiceVisitMeta(service.id, {
             professionalName: att.professional,
             lastPrice: att.price,
             allowLastPrice: true,
           })
+          // 0051 Pago já limpou scheduled_at: o patch só mexe no catálogo.
+          // last_done_at vem do UPDATE (não do cache) — preço/pro do 0002
+          // entram na linha do dia em client_service_visits.
+          const visitAt =
+            patched?.last_done_at &&
+            attendedDay &&
+            toSalonDateIso(patched.last_done_at) === attendedDay
+              ? patched.last_done_at
+              : null
+          if (visitAt && patched) {
+            await recordServiceVisit({
+              contactId: patched.contact_id,
+              clientServiceId: patched.id,
+              serviceName: patched.name,
+              category: patched.category,
+              doneAt: visitAt,
+              professionalName: att.professional ?? patched.professional_name,
+              price: att.price ?? null,
+              source: 'avec',
+            })
+          }
         }
         if (att.professional && isNailService(att.serviceName)) {
           await setPreferredManicurist(contact.id, att.professional)
@@ -925,6 +950,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else if (
               service.scheduled_at &&
@@ -934,11 +960,13 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt: service.scheduled_at,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else {
               await applyVisitDayToService(service.id, day, {
                 professionalName: att.professional,
                 lastPrice: att.price,
+                recordVisit: true,
               })
             }
           } else {
