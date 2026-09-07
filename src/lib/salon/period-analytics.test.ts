@@ -49,6 +49,26 @@ describe('period-analytics', () => {
     })
   })
 
+  it('não inventa retorno 0% quando P3 existe sem taxa conhecida', async () => {
+    sqlMock
+      .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+      .mockResolvedValueOnce([{ revenue: 9000, attended: 45, revenue_days: 1, attended_days: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+    getSalonP3DailyNear.mockResolvedValue({
+      day: '2026-07-31',
+      return_rate: null,
+      new_clients_period: null,
+      revenue_curve: [{ day: '2026-07-01', revenue: 100 }],
+      updated_at: 'now',
+    })
+
+    const { computePeriodAnalytics } = await import('@/lib/salon/period-analytics')
+    const result = await computePeriodAnalytics({ month: '2026-07' })
+    expect(result.return_rate).toBeNull()
+    expect(result.new_clients_period).toBeNull()
+  })
+
   it('não inventa novos/pacotes/perdida quando P2/P3 ausentes', async () => {
     sqlMock
       .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
