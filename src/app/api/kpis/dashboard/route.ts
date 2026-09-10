@@ -33,6 +33,8 @@ function normalizeProName(name: string): string {
  * Bootstrap da Visão: um lambda, queries sequenciais.
  * Evita waterfall de 4 rotas × pooler max:1 no browser.
  */
+export const maxDuration = 120
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireAdmin(req)

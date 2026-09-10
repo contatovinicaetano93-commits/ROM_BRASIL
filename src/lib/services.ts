@@ -603,22 +603,29 @@ export async function listTodayPipeline(day: string): Promise<{
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
+        and c.anonymized_at is null
         and cs.scheduled_at is not null
-        and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         and (
           cs.last_done_at is null
-          or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+          or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+          or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         )
       order by cs.scheduled_at asc
+      limit 400
     `,
     sql`
       select cs.*, c.name as contact_name
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
+        and c.anonymized_at is null
         and cs.last_done_at is not null
-        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        and cs.last_done_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        and cs.last_done_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       order by cs.last_done_at asc
+      limit 400
     `,
   ])
 
