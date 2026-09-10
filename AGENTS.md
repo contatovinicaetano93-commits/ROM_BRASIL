@@ -63,4 +63,18 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
 - **`maxDuration = 800` nas rotas `/api/avec/sync*` exige Vercel Fluid Compute (Pro).** Sem Fluid, a Vercel capa em 300s — as rotas logam aviso no cold start (`warnIfLongMaxDuration`). Não baixar para 300 sem confirmar que o full cabe no budget.
-- **~30 ocorrências de `react-hooks/set-state-in-effect`** entre Brasil e Iguatemi. É correção de verdade (loop de render, estado velho), não estilo. É o que impede o lint de virar gate bloqueante.
+- **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any`, `no-unused-vars`, `react-hooks/refs`; `set-state-in-effect` já zerou).
+
+## Drift BR ↔ IG (intencional ou conhecido — não “descobrir” de novo)
+
+As unidades devem permanecer em **paridade de produto**. Diferenças abaixo são conhecidas; se for mudar, diga no PR:
+
+| Item | Estado |
+|------|--------|
+| Páginas do painel | Em paridade (~16) |
+| `/api/reminders/financeiro` | **Só BR.** IG não ativa (decisão: sem WhatsApp financeiro por enquanto). |
+| `/api/docs`, `/api/webhooks/telegram-staff` | **Só BR** (Telegram legado / OpenAPI). |
+| `/api/avec/probe-0011` | **Só IG** (diagnóstico de visitas). |
+| `useClientLoader` | **Só IG** (padrão de fetch client); BR usa outros hooks. |
+| `src/lib/db.ts` | Implementações divergem (cache/overlay IG vs Map multi-URL BR) — mesmo contrato `getSql`. |
+| `warnIfLongMaxDuration` / `vercel-runtime.ts` | Deve existir nos dois; se faltar num lado, é bug de paridade. |
