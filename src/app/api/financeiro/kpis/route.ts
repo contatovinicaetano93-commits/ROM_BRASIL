@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       return err('Parâmetro compare inválido (esperado YYYY-MM)', 422)
 
     const data = await ttlGetOrSet(
-      `finance:kpis:v1:${month ?? 'cur'}:${compareMonth ?? 'prev'}`,
+      `finance:kpis:v2:${month ?? 'cur'}:${compareMonth ?? 'prev'}`,
       45_000,
       async () => {
         const kpis = await computeFinanceKpis({ month, compareMonth })

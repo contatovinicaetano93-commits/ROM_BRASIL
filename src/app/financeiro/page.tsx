@@ -748,7 +748,9 @@ export default function FinanceiroPage() {
           {' ('}
           {kpis.previous.from.slice(8, 10)}–{kpis.previous.to.slice(8, 10)}
           {')'}
-          . No mês corrente o anterior é cortado no mesmo dia (janela comparável).
+          . No mês corrente o anterior é cortado no mesmo dia (janela comparável) —
+          receita e despesas dos cards. A lista Contas a Pagar abaixo continua no mês
+          calendário cheio (Omie).
         </p>
       )}
 
