@@ -12,8 +12,9 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return err(auth.message, auth.status)
   try {
     const user = await resolveFlowUser(auth.session)
+    const canViewRevenue = auth.session.can_view_revenue
     const [kpis, posts, notifications, expenses] = await Promise.all([
-      loadWeekKpis(),
+      loadWeekKpis({ includeRevenue: canViewRevenue }),
       listPublishedPosts(),
       listUnreadNotifications(readerKey(auth.session)),
       listVisibleExpenses(user).catch(() => []),
@@ -33,9 +34,9 @@ export async function GET(req: NextRequest) {
       }))
     return ok({
       greetingName: auth.session.displayName,
-      can_view_revenue: auth.session.can_view_revenue,
+      can_view_revenue: canViewRevenue,
       canPublish: auth.session.canPublish || auth.session.role === 'admin' || auth.session.role === 'mkt',
-      kpis,
+      kpis: canViewRevenue ? kpis : { ...kpis, revenue: null },
       posts,
       notifications,
       tasks,
