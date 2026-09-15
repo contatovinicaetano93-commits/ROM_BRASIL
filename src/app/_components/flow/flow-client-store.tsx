@@ -31,6 +31,57 @@ const EMPTY_DB: Database = {
   emailLogs: [],
 }
 
+type AuditApiItem = {
+  id: string
+  username: string
+  action: string
+  resource: string
+  created_at: string
+  changes?: Record<string, unknown> | string | null
+}
+
+function parseAuditChanges(raw: AuditApiItem['changes']): Record<string, unknown> {
+  if (!raw) return {}
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw
+  return {}
+}
+
+function auditDelta(changes: Record<string, unknown>, key: 'from' | 'to'): string {
+  const value = changes[key]
+  if (value == null) return ''
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function mapAuditLogs(logs: AuditApiItem[], users: User[]): AuditLog[] {
+  return logs.map((item) => {
+    const username = item.username ?? ''
+    const needle = username.toLowerCase()
+    const actor = users.find(
+      (person) => person.id === username || person.email.toLowerCase() === needle,
+    )
+    const changes = parseAuditChanges(item.changes)
+    return {
+      id: item.id,
+      user: actor?.id ?? username,
+      action: mapAuditAction(item.action),
+      resource: item.resource,
+      before: auditDelta(changes, 'from'),
+      after: auditDelta(changes, 'to'),
+      created: item.created_at,
+    }
+  })
+}
+
 function mapAuditAction(action: string): AuditAction {
   const normalized = action.toUpperCase()
   switch (normalized) {
@@ -137,21 +188,12 @@ export function FlowClientStoreProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     const boot = await api<FlowBootstrap>('/api/flow')
+    const users = boot.users?.length ? boot.users : [boot.user]
     let auditLogs: AuditLog[] = []
     if (canManageUsers(boot.user.role)) {
       try {
-        const audit = await api<{ logs: Array<{ id: string; username: string; action: string; resource: string; created_at: string }> }>(
-          '/api/flow/audit',
-        )
-        auditLogs = (audit.logs ?? []).map((item) => ({
-          id: item.id,
-          user: item.username,
-          action: mapAuditAction(item.action),
-          resource: item.resource,
-          before: '',
-          after: '',
-          created: item.created_at,
-        }))
+        const audit = await api<{ logs: AuditApiItem[] }>('/api/flow/audit')
+        auditLogs = mapAuditLogs(audit.logs ?? [], users)
       } catch {
         auditLogs = []
       }
@@ -161,7 +203,7 @@ export function FlowClientStoreProvider({ children }: { children: ReactNode }) {
       revision: 1,
       companies: boot.companies,
       categories: boot.categories,
-      users: boot.users?.length ? boot.users : [boot.user],
+      users,
       invitations: [],
       expenses: boot.expenses,
       auditLogs,
@@ -170,8 +212,7 @@ export function FlowClientStoreProvider({ children }: { children: ReactNode }) {
     setCompanyId((current) => {
       const stored = typeof window !== 'undefined' ? window.localStorage.getItem(COMPANY_KEY) : null
       const allowed = new Set(boot.user.companyIds)
-      const fromStore = boot.companies.filter((item) => allowed.has(item.id) || boot.user.role === 'master')
-      const pool = fromStore.length ? fromStore : boot.companies
+      const pool = boot.companies.filter((item) => allowed.has(item.id))
       if (current && pool.some((item) => item.id === current)) return current
       if (stored && pool.some((item) => item.id === stored)) return stored
       return pool.length === 1 ? pool[0].id : null
@@ -185,7 +226,6 @@ export function FlowClientStoreProvider({ children }: { children: ReactNode }) {
 
   const accessibleCompanies = useCallback(() => {
     if (!user) return []
-    if (user.role === 'master') return db.companies.filter((item) => item.is_active)
     const allowed = new Set(user.companyIds)
     return db.companies.filter((item) => item.is_active && allowed.has(item.id))
   }, [db.companies, user])
@@ -252,7 +292,7 @@ export function FlowClientStoreProvider({ children }: { children: ReactNode }) {
           name: email.split('@')[0],
           password,
           flow_role: role,
-          panel_role: role === 'master' ? 'admin' : 'staff',
+          panel_role: 'staff',
           companyIds,
           areaIds,
         }),

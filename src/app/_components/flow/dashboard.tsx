@@ -70,11 +70,13 @@ export function Dashboard({
   );
   const greeting = KINDNESS_PHRASES[new Date(now).getDate() % KINDNESS_PHRASES.length];
   const categoryStats = (categories.length
-    ? categories.map((item) => ({ category: item.name, color: item.color }))
-    : Object.entries(CATEGORY_COLOR).map(([category, color]) => ({ category, color }))
+    ? categories.map((item) => ({ id: item.id, category: item.name, color: item.color }))
+    : Object.entries(CATEGORY_COLOR).map(([category, color]) => ({ id: category, category, color }))
   ).map((item) => ({
     ...item,
-    value: expenses.filter((expense) => expense.category === item.category).reduce((sum, expense) => sum + expense.amount, 0),
+    value: expenses
+      .filter((expense) => expense.category === item.id || expense.category === item.category)
+      .reduce((sum, expense) => sum + expense.amount, 0),
   }));
   const maxCategory = Math.max(...categoryStats.map((item) => item.value), 1);
 
