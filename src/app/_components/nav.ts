@@ -50,5 +50,11 @@ export function pageTitleFromPath(pathname: string) {
   if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/financeiro')) return 'Financeiro'
   if (pathname.startsWith('/estoque')) return 'Estoque'
+  if (pathname.startsWith('/flow')) return 'RomFlow'
+  if (pathname.startsWith('/pessoas')) return 'Pessoas'
+  if (pathname.startsWith('/empresa')) return 'Empresa'
+  if (pathname.startsWith('/rh')) return 'RH'
+  if (pathname.startsWith('/treinamentos')) return 'Treinamentos'
+  if (pathname.startsWith('/ajuda')) return 'Ajuda'
   return brand.displayName
 }

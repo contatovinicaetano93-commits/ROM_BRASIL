@@ -5,6 +5,8 @@ import { DesktopSidebar } from './DesktopSidebar'
 import { TopBar } from './TopBar'
 import { BottomNav } from './BottomNav'
 import { SessionProvider } from './SessionProvider'
+import { IntranetShell } from './intranet/IntranetShell'
+import { isIntranetShellPath } from '@/lib/intranet/paths'
 
 const STANDALONE_PATHS = ['/login']
 
@@ -13,6 +15,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (STANDALONE_PATHS.includes(pathname)) {
     return <>{children}</>
+  }
+
+  if (isIntranetShellPath(pathname)) {
+    return (
+      <SessionProvider>
+        <IntranetShell>{children}</IntranetShell>
+      </SessionProvider>
+    )
   }
 
   return (
