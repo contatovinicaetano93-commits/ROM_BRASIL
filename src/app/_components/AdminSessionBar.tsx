@@ -18,7 +18,9 @@ export function AdminSessionBar({ className = '' }: { className?: string }) {
         ? 'Sessão financeiro'
         : session.role === 'estoque'
           ? 'Sessão estoque'
-          : 'Sessão equipe'
+          : session.role === 'mkt'
+            ? 'Sessão marketing'
+            : 'Sessão equipe'
 
   return (
     <div className={`rounded-xl border border-gold/25 bg-gold/5 p-3 ${className}`}>
@@ -26,7 +28,7 @@ export function AdminSessionBar({ className = '' }: { className?: string }) {
         <Icon size={14} className="text-gold" />
         <div className="min-w-0">
           <p className="text-[0.65rem] uppercase tracking-wide text-muted">{label}</p>
-          <p className="truncate text-sm font-medium text-gold">{session.user ?? '—'}</p>
+          <p className="truncate text-sm font-medium text-gold">{session.displayName || session.user || '—'}</p>
           {!isAdmin && session.role === 'staff' && (
             <p className="mt-0.5 text-[0.65rem] text-muted">Sem acesso a faturamento</p>
           )}

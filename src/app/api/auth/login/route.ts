@@ -2,15 +2,19 @@ import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
 import {
   AUTH_COOKIE,
-  createSessionToken,
+  buildAuthSession,
+  createV3SessionToken,
   getAdminUser,
   isAuthEnabled,
   validateCredentials,
+  type AuthSession,
 } from '@/lib/auth'
 import { isProduction } from '@/lib/env'
 import { LoginRequestSchema } from '@/lib/schemas'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { findEmployeeByEmail } from '@/lib/employees'
+import { verifyPassword } from '@/lib/intranet/password'
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
@@ -33,10 +37,32 @@ export async function POST(req: NextRequest) {
 
   const user = parsedUser || getAdminUser()
   const pass = password || legacyToken || ''
-  const hit = pass ? validateCredentials(user, pass) : null
+  let session: AuthSession | null = null
 
-  if (!hit) {
-    return err('Usuário ou senha incorretos', 401)
+  if (pass) {
+    try {
+      const employee = await findEmployeeByEmail(user)
+      if (employee && employee.status === 'active') {
+        const okPass = await verifyPassword(pass, employee.password_hash)
+        if (okPass) {
+          session = buildAuthSession(employee.email, employee.panel_role, {
+            displayName: employee.name,
+            employeeId: employee.id,
+            canPublish: employee.can_publish || employee.panel_role === 'admin' || employee.panel_role === 'mkt',
+          })
+        }
+      }
+    } catch {
+      session = null
+    }
+  }
+
+  if (!session) {
+    const hit = pass ? validateCredentials(user, pass) : null
+    if (!hit) {
+      return err('Usuário ou senha incorretos', 401)
+    }
+    session = buildAuthSession(hit.user, hit.role)
   }
 
   // Analytics não pode atrasar nem quebrar login: sem token vira no-op, erro é
@@ -45,13 +71,13 @@ export async function POST(req: NextRequest) {
     const posthog = getPostHogClient()
     if (posthog) {
       posthog.identify({
-        distinctId: hit.user,
-        properties: { role: hit.role },
+        distinctId: session.user,
+        properties: { role: session.role },
       })
       posthog.capture({
-        distinctId: hit.user,
+        distinctId: session.user,
         event: 'server_user_logged_in',
-        properties: { role: hit.role },
+        properties: { role: session.role },
       })
       void posthog.flush().catch(() => {})
     }
@@ -61,12 +87,15 @@ export async function POST(req: NextRequest) {
 
   const res = ok({
     auth: 'ok',
-    user: hit.user,
-    role: hit.role,
-    can_view_revenue: hit.role === 'admin',
+    user: session.user,
+    role: session.role,
+    can_view_revenue: session.can_view_revenue,
+    displayName: session.displayName,
+    employeeId: session.employeeId,
+    canPublish: session.canPublish,
   })
   for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
-  res.cookies.set(AUTH_COOKIE, await createSessionToken(hit.user, hit.role), {
+  res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {
     httpOnly: true,
     sameSite: 'lax',
     secure: isProduction(),

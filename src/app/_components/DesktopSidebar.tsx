@@ -34,14 +34,24 @@ export function DesktopSidebar() {
     return (
       <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
         <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-          <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+          <Link href="/" className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
             {brand.shortMonogram}
-          </span>
+          </Link>
           <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
             {role === 'financeiro' ? 'Financeiro' : 'Estoque'}
           </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-4">
+          <Link
+            href="/"
+            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+              pathname === '/'
+                ? 'border border-gold/40 bg-gold/10 text-gold'
+                : 'text-foreground/85 hover:bg-card hover:text-foreground'
+            }`}
+          >
+            Intranet
+          </Link>
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -87,15 +97,25 @@ export function DesktopSidebar() {
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
       <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+        <Link href="/" className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
           {brand.shortMonogram}
-        </span>
+        </Link>
         <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
           {brand.locationSubtitle}
         </span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-4">
+        <Link
+          href="/"
+          className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+            pathname === '/'
+              ? 'border border-gold/40 bg-gold/10 text-gold'
+              : 'text-foreground/85 hover:bg-card hover:text-foreground'
+          }`}
+        >
+          Intranet
+        </Link>
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return (

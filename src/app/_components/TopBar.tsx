@@ -54,7 +54,7 @@ export function TopBar() {
           </button>
 
           <div className="min-w-0 flex-1 lg:flex lg:items-center lg:justify-between">
-            <Link href="/hoje" className="flex items-baseline justify-center gap-1 lg:justify-start">
+            <Link href="/" className="flex items-baseline justify-center gap-1 lg:justify-start">
               <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">
                 {brand.shortMonogram}
               </span>

@@ -41,13 +41,8 @@ function LoginForm() {
         return
       }
       // Financeiro/estoque têm painel próprio — não faz sentido cair no playbook do dia por padrão.
+      const dest = next
       const role = json.data?.role
-      const dest =
-        role === 'financeiro' && !next.startsWith('/financeiro')
-          ? '/financeiro'
-          : role === 'estoque' && !next.startsWith('/estoque')
-            ? '/estoque'
-            : next
       posthog.identify(json.data?.user ?? username.trim(), { role })
       posthog.capture('user_logged_in', { role })
       // Hard navigation garante que o cookie da sessão seja lido pelo middleware
