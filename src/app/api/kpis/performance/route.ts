@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAdmin } from '@/lib/auth'
+import { requireDashboard } from '@/lib/auth'
 import {
   getLatestSalonP1Daily,
   getSalonP1DailyNear,
@@ -29,7 +29,7 @@ interface ProfessionalWithDelta extends P1ProfessionalRow {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAdmin(req)
+    const auth = await requireDashboard(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const month = req.nextUrl.searchParams.get('month')?.trim()
