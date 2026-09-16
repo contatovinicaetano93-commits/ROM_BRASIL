@@ -117,6 +117,7 @@ export function IntranetTopNav() {
                 {initial}
               </span>
               <span className="hidden text-sm text-foreground sm:inline">{name.split(' ')[0]}</span>
+              <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
         </div>
