@@ -2,18 +2,27 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useClientSession } from '../SessionProvider'
+import { hasPanelModule, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 
-const TABS = [
-  { href: '/dashboard', label: 'Visão' },
-  { href: '/relatorios', label: 'Relatórios' },
-] as const
+const TABS: { href: string; label: string; key: GrantableModuleKey }[] = [
+  { href: '/dashboard', label: 'Visão', key: 'dashboard' },
+  { href: '/relatorios', label: 'Relatórios', key: 'relatorios' },
+]
 
 export function VisaoAnaliticaNav() {
   const pathname = usePathname()
+  const { session } = useClientSession()
+  const role = session?.role ?? null
+  const extras = parseGrantableModules(session?.modules)
+  const openAuth = Boolean(session && !session.auth_enabled)
+  const tabs = TABS.filter((tab) => openAuth || (role != null && hasPanelModule(role, extras, tab.key)))
+
+  if (tabs.length === 0) return null
 
   return (
     <nav className="mt-3 flex flex-wrap gap-2" aria-label="Seções da visão analítica">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active =
           tab.href === '/dashboard'
             ? pathname === '/dashboard' || pathname === '/adm' || pathname.startsWith('/adm/')
