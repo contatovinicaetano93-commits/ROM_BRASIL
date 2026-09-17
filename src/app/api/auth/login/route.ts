@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
             displayName: employee.name,
             employeeId: employee.id,
             canPublish: employee.can_publish || employee.panel_role === 'admin' || employee.panel_role === 'mkt',
+            modules: employee.modules,
           })
         }
       }
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
     displayName: session.displayName,
     employeeId: session.employeeId,
     canPublish: session.canPublish,
+    modules: session.modules,
   })
   for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
   res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {

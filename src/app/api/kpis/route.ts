@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { okCached, err, handleError } from '@/lib/api-response'
-import { requireAdmin } from '@/lib/auth'
+import { requireDashboard } from '@/lib/auth'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
@@ -8,7 +8,7 @@ import { eachDayInclusive } from '@/lib/salon/contact-kpi-chart'
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAdmin(req)
+    const auth = await requireDashboard(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const month = req.nextUrl.searchParams.get('month')?.trim()
