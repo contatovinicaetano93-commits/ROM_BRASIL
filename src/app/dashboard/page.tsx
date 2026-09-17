@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
+import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 
 import { apiFetch } from '@/lib/api-client'
@@ -230,8 +231,9 @@ export default function DashboardPage() {
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
             Funil CRM real (sem dump Avec) + mês acumulado local + snapshots Avec ~30 dias. Operação do
-            dia em Hoje · dinheiro em Financeiro · fechamento em Relatórios.
+            dia em Hoje · dinheiro em Financeiro · fechamento na aba Relatórios.
           </p>
+          <VisaoAnaliticaNav />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
