@@ -7,6 +7,16 @@ describe('intranetAuditLabel', () => {
     expect(intranetAuditLabel('PUBLISH', 'cms:1')).toBe('Publicou na intranet')
     expect(intranetAuditLabel('UPDATE_USER', 'flow:user:x')).toBe('Atualizou acesso de usuário')
   })
+
+  it('traduz verbos curtos gravados pelo Flow', () => {
+    expect(intranetAuditLabel('APPROVE', 'flow:abc')).toBe('Aprovou solicitação')
+    expect(intranetAuditLabel('DOCS', 'flow:abc')).toBe('Devolveu para ajustes')
+    expect(intranetAuditLabel('PROGRESS', 'flow:abc')).toBe('Colocou em andamento')
+    expect(intranetAuditLabel('COMPLETE', 'flow:abc')).toBe('Finalizou solicitação')
+    expect(intranetAuditLabel('CANCEL', 'flow:abc')).toBe('Cancelou solicitação')
+    expect(intranetAuditLabel('REJECT', 'flow:abc')).toBe('Recusou solicitação')
+    expect(intranetAuditLabel('RESUBMIT', 'flow:abc')).toBe('Atualizou solicitação')
+  })
 })
 
 describe('intranetAuditHref', () => {
