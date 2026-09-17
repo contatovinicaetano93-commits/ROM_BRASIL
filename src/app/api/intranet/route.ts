@@ -3,6 +3,7 @@ import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { listUnreadNotifications, markNotificationsRead, listPublishedPosts } from '@/lib/cms'
 import { loadWeekKpis } from '@/lib/intranet/load-week-kpis'
+import { notificationAudienceKeys } from '@/lib/intranet/notifications'
 import { readerKey, resolveFlowUser } from '@/lib/flow/from-session'
 import { listVisibleExpenses } from '@/lib/flow/store'
 import { allowedActions, isAdminInbox, isSolicitanteInbox } from '@/lib/flow/workflow'
@@ -13,10 +14,17 @@ export async function GET(req: NextRequest) {
   try {
     const user = await resolveFlowUser(auth.session)
     const canViewRevenue = auth.session.can_view_revenue
+    const reader = readerKey(auth.session)
+    const audience = notificationAudienceKeys({
+      readerKey: reader,
+      panelRole: auth.session.role,
+      flowRole: user.role,
+      areaIds: user.areaIds,
+    })
     const [kpis, posts, notifications, expenses] = await Promise.all([
       loadWeekKpis({ includeRevenue: canViewRevenue }),
       listPublishedPosts(),
-      listUnreadNotifications(readerKey(auth.session)),
+      listUnreadNotifications(reader, audience),
       listVisibleExpenses(user).catch(() => []),
     ])
     const tasks = expenses
@@ -50,6 +58,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireSession(req)
   if (!auth.ok) return err(auth.message, auth.status)
-  await markNotificationsRead(readerKey(auth.session))
-  return ok({ ok: true })
+  try {
+    const user = await resolveFlowUser(auth.session)
+    const reader = readerKey(auth.session)
+    const audience = notificationAudienceKeys({
+      readerKey: reader,
+      panelRole: auth.session.role,
+      flowRole: user.role,
+      areaIds: user.areaIds,
+    })
+    await markNotificationsRead(reader, audience)
+    return ok({ ok: true })
+  } catch (error) {
+    return err(error instanceof Error ? error.message : 'Falha ao marcar notificação', 500)
+  }
 }
