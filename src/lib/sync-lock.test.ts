@@ -72,4 +72,10 @@ describe('withSyncLock', () => {
     // exists check + acquire + release
     expect(sqlMock.mock.calls.length).toBeGreaterThanOrEqual(3)
   })
+
+  it('expõe chave avecDirector separada do full', async () => {
+    const { SYNC_LOCK_KEYS } = await import('./sync-lock')
+    expect(SYNC_LOCK_KEYS.avecDirector).toBe('avec_sync_director')
+    expect(SYNC_LOCK_KEYS.avecDirector).not.toBe(SYNC_LOCK_KEYS.avecFull)
+  })
 })
