@@ -6,6 +6,7 @@
 
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
+import { noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
@@ -240,7 +241,7 @@ async function syncOneQuarter(
       if (opts?.shouldAbort?.()) {
         aborted = true
         truncated = true
-        stats.aborted = true
+        noteSyncBudgetExhausted(stats, `director-visits ${quarter}`)
         break
       }
 
@@ -386,7 +387,7 @@ export async function syncDirectorVisits(
   const quarters = opts?.quarters?.length ? opts.quarters : quartersToSync()
   for (const q of quarters) {
     if (opts?.shouldAbort?.()) {
-      stats.aborted = true
+      noteSyncBudgetExhausted(stats, 'director-visits')
       stats.warnings.push(`director-visits: abortado por orçamento antes de ${q}`)
       break
     }
