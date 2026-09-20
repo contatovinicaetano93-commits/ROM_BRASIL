@@ -103,7 +103,7 @@ export function IntranetTopNav() {
                 {initial}
               </span>
               <span className="hidden max-w-[7rem] truncate text-sm text-foreground lg:inline">{name.split(' ')[0]}</span>
-              <LogoutButton compact className="lg:hidden" label="Sair" />
+              <LogoutButton compact className="inline-flex lg:hidden" label="Sair" />
               <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
