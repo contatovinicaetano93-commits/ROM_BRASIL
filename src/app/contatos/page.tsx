@@ -176,10 +176,17 @@ function initialQueryFromSearch(searchParams: URLSearchParams): string {
   return searchParams.get('q')?.trim() ?? ''
 }
 
+function initialReactivateQueueFromSearch(searchParams: URLSearchParams): ReactivateQueue {
+  const queue = searchParams.get('queue')
+  if (queue === 'due_soon' || queue === 'scheduled' || queue === 'overdue') return queue
+  return 'overdue'
+}
+
 function initialModeFromSearch(searchParams: URLSearchParams): ListMode {
   if (initialQueryFromSearch(searchParams)) return 'search'
   if (searchParams.get('queue') === 'novos') return 'novos'
   if (searchParams.get('queue') === 'ativados') return 'ativados'
+  if (searchParams.get('queue') === 'sem_servicos') return 'sem_servicos'
   const ch = searchParams.get('channel')?.trim().toLowerCase() ?? ''
   const st = searchParams.get('status')?.trim().toLowerCase() ?? ''
   if (URL_CHANNELS.has(ch) || URL_STATUSES.has(st)) return 'search'
@@ -206,7 +213,7 @@ function ContatosPageContent() {
   const searchParams = useSearchParams()
   const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
   const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
-  const [queue, setQueue] = useState<ReactivateQueue>('overdue')
+  const [queue, setQueue] = useState<ReactivateQueue>(() => initialReactivateQueueFromSearch(searchParams))
   const [contacts, setContacts] = useState<Contact[]>([])
   const [queueCounts, setQueueCounts] = useState<{
     overdue: number
