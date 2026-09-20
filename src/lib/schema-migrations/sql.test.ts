@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import type { RomPanelId } from '@/lib/brand'
-import { assertSafeDbFileName, splitSqlStatements } from './sql'
+import { assertSafeDbFileName, readDbSqlFile, splitSqlStatements } from './sql'
 import {
   listMigrationsForPanel,
   loadMigrationsManifest,
@@ -33,6 +33,14 @@ create index if not exists foo_idx on foo (id);
   it('não corta -- dentro de string', () => {
     const sql = `insert into t (n) values ('a--b');`
     expect(splitSqlStatements(sql)).toEqual([`insert into t (n) values ('a--b')`])
+  })
+
+  it('delta-estoque-rom-points não deixa DO/end if órfãos', () => {
+    const stmts = splitSqlStatements(readDbSqlFile('delta-estoque-rom-points.sql'))
+    expect(stmts.some((s) => /^do\b/i.test(s))).toBe(false)
+    expect(stmts.some((s) => /\bend\s+if\b/i.test(s))).toBe(false)
+    expect(stmts.some((s) => /stock_point_balances/.test(s))).toBe(true)
+    expect(stmts.some((s) => /stock_point_transfers/.test(s))).toBe(true)
   })
 })
 

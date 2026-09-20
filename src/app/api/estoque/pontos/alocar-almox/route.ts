@@ -4,6 +4,8 @@ import { requireStock } from '@/lib/auth'
 import { allocateAllProductsToAlmox } from '@/lib/stock-points-db'
 
 /** Inventário inicial: joga todo o saldo Avec no Almoxarifado (pisos zeram). */
+export const maxDuration = 300
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireStock(req)
