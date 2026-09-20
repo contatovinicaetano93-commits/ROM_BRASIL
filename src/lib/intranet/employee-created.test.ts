@@ -4,9 +4,12 @@ import {
   type CreateUserAuditPerson,
 } from '@/lib/intranet/employee-created'
 
-function person(partial: Partial<CreateUserAuditPerson> & Pick<CreateUserAuditPerson, 'id'>): CreateUserAuditPerson {
+function person(
+  partial: Partial<CreateUserAuditPerson> & Pick<CreateUserAuditPerson, 'id'>,
+): CreateUserAuditPerson {
   return {
     email: `${partial.id}@rom.test`,
+    name: partial.id,
     status: 'active',
     panel_role: 'staff',
     flow_role: 'solicitante',
@@ -19,6 +22,7 @@ describe('selectCreateUserAuditRecipients', () => {
   const created = person({
     id: 'new',
     email: 'novo@rom.test',
+    name: 'Novo',
     areaIds: ['financeiro', 'compras'],
   })
 
