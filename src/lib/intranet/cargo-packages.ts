@@ -215,15 +215,14 @@ export function matchCargoPackage(input: {
     const personExtras = [...extras].sort().join(',')
     let score = 0
     if (packExtras === personExtras) score += 3
-    else if (pack.extras.every((key) => extras.includes(key))) score += 1
+    else if (pack.extras.length > 0 && pack.extras.every((key) => extras.includes(key))) score += 1
     const packAreas = [...pack.areaIds].sort().join(',')
     const personAreas = areas.join(',')
-    if (packAreas === personAreas) score += 2
-    else if (pack.areaIds.length === 0 && areas.length === 0) score += 2
+    if (packAreas === personAreas) score += 4
     if (score > bestScore) {
       bestScore = score
       best = pack
     }
   }
-  return bestScore >= 3 ? best : bestScore >= 1 ? best : null
+  return bestScore >= 3 ? best : null
 }

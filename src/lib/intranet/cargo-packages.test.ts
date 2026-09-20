@@ -66,4 +66,26 @@ describe('cargo packages', () => {
       })?.id,
     ).toBe('profissional')
   })
+
+  it('Gestor Baru sem dashboard continua Gestor Baru, não Solicitante', () => {
+    expect(
+      matchCargoPackage({
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        modules: [],
+        areaIds: ['financeiro', 'compras'],
+      })?.id,
+    ).toBe('gestor_baru')
+  })
+
+  it('Gestor unidade com extra a mais continua Gestor unidade, não Solicitante', () => {
+    expect(
+      matchCargoPackage({
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        modules: ['dashboard', 'financeiro'],
+        areaIds: ['financeiro', 'manutencao', 'compras', 'rh'],
+      })?.id,
+    ).toBe('gestor_unidade')
+  })
 })
