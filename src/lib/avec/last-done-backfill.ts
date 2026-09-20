@@ -7,8 +7,14 @@ import {
 } from '@/lib/avec/normalize'
 import { upsertContact } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
-import { listServices, addService, ensureServiceCadence } from '@/lib/services'
-import { todayIso } from '@/lib/salon/format'
+import {
+  listServices,
+  addService,
+  ensureServiceCadence,
+  recordServiceVisit,
+  type ClientService,
+} from '@/lib/services'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 
 export type LastDoneBackfillStats = {
   rows_seen: number
@@ -34,6 +40,23 @@ function shiftYmd(ymd: string, deltaDays: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
+async function recordVisitForDay(
+  service: ClientService,
+  visitDoneAt: string,
+  opts: { professionalName?: string | null; lastPrice?: number | null },
+) {
+  await recordServiceVisit({
+    contactId: service.contact_id,
+    clientServiceId: service.id,
+    serviceName: service.name,
+    category: service.category,
+    doneAt: visitDoneAt,
+    professionalName: opts.professionalName ?? service.professional_name,
+    price: opts.lastPrice ?? null,
+    source: 'avec',
+  })
+}
+
 /**
  * Grava last_done_at a partir de ultima_visita (0002) — só data real da Avec.
  * - Não inventa visita: exige lastVisitDay do relatório.
@@ -44,7 +67,12 @@ function shiftYmd(ymd: string, deltaDays: number): string {
 export async function applyVisitDayToService(
   serviceId: string,
   visitDayYmd: string,
-  opts: { professionalName?: string | null; lastPrice?: number | null } = {},
+  opts: {
+    professionalName?: string | null
+    lastPrice?: number | null
+    /** Só o fallback do dia corrente no sync — não backfill histórico. */
+    recordVisit?: boolean
+  } = {},
 ): Promise<'filled' | 'skipped' | 'missing'> {
   const doneAt = parseAvecDateTime(visitDayYmd, '12:00')
   if (!doneAt) return 'missing'
@@ -67,15 +95,30 @@ export async function applyVisitDayToService(
         or (${doneAt}::timestamptz at time zone 'America/Sao_Paulo')::date
           > (last_done_at at time zone 'America/Sao_Paulo')::date
       )
-    returning id
-  `) as { id: string }[]
+    returning *
+  `) as ClientService[]
 
-  if (rows.length > 0) return 'filled'
+  if (rows.length > 0) {
+    const service = rows[0]!
+    if (opts.recordVisit) {
+      await recordVisitForDay(service, service.last_done_at ?? doneAt, opts)
+    }
+    return 'filled'
+  }
 
-  const exists = (await sql`
-    select id from client_services where id = ${serviceId} limit 1
-  `) as { id: string }[]
-  return exists.length ? 'skipped' : 'missing'
+  const existing = (await sql`
+    select * from client_services where id = ${serviceId} limit 1
+  `) as ClientService[]
+  const service = existing[0]
+  if (!service) return 'missing'
+  if (
+    opts.recordVisit &&
+    service.last_done_at &&
+    toSalonDateIso(service.last_done_at) === visitDayYmd
+  ) {
+    await recordVisitForDay(service, service.last_done_at, opts)
+  }
+  return 'skipped'
 }
 
 async function findOrCreateServiceForBackfill(contactId: string, serviceName: string) {

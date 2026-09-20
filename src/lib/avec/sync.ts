@@ -17,6 +17,7 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  recordServiceVisit,
   clearServiceSchedule,
   clearOrphanSchedulesForDay,
   ensureServiceCadence,
@@ -66,7 +67,6 @@ import {
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
-import { syncDirectorVisits } from '@/lib/avec/sync-director-visits'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   getSalonMetrics,
@@ -198,7 +198,10 @@ async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<Ave
         else 'error'
       end,
       error = coalesce(nullif(error, ''), 'Sync interrompido (timeout/kill)'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+      stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object(
+        'running', false,
+        'platform_kill_age_s', greatest(0, floor(extract(epoch from (now() - created_at))))::int
+      )
     where kind in ('fast', 'full')
       and coalesce(stats->>'running', 'false') = 'true'
       and (
@@ -331,13 +334,39 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 14 * 60_000): Promise<
         else 'error'
       end,
       error = coalesce(nullif(error, ''), 'abandoned_partial_timeout'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+      stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object(
+        'running', false,
+        'platform_kill_age_s', greatest(0, floor(extract(epoch from (now() - created_at))))::int
+      )
     where coalesce(stats->>'running', 'false') = 'true'
       and kind in ('fast', 'full', 'stock_fast', 'stock_full')
       and created_at < ${cutoff}::timestamptz
     returning id
   `) as { id: string }[]
   return rows.length
+}
+
+/**
+ * Full runs recentes mortos por kill duro (sem aborted limpo).
+ * Usado por /api/health para ir RED se Fluid/maxDuration falhar.
+ */
+export async function getRecentHardPlatformTimeoutFullRuns(
+  lookbackHours = 24,
+): Promise<AvecSyncRun[]> {
+  const sql = getSql()
+  const rows = (await sql`
+    select *
+    from avec_sync_runs
+    where kind = 'full'
+      and coalesce(stats->>'running', 'false') <> 'true'
+      and coalesce(stats->>'aborted', 'false') <> 'true'
+      and status in ('error', 'partial')
+      and error ~* 'abandoned|Sync interrompido|timeout/kill|interrompido'
+      and created_at > now() - (${lookbackHours}::text || ' hours')::interval
+    order by created_at desc
+    limit 20
+  `) as AvecSyncRun[]
+  return rows
 }
 
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
@@ -705,6 +734,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             doneAt: scheduledAt,
             professionalName: appt.professional,
             lastPrice: appt.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (isLostOutcome) {
@@ -880,6 +910,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (
@@ -893,14 +924,36 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             doneAt: service.scheduled_at,
             professionalName: att.professional,
             lastPrice: att.price,
+            source: 'avec',
           })
           stats.services_completed++
         } else if (att.professional || att.price != null) {
-          await patchServiceVisitMeta(service.id, {
+          const patched = await patchServiceVisitMeta(service.id, {
             professionalName: att.professional,
             lastPrice: att.price,
             allowLastPrice: true,
           })
+          // 0051 Pago já limpou scheduled_at: o patch só mexe no catálogo.
+          // last_done_at vem do UPDATE (não do cache) — preço/pro do 0002
+          // entram na linha do dia em client_service_visits.
+          const visitAt =
+            patched?.last_done_at &&
+            attendedDay &&
+            toSalonDateIso(patched.last_done_at) === attendedDay
+              ? patched.last_done_at
+              : null
+          if (visitAt && patched) {
+            await recordServiceVisit({
+              contactId: patched.contact_id,
+              clientServiceId: patched.id,
+              serviceName: patched.name,
+              category: patched.category,
+              doneAt: visitAt,
+              professionalName: att.professional ?? patched.professional_name,
+              price: att.price ?? null,
+              source: 'avec',
+            })
+          }
         }
         if (att.professional && isNailService(att.serviceName)) {
           await setPreferredManicurist(contact.id, att.professional)
@@ -970,6 +1023,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else if (
               service.scheduled_at &&
@@ -979,11 +1033,13 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
                 doneAt: service.scheduled_at,
                 professionalName: att.professional,
                 lastPrice: att.price,
+                source: 'avec',
               })
             } else {
               await applyVisitDayToService(service.id, day, {
                 professionalName: att.professional,
                 lastPrice: att.price,
+                recordVisit: true,
               })
             }
           } else {
@@ -1532,10 +1588,9 @@ async function runAvecSyncUnlocked(
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
       ] as const
-      // director-visits primeiro: o Relatório gerência depende disso e o budget
-      // do full/agenda costuma esgotar antes do bloco no fim do sync.
+      // director-visits NÃO entra aqui — cron dedicado (/api/avec/sync/director-visits)
+      // consome trimestres e estourava o budget do full/agenda (timeouts).
       const agendaSteps = [
-        ['director-visits', () => syncDirectorVisits(stats, syncRunId, { shouldAbort: () => syncBudgetExhausted() })],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
@@ -1575,7 +1630,7 @@ async function runAvecSyncUnlocked(
       }
     }
 
-    // director-visits já roda como 1º passo do full/agenda (acima).
+    // director-visits: cron dedicado (não no full/agenda).
 
     if (runCatalog) {
       if (!syncBudgetExhausted()) {

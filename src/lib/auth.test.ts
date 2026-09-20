@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  buildAuthSession,
   canViewRevenue,
   createSessionToken,
+  createV3SessionToken,
   isAuthEnabled,
   isStaffAuthConfigured,
   validateCredentials,
@@ -92,5 +94,25 @@ describe('auth dual login', () => {
     // Trocar o exp muda a assinatura — cookie adulterado não valida.
     const forged = await createSessionToken('admin', 'admin', exp + 60_000)
     expect(forged).not.toEqual(token)
+  })
+
+  it('emite token v3 com nome do colaborador', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+    const session = buildAuthSession('ana@rom', 'staff', { displayName: 'Ana Souza', employeeId: 'emp-1' })
+    const token = await createV3SessionToken(session)
+    expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
+  })
+
+  it('guarda extras de módulo no token v3', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+    const session = buildAuthSession('ana@rom', 'staff', {
+      displayName: 'Ana',
+      employeeId: 'emp-1',
+      modules: ['financeiro'],
+    })
+    expect(session.modules).toEqual(['financeiro'])
+    const token = await createV3SessionToken(session)
+    const payload = token.split('.')[2]
+    expect(payload).toBeTruthy()
   })
 })
