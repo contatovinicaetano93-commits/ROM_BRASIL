@@ -14,7 +14,7 @@ import {
 } from '@/lib/salon/p1-metrics'
 import {
   resolveMonthWindow,
-  resolvePreviousComparableWindow,
+  resolveComparableWindow,
 } from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { asJsonArray } from '@/lib/sql-json'
@@ -42,9 +42,11 @@ export async function GET(req: NextRequest) {
 
     const monthRaw = req.nextUrl.searchParams.get('month')?.trim()
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
+    const compareRaw = req.nextUrl.searchParams.get('compare')?.trim()
+    const compareMonth = compareRaw && /^\d{4}-\d{2}$/.test(compareRaw) ? compareRaw : null
 
     const data = await ttlGetOrSet(
-      `kpis:dashboard:v3:${month ?? 'latest'}`,
+      `kpis:dashboard:v4:${month ?? 'latest'}:cmp=${compareMonth ?? 'yoy'}`,
       45_000,
       async () => {
         // 1) Contact KPIs
@@ -65,8 +67,8 @@ export async function GET(req: NextRequest) {
         // 2) TM
         const referenceDay = month ? monthToDateRange(month).to : todayIso()
         const tm = {
-          ...(await fetchTmComparison(referenceDay)),
-          note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
+          ...(await fetchTmComparison(referenceDay, compareMonth)),
+          note: 'TM = 1ª vista no salão (ou após hora marcada) até o 0051 só mostrar Pago. Não fecha se ainda houver linha aberta no mesmo dia. Catálogo 0223 não entra.',
         }
 
         // 3) Ranking profissionais
@@ -98,9 +100,9 @@ export async function GET(req: NextRequest) {
           }
         } else {
           const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
-          // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
+          // YoY (ou mês escolhido) — mesmo dia se MTD.
           const window = resolveMonthWindow(month ?? latest.day.slice(0, 7), latest.day)
-          const prevWindow = resolvePreviousComparableWindow(window)
+          const prevWindow = resolveComparableWindow(window, compareMonth)
           const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
           const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
           const compareByName = new Map(comparePros.map((p) => [normalizeProName(p.name), p]))
@@ -135,7 +137,10 @@ export async function GET(req: NextRequest) {
         }
 
         // 4) Período + sync
-        const periodBase = await computePeriodAnalytics({ month: month ?? undefined })
+        const periodBase = await computePeriodAnalytics({
+          month: month ?? undefined,
+          compareMonth,
+        })
         const sync = await loadAvecSyncMeta()
         const period = { ...periodBase, sync }
 

@@ -7,7 +7,11 @@ import {
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
-import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
+import {
+  formatMonthWindowLabel,
+  resolveMonthWindow,
+  resolveComparableWindow,
+} from '@/lib/salon/month-window'
 
 export interface FinanceCategory {
   id: string
@@ -436,7 +440,12 @@ async function listDailyMetrics(from: string, to: string): Promise<FinanceDayPoi
         from salon_daily_metrics
         where day >= ${from}::date and day <= ${to}::date
         order by day asc
-      `) as { day: string; revenue: number | null; attended: number | null; ticket_avg: number | null }[])(),
+      `) as {
+        day: string
+        revenue: number | null
+        attended: number | null
+        ticket_avg: number | null
+      }[])(),
     listDailyOmieExpenses(from, to),
   ])
   return mergeDailyFinanceSeries(metricRows, expenseRows)
@@ -609,7 +618,8 @@ export interface FinanceKpiBucket {
   margin_after_cmv: number | null
   /** (receita - despesas) / receita, em % — null se não houver receita no período. */
   gross_margin: number | null
-  cash_flow: number
+  /** null quando ainda não há receita conhecida (não mostrar −despesas como “fluxo”). */
+  cash_flow: number | null
   /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
   payment_mix: P2PaymentRow[]
   /** Receita (métricas) vs soma das formas de pagamento (0081). */
@@ -632,8 +642,8 @@ async function buildBucket(
   const from = range?.from ?? base.from
   const to = range?.to ?? base.to
   const label = range?.label ?? labelMonthPt(monthKey)
-  // Despesas na mesma janela da receita (MTD↔MTD). Contas a Pagar continua mês cheio
-  // via /api/financeiro/despesas (omieFullMonthRange) — lista ≠ card MoM.
+  // Despesas no mesmo recorte da receita (MTD se o mês está aberto).
+  // Lista /api/financeiro/despesas continua mês calendário (títulos a vencer).
   const [metricsRevenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
@@ -689,14 +699,17 @@ async function buildBucket(
     cmv_coverage: cmvCoverage,
     margin_after_cmv,
     gross_margin,
-    cash_flow: Math.round((revenue - expenses) * 100) / 100,
+    cash_flow:
+      revenue_source === 'empty'
+        ? null
+        : Math.round((revenueRounded - expensesRounded) * 100) / 100,
     payment_mix,
     payment_reconciliation: reconcileRevenueToPayments(revenueRounded, payment_mix),
     fiscal_split,
   }
 }
 
-/** KPIs do Financeiro. Receita vem de salon_daily_metrics (Avec); despesas são cadastro manual. */
+/** KPIs do Financeiro. Receita = Avec (métricas/0081); despesas = Omie (vencimento) + manuais. */
 export async function computeFinanceKpis(opts?: {
   month?: string
   compareMonth?: string
@@ -706,21 +719,8 @@ export async function computeFinanceKpis(opts?: {
     normalizeMonthKey(opts?.month) ?? currentMonthKey(todayIso())
   const currentWindow = resolveMonthWindow(current)
   const compareKey = normalizeMonthKey(opts?.compareMonth)
-  const prevWindow = compareKey
-    ? (() => {
-        const w = resolveMonthWindow(compareKey, currentWindow.to)
-        return {
-          month: w.month,
-          from: w.from,
-          to: w.to,
-          label: labelMonthPt(w.month),
-          mtd_aligned: false,
-        }
-      })()
-    : resolvePreviousComparableWindow(currentWindow)
-  const currentLabel = currentWindow.mtd
-    ? `${labelMonthPt(current)} (até dia ${Number(currentWindow.to.slice(8, 10))})`
-    : labelMonthPt(current)
+  const prevWindow = resolveComparableWindow(currentWindow, compareKey)
+  const currentLabel = formatMonthWindowLabel(current, currentWindow.to, currentWindow.mtd)
   // Sequencial: bucket atual depois comparado — reduz pico no pooler.
   const currentBucket = await buildBucket(current, {
     from: currentWindow.from,

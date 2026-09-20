@@ -285,6 +285,22 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "036_p3_presence_flags",
+      "file": "delta-p3-presence-flags.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "037_comanda_spans",
+      "file": "delta-comanda-spans.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

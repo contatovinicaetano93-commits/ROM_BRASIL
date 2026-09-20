@@ -8,7 +8,7 @@ import {
 } from '@/lib/salon/p1-metrics'
 import {
   resolveMonthWindow,
-  resolvePreviousComparableWindow,
+  resolveComparableWindow,
 } from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const month = req.nextUrl.searchParams.get('month')?.trim()
+    const compareRaw = req.nextUrl.searchParams.get('compare')?.trim()
+    const compareMonth = compareRaw && /^\d{4}-\d{2}$/.test(compareRaw) ? compareRaw : null
     const latest =
       month && /^\d{4}-\d{2}$/.test(month)
         ? await getSalonP1DailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
@@ -50,12 +52,12 @@ export async function GET(req: NextRequest) {
     }
 
     const professionalsRaw = asJsonArray<P1ProfessionalRow>(latest.professionals)
-    // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
+    // YoY (ou mês escolhido) — mesmo dia se MTD.
     const window = resolveMonthWindow(
       month && /^\d{4}-\d{2}$/.test(month) ? month : latest.day.slice(0, 7),
       latest.day,
     )
-    const prevWindow = resolvePreviousComparableWindow(window)
+    const prevWindow = resolveComparableWindow(window, compareMonth)
     const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
     const comparePros = asJsonArray<P1ProfessionalRow>(compare?.professionals)
     const compareByName = new Map(comparePros.map((p) => [normalizeProName(p.name), p]))

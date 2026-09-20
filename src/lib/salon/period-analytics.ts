@@ -13,7 +13,7 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
-import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -176,7 +176,7 @@ export interface PeriodAnalytics {
   month_attended: number | null
   /** true se a janela atual é MTD (mês corrente). */
   mtd: boolean
-  /** Mês anterior alinhado (MTD→mesmo dia; mês fechado→mês cheio). */
+  /** Período comparado (YoY por padrão; mês escolhido se informado). */
   previous: PeriodMonthTotals | null
 }
 
@@ -186,10 +186,11 @@ export interface PeriodAnalytics {
  */
 export async function computePeriodAnalytics(opts?: {
   month?: string
+  compareMonth?: string | null
 }): Promise<PeriodAnalytics> {
   const window = resolveMonthWindow(opts?.month ?? todayIso().slice(0, 7))
   const { month, from, to } = window
-  const prevWindow = resolvePreviousComparableWindow(window)
+  const prevWindow = resolveComparableWindow(window, opts?.compareMonth)
   const nearOpts = { maxSkewDays: 14 }
   // Sequencial no pooler max:1 — Promise.all(5) × 2 lotes competia com outras
   // lambdas e o Overview ficava em “Carregando…” até abortar.
@@ -242,8 +243,8 @@ export async function computePeriodAnalytics(opts?: {
     packages_revenue,
     booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
     acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
-    return_rate: p3 != null ? Number(p3.return_rate) : null,
-    new_clients_period: p3 != null ? Number(p3.new_clients_period ?? 0) || 0 : null,
+    return_rate: p3?.return_rate ?? null,
+    new_clients_period: p3?.new_clients_period ?? null,
     top_professionals: professionals.slice(0, 8),
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
     month_revenue: totals.revenue,
@@ -262,8 +263,8 @@ export async function computePeriodAnalytics(opts?: {
       ticket_avg: prevTicket,
       occupancy_avg: prevP1 ? averageOccupancy(prevProfessionals) : null,
       packages_revenue: prevPackagesRevenue,
-      new_clients_period: prevP3 != null ? Number(prevP3.new_clients_period ?? 0) || 0 : null,
-      return_rate: prevP3 != null ? Number(prevP3.return_rate) : null,
+      new_clients_period: prevP3?.new_clients_period ?? null,
+      return_rate: prevP3?.return_rate ?? null,
     },
   }
 }

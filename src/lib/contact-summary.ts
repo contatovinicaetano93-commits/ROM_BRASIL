@@ -3,6 +3,7 @@ import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { DUE_SOON_DAYS, NOVOS_WINDOW_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 import {
   ACTIVATED_QUEUE_WINDOW_DAYS,
   countPendingActivatedContacts,
@@ -49,7 +50,7 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela + sem serviço + ativados. */
+/** Filas da tela Contatos — urgência + Sem vínculo + sem serviço + ativados + entrada no mês. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
@@ -57,6 +58,11 @@ export interface ContactQueueCounts extends UrgencyQueueCounts {
   sem_servicos: number
   /** Reativados pelo painel aguardando agenda/visita Avec (30d). */
   ativados: number
+  /**
+   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
+   * status ≠ importado. Não é fila de trabalho — só referência + link.
+   */
+  base_ativa: number
 }
 
 export interface ContactListResult {
@@ -719,18 +725,35 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço + ativados). */
+/** Entrada no mês — mesma regra de `funnel_contacts` em Visão (não é fila). */
+export async function countBaseAtiva(): Promise<number> {
+  const sql = getSql()
+  const { from, to } = resolveMonthWindow(todayIso().slice(0, 7))
+  const rows = (await sql`
+    select count(*) filter (where status <> 'importado')::int as n
+    from contacts
+    where anonymized_at is null
+      and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+        >= ${from}::date
+      and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+        <= ${to}::date
+  `) as { n: number }[]
+  return Number(rows[0]?.n) || 0
+}
+
+/** Totais das filas Contatos (reativar + Sem vínculo + sem serviço + ativados) + entrada no mês. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos, sem_servicos, ativados] = await Promise.all([
+  const [urgency, novos, sem_servicos, ativados, base_ativa] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
     countContactsWithoutServices({ day: opts?.day }),
     countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS),
+    countBaseAtiva(),
   ])
-  return { ...urgency, novos, sem_servicos, ativados }
+  return { ...urgency, novos, sem_servicos, ativados, base_ativa }
 }
 
 /** Lista contatos na fila Ativados (outreach pelo painel, aguardando Avec). */
