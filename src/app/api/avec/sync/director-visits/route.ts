@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-visits'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { isSyncBudgetExhausted, setActiveSyncDeadlineAt } from '@/lib/avec/sync-budget'
 import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
@@ -35,6 +36,9 @@ import {
  */
 export const maxDuration = 800
 warnIfLongMaxDuration('/api/avec/sync/director-visits', maxDuration)
+
+/** Margem vs maxDuration=800 — abort limpo em vez de kill 504. */
+const DIRECTOR_VISITS_BUDGET_MS = 720_000
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()
@@ -168,16 +172,31 @@ async function runSync(req: NextRequest) {
         await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
         const stats = emptyStats()
-        await syncDirectorVisits(stats, undefined, { quarters, force })
+        setActiveSyncDeadlineAt(Date.now() + DIRECTOR_VISITS_BUDGET_MS)
+        try {
+          await syncDirectorVisits(stats, undefined, {
+            quarters,
+            force,
+            shouldAbort: isSyncBudgetExhausted,
+          })
+        } finally {
+          setActiveSyncDeadlineAt(null)
+        }
         const status = await listVisitCoverage()
 
         const okRun = stats.errors.length === 0
         return ok({
           ran: true,
-          status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
+          status: okRun
+            ? stats.aborted || stats.warnings.some((w) => /truncado|orçamento/i.test(w))
+              ? 'partial'
+              : 'ok'
+            : 'error',
           director_visits_upserted: stats.director_visits_upserted ?? 0,
           quarters: quarters ?? null,
           force,
+          aborted: Boolean(stats.aborted),
+          budget_ms: DIRECTOR_VISITS_BUDGET_MS,
           warnings: stats.warnings,
           errors: stats.errors,
           coverage: status.coverage,
