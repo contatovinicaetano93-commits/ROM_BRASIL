@@ -63,4 +63,4 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
 - **`maxDuration = 800` nas rotas `/api/avec/sync*` exige Vercel Fluid Compute (Pro).** Sem Fluid, a Vercel capa em 300s — as rotas logam aviso no cold start (`warnIfLongMaxDuration`). Não baixar para 300 sem confirmar que o full cabe no budget.
-- **~30 ocorrências de `react-hooks/set-state-in-effect`** entre Brasil e Iguatemi. É correção de verdade (loop de render, estado velho), não estilo. É o que impede o lint de virar gate bloqueante.
+- **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any` + `react-hooks/refs`; `set-state-in-effect` já zerou).

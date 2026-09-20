@@ -79,6 +79,42 @@ export class AuditLogger {
       return []
     }
   }
+
+  static async listByResourcePrefix(prefix: string, limit = 200): Promise<AuditLog[]> {
+    const sql = getSql()
+    const like = `${prefix}%`
+    try {
+      return (await sql`
+        select * from audit_logs
+        where resource like ${like}
+        order by created_at desc
+        limit ${limit}
+      `) as AuditLog[]
+    } catch (e) {
+      logger.warn('Failed to fetch audit logs by resource prefix', {
+        prefix,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return []
+    }
+  }
+
+  static async listRecent(limit = 100): Promise<AuditLog[]> {
+    const sql = getSql()
+    const safeLimit = Math.min(Math.max(limit, 1), 200)
+    try {
+      return (await sql`
+        select * from audit_logs
+        order by created_at desc
+        limit ${safeLimit}
+      `) as AuditLog[]
+    } catch (e) {
+      logger.warn('Failed to fetch recent audit logs', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return []
+    }
+  }
 }
 
 export function extractIP(req: Request): string {

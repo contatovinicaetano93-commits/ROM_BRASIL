@@ -109,3 +109,22 @@ export function getSql(databaseUrl?: string): Sql {
   if (!url) throw new Error('DATABASE_URL não configurada')
   return wrap(getClient(url))
 }
+
+/**
+ * Banco da intranet (colaboradores, CMS, RomFlow).
+ * `INTRANET_DATABASE_URL` quando definido; senão o mesmo `DATABASE_URL` do salão.
+ */
+type IntranetDbEnv = {
+  INTRANET_DATABASE_URL?: string
+  DATABASE_URL?: string
+}
+
+export function peekIntranetDatabaseUrl(env: IntranetDbEnv = process.env as IntranetDbEnv): string | null {
+  return env.INTRANET_DATABASE_URL?.trim() || env.DATABASE_URL?.trim() || null
+}
+
+export function getIntranetSql(databaseUrl?: string): Sql {
+  const url = (databaseUrl ?? peekIntranetDatabaseUrl())?.trim()
+  if (!url) throw new Error('DATABASE_URL não configurada')
+  return wrap(getClient(url))
+}

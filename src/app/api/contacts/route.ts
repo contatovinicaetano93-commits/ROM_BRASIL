@@ -3,6 +3,7 @@ import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
   countContactQueues,
+  listActivatedContacts,
   listContactsWithSummary,
   listContactsWithoutServices,
   listNewContactsNotInAvec,
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
       searchParams.get('no_services') === '1' ||
       searchParams.get('no_services') === 'true' ||
       searchParams.get('queue') === 'sem_servicos'
+    const activatedQueue = searchParams.get('queue') === 'ativados'
     const dayRaw = searchParams.get('day')
     const day = dayRaw && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : null
 
@@ -112,6 +114,29 @@ export async function GET(req: NextRequest) {
         pending: false,
         queue: 'novos',
         day: day ?? 'today',
+        queues: result.queues,
+        sync: syncPayload,
+      })
+    }
+
+    if (activatedQueue) {
+      const cacheKey = `contacts:ativados:v1:lim=${limit}`
+      const result = await cachedFetch(
+        cacheKey,
+        async () => {
+          const listed = await listActivatedContacts({ limit })
+          const queues = await countContactQueues({ channel, day })
+          return { items: listed.items, total: listed.total, queues }
+        },
+        30,
+      )
+      return okCached(result.items, 30, {
+        total: result.total,
+        limit,
+        status: 'ativados',
+        channel: channel ?? 'all',
+        pending: false,
+        queue: 'ativados',
         queues: result.queues,
         sync: syncPayload,
       })

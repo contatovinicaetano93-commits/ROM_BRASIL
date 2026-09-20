@@ -4,6 +4,11 @@ import type { ClientService } from '@/lib/services'
 import { DUE_SOON_DAYS, NOVOS_WINDOW_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
+import {
+  ACTIVATED_QUEUE_WINDOW_DAYS,
+  countPendingActivatedContacts,
+  listPendingActivatedContacts,
+} from '@/lib/salon/reactivation-kpi'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
@@ -16,6 +21,8 @@ export interface ContactListItem extends ContactRow {
   top_action: string | null
   /** Próximo horário na janela Agendados (hoje → +SCHEDULED_SOON_DAYS). */
   next_scheduled_at: string | null
+  /** Último outreach de reativação (fila Ativados). */
+  outreach_at?: string | null
 }
 
 export interface ListContactsWithSummaryOpts {
@@ -43,15 +50,17 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela + sem serviço. */
+/** Filas da tela Contatos — urgência + Sem vínculo + sem serviço + ativados + entrada no mês. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
+  /** Reativados pelo painel aguardando agenda/visita Avec (30d). */
+  ativados: number
   /**
-   * Funil CRM (Visão): mesma regra de `funnel_contacts` no mês corrente.
-   * Não é fila de trabalho — só referência + link.
+   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
+   * status ≠ importado. Não é fila de trabalho — só referência + link.
    */
   base_ativa: number
 }
@@ -716,7 +725,7 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Funil CRM — mesma regra de `funnel_contacts` em Visão (mês corrente, não é fila). */
+/** Entrada no mês — mesma regra de `funnel_contacts` em Visão (não é fila). */
 export async function countBaseAtiva(): Promise<number> {
   const sql = getSql()
   const { from, to } = resolveMonthWindow(todayIso().slice(0, 7))
@@ -732,16 +741,35 @@ export async function countBaseAtiva(): Promise<number> {
   return Number(rows[0]?.n) || 0
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço) + base ativa. */
+/** Totais das filas Contatos (reativar + Sem vínculo + sem serviço + ativados) + entrada no mês. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos, sem_servicos, base_ativa] = await Promise.all([
+  const [urgency, novos, sem_servicos, ativados, base_ativa] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
     countContactsWithoutServices({ day: opts?.day }),
+    countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS),
     countBaseAtiva(),
   ])
-  return { ...urgency, novos, sem_servicos, base_ativa }
+  return { ...urgency, novos, sem_servicos, ativados, base_ativa }
+}
+
+/** Lista contatos na fila Ativados (outreach pelo painel, aguardando Avec). */
+export async function listActivatedContacts(opts?: {
+  limit?: number
+}): Promise<ContactListResult> {
+  const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+  const pending = await listPendingActivatedContacts({ limit })
+  const outreachAt = new Map(pending.map((p) => [p.contact_id, p.contacted_at]))
+  const ids = pending.map((p) => p.contact_id)
+  const byContact = await loadServicesByContactIds(ids)
+  const contacts = await orderContactsByIds(ids)
+  const items = withUrgency(contacts, byContact).map((item) => ({
+    ...item,
+    outreach_at: outreachAt.get(item.id) ?? null,
+  }))
+  const total = await countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS)
+  return { items, total }
 }

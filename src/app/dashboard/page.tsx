@@ -19,6 +19,7 @@ import {
 import { SectionCard, CountBadge, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
 import { VisaoSection } from '../_components/VisaoSection'
+import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 
 import { apiFetch } from '@/lib/api-client'
@@ -233,6 +234,7 @@ export default function DashboardPage() {
             passado (mesmo dia se o mês estiver aberto). Operação do dia em Hoje · dinheiro em
             Financeiro · fechamento em Relatórios.
           </p>
+          <VisaoAnaliticaNav />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
@@ -692,11 +694,11 @@ export default function DashboardPage() {
                 <TrendingUp size={13} />
                 {(conversionRate * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-muted">conversão na base ativa (não dos leads do mês)</span>
+              <span className="text-xs text-muted">conversão no funil do mês (CRM)</span>
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Base ativa (estoque atual, não o mês): {funnelContacts.toLocaleString('pt-BR')} ·
+                Entrada no mês (funil CRM): {funnelContacts.toLocaleString('pt-BR')} ·
                 importados Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>

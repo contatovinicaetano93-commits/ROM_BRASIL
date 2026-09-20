@@ -8,6 +8,7 @@ import type {
   NormalizedStockPurchase,
 } from '@/lib/avec/normalize'
 import { normalizeSearchText } from '@/lib/search'
+import { reconcileAlmoxAfterAvecQty } from '@/lib/stock-points-db'
 
 function productNameKey(name: string): string {
   return normalizeSearchText(name).toLowerCase()
@@ -307,7 +308,15 @@ export async function upsertStockProductFromPosition(
     returning id
   `) as { id: string }[]
 
-  return { productId: rows[0]!.id, previousQty }
+  const productId = rows[0]!.id
+  // Camada ROM: Almox absorve Avec − pisos (não inventa locais na Avec).
+  try {
+    await reconcileAlmoxAfterAvecQty(productId, pos.quantity)
+  } catch {
+    // Migration 035 ainda não aplicada — sync Avec segue normal.
+  }
+
+  return { productId, previousQty }
 }
 
 async function ensureProductExists(avecProductId: string, name: string): Promise<string> {

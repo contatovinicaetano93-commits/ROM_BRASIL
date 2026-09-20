@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
-export type ClientAuthRole = 'admin' | 'staff' | 'financeiro' | 'estoque'
+export type ClientAuthRole = 'admin' | 'staff' | 'financeiro' | 'estoque' | 'mkt'
 
 export interface ClientSession {
   auth_enabled: boolean
@@ -10,6 +10,10 @@ export interface ClientSession {
   user: string | null
   role: ClientAuthRole | null
   can_view_revenue: boolean
+  displayName?: string | null
+  employeeId?: string | null
+  canPublish?: boolean
+  modules?: string[]
   staff_login_configured?: boolean
 }
 

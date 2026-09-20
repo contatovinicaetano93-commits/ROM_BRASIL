@@ -75,8 +75,8 @@ interface FinanceKpiBucket {
   ticket_avg: number | null
   daily: {
     day: string
-    revenue: number
-    attended: number
+    revenue: number | null
+    attended: number | null
     ticket_avg: number | null
     expenses_servicos: number
     expenses_comercio: number
@@ -751,7 +751,9 @@ export default function FinanceiroPage() {
           {' ('}
           {kpis.previous.from.slice(8, 10)}–{kpis.previous.to.slice(8, 10)}
           {')'}
-          . No mês corrente o anterior é cortado no mesmo dia (janela comparável).
+          . No mês corrente o anterior é cortado no mesmo dia (janela comparável) —
+          receita e despesas dos cards. A lista Contas a Pagar abaixo continua no mês
+          calendário cheio (Omie).
         </p>
       )}
 
@@ -1095,7 +1097,9 @@ export default function FinanceiroPage() {
                       <td className="py-1.5 tabular-nums">
                         {formatCurrency(d.expenses_comercio ?? 0)}
                       </td>
-                      <td className="py-1.5 tabular-nums">{d.attended}</td>
+                      <td className="py-1.5 tabular-nums">
+                        {d.attended != null ? d.attended : '—'}
+                      </td>
                       <td className="py-1.5 tabular-nums">
                         {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
                       </td>
