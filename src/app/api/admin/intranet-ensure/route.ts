@@ -3,7 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { getIntranetSql, peekIntranetDatabaseUrl } from '@/lib/db'
-import { ensureIntranetProLinkColumn } from '@/lib/intranet/ensure-schema'
+import { ensureIntranetSchema } from '@/lib/intranet/ensure-schema'
 
 async function authorize(req: NextRequest) {
   if (isCronAuthorized(req)) return { ok: true as const }
@@ -18,16 +18,29 @@ function dbHost(url: string | null | undefined): string | null {
   return match?.[1] ?? null
 }
 
-/** POST — só garante professional_name no banco da intranet (sem outras migrations). */
+/** POST — aplica deltas intranet no Neon (sem migrations do salão). */
 export async function POST(req: NextRequest) {
   try {
     const auth = await authorize(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const host = dbHost(peekIntranetDatabaseUrl())
-    await ensureIntranetProLinkColumn()
+    const applied = await ensureIntranetSchema()
 
     const sql = getIntranetSql()
+    const tables = (await sql.query(`
+      select table_name
+      from information_schema.tables
+      where table_schema = 'public'
+        and table_name in (
+          'intranet_employees',
+          'intranet_employee_modules',
+          'intranet_employee_companies',
+          'intranet_employee_areas'
+        )
+      order by table_name
+    `)) as { table_name: string }[]
+
     const cols = (await sql.query(`
       select column_name
       from information_schema.columns
@@ -36,10 +49,13 @@ export async function POST(req: NextRequest) {
         and column_name = 'professional_name'
     `)) as { column_name: string }[]
 
+    const names = tables.map((t) => t.table_name)
     return ok({
       host,
+      files: applied.files,
+      tables: names,
       professionalNameReady: cols.length > 0,
-      columns: cols.map((c) => c.column_name),
+      modulesReady: names.includes('intranet_employee_modules'),
     })
   } catch (e) {
     return handleError(e)
