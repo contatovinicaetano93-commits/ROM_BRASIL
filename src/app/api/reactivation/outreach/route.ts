@@ -1,9 +1,13 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth } from '@/lib/auth'
+import { requireSession } from '@/lib/auth'
 import { MemoryCache } from '@/lib/cache'
 import { logReactivationOutreach } from '@/lib/salon/reactivation-kpi'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 const schema = z.object({
   contactId: z.string().uuid().optional(),
@@ -17,12 +21,22 @@ const schema = z.object({
 /** POST — registra outreach de reativação via WhatsApp (antes de abrir o wa.me). */
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const body = schema.parse(await req.json())
     if (!body.contactId && !body.phone) {
       return err('Informe contactId ou phone', 400)
+    }
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope && body.contactId) {
+      const allowed = await contactBelongsToProfessional(body.contactId, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
+    // Profissional sem contactId não deve registrar outreach por telefone avulso (vaza base).
+    if (proScope && !body.contactId) {
+      return err('Informe contactId', 400)
     }
 
     const result = await logReactivationOutreach({
