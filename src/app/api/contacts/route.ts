@@ -17,6 +17,7 @@ import { requireAuth, requireSession } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import {
   listContactIdsOwnedByProfessional,
+  professionalKeepsUnitLeadQueues,
   resolveSessionProfessionalScope,
 } from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
@@ -87,40 +88,39 @@ export async function GET(req: NextRequest) {
     }
 
     const proScope = await resolveSessionProfessionalScope(auth.session)
-    if (proScope) {
-      const ownedIds = await listContactIdsOwnedByProfessional(proScope)
-      const ownedSet = new Set(ownedIds)
+    const keepUnitLeads = professionalKeepsUnitLeadQueues(auth.session)
+    const ownedIds = proScope ? await listContactIdsOwnedByProfessional(proScope) : null
 
-      if (countsOnly) {
+    if (countsOnly) {
+      if (proScope && ownedIds) {
         const listed = await listContactsOwnedByIds(ownedIds, {
           limit: 2000,
           pendingOnly: true,
           orderBy: 'urgency',
         })
-        const queues = {
+        const urgency = {
           overdue: listed.items.filter((c) => c.overdue > 0).length,
           due_soon: listed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
           scheduled: listed.items.filter((c) => c.scheduled_soon > 0).length,
-          novos: 0,
-          sem_servicos: 0,
-          ativados: 0,
-          base_ativa: ownedIds.length,
         }
-        return okCached(null, 15, { queues, sync: syncPayload, professional_scope: proScope })
-      }
-
-      if (newNotAvec || withoutServices || activatedQueue) {
-        return okCached([], 15, {
-          total: 0,
-          limit,
-          status: status ?? 'all',
-          channel: channel ?? 'all',
-          pending: false,
-          queue: newNotAvec ? 'novos' : withoutServices ? 'sem_servicos' : 'ativados',
+        // Dono/financeiro: urgência da carteira + leads da unidade (Novos/Sem serviço).
+        if (keepUnitLeads) {
+          const unit = await countContactQueues({ channel, day })
+          return okCached(null, 15, {
+            queues: {
+              ...urgency,
+              novos: unit.novos,
+              sem_servicos: unit.sem_servicos,
+              ativados: unit.ativados,
+              base_ativa: ownedIds.length,
+            },
+            sync: syncPayload,
+            professional_scope: proScope,
+          })
+        }
+        return okCached(null, 15, {
           queues: {
-            overdue: 0,
-            due_soon: 0,
-            scheduled: 0,
+            ...urgency,
             novos: 0,
             sem_servicos: 0,
             ativados: 0,
@@ -130,32 +130,6 @@ export async function GET(req: NextRequest) {
           professional_scope: proScope,
         })
       }
-
-      const listed = await listContactsOwnedByIds(ownedIds, {
-        limit,
-        query,
-        pendingOnly,
-        orderBy: sort === 'name' ? 'name' : 'urgency',
-        urgencyQueue,
-      })
-      let items = listed.items
-      if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
-        items = [...items].sort(compareByOverdueThenName)
-      }
-      return okCached(items, query ? 15 : 30, {
-        total: listed.total,
-        limit,
-        status: status ?? 'all',
-        channel: channel ?? 'all',
-        pending: pendingOnly,
-        queue: urgencyQueue ?? 'all',
-        sync: syncPayload,
-        professional_scope: proScope,
-        owned_total: ownedSet.size,
-      })
-    }
-
-    if (countsOnly) {
       const cacheKey = `contacts:queue-counts:v6:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
         cacheKey,
@@ -163,6 +137,30 @@ export async function GET(req: NextRequest) {
         30,
       )
       return okCached(null, 30, { queues, sync: syncPayload })
+    }
+
+    // Staff profissional: sem filas de lead da unidade (sigilo).
+    // Dono/financeiro com professional_name: cai no fluxo unitário abaixo.
+    if (proScope && !keepUnitLeads && (newNotAvec || withoutServices || activatedQueue)) {
+      return okCached([], 15, {
+        total: 0,
+        limit,
+        status: status ?? 'all',
+        channel: channel ?? 'all',
+        pending: false,
+        queue: newNotAvec ? 'novos' : withoutServices ? 'sem_servicos' : 'ativados',
+        queues: {
+          overdue: 0,
+          due_soon: 0,
+          scheduled: 0,
+          novos: 0,
+          sem_servicos: 0,
+          ativados: 0,
+          base_ativa: ownedIds?.length ?? 0,
+        },
+        sync: syncPayload,
+        professional_scope: proScope,
+      })
     }
 
     if (newNotAvec) {
@@ -236,6 +234,32 @@ export async function GET(req: NextRequest) {
         queue: 'sem_servicos',
         day: day ?? 'today',
         queues: result.queues,
+      })
+    }
+
+    // Carteira do profissional (Reativar / busca / lista padrão).
+    if (proScope && ownedIds) {
+      const listed = await listContactsOwnedByIds(ownedIds, {
+        limit,
+        query,
+        pendingOnly,
+        orderBy: sort === 'name' ? 'name' : 'urgency',
+        urgencyQueue,
+      })
+      let items = listed.items
+      if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
+        items = [...items].sort(compareByOverdueThenName)
+      }
+      return okCached(items, query ? 15 : 30, {
+        total: listed.total,
+        limit,
+        status: status ?? 'all',
+        channel: channel ?? 'all',
+        pending: pendingOnly,
+        queue: urgencyQueue ?? 'all',
+        sync: syncPayload,
+        professional_scope: proScope,
+        owned_total: ownedIds.length,
       })
     }
 
