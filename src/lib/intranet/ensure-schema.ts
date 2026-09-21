@@ -1,27 +1,63 @@
 import 'server-only'
 
 import { getIntranetSql, peekIntranetDatabaseUrl } from '@/lib/db'
+import { readDbSqlFile, splitSqlStatements } from '@/lib/schema-migrations/sql'
 
 /**
- * Schema da intranet (colaboradores) pode viver em INTRANET_DATABASE_URL
- * (Neon) enquanto as migrations admin rodam no DATABASE_URL (salão).
- * Garante colunas críticas sem depender do runner único.
+ * Schema da intranet (colaboradores / Flow / CMS) pode viver em
+ * INTRANET_DATABASE_URL (Neon) enquanto POST /api/admin/migrations
+ * roda no DATABASE_URL do salão (Supabase). Aplica os deltas intranet
+ * idempotentes no banco certo.
  */
-let proLinkOnce: Promise<void> | null = null
+const INTRANET_SQL_FILES = [
+  'delta-intranet.sql',
+  'delta-intranet-modules.sql',
+  'delta-intranet-pro-link.sql',
+  'delta-intranet-policy.sql',
+] as const
 
-export async function ensureIntranetProLinkColumn(): Promise<void> {
-  if (!peekIntranetDatabaseUrl()) return
-  if (!proLinkOnce) {
-    proLinkOnce = (async () => {
-      const sql = getIntranetSql()
-      await sql.query(`
-        alter table intranet_employees
-          add column if not exists professional_name text
-      `)
+let schemaOnce: Promise<void> | null = null
+
+type SqlExec = {
+  query?: (query: string, params?: unknown[]) => Promise<unknown>
+  unsafe?: (query: string, params?: unknown[]) => Promise<unknown>
+}
+
+async function runStatement(sql: SqlExec, statement: string): Promise<void> {
+  if (typeof sql.query === 'function') {
+    await sql.query(statement)
+    return
+  }
+  if (typeof sql.unsafe === 'function') {
+    await sql.unsafe(statement)
+    return
+  }
+  throw new Error('Cliente SQL da intranet sem query/unsafe')
+}
+
+export async function ensureIntranetSchema(): Promise<{ files: string[] }> {
+  if (!peekIntranetDatabaseUrl()) return { files: [] }
+  if (!schemaOnce) {
+    schemaOnce = (async () => {
+      const sql = getIntranetSql() as SqlExec
+      // uuid default em intranet_employees
+      await runStatement(sql, 'create extension if not exists pgcrypto')
+      for (const file of INTRANET_SQL_FILES) {
+        const body = readDbSqlFile(file)
+        for (const statement of splitSqlStatements(body)) {
+          await runStatement(sql, statement)
+        }
+      }
     })().catch((err) => {
-      proLinkOnce = null
+      schemaOnce = null
       throw err
     })
   }
-  await proLinkOnce
+  await schemaOnce
+  return { files: [...INTRANET_SQL_FILES] }
+}
+
+/** @deprecated use ensureIntranetSchema — mantido para imports existentes. */
+export async function ensureIntranetProLinkColumn(): Promise<void> {
+  await ensureIntranetSchema()
 }
