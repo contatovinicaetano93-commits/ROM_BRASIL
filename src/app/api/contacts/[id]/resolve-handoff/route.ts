@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { logEvent } from '@/lib/contacts'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -12,6 +16,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
     await logEvent({
       contactId: id,
       channel: 'whatsapp',
