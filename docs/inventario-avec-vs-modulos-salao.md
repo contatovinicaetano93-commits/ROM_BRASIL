@@ -278,8 +278,8 @@ Varredura **não** = blueprint para clonar o Avec.
 
 Se a meta for **conhecer mais o Avec sem sair dele**, ordem sugerida:
 
-1. **Comissões** — vasculhar collection Postman por reports de comissão/repasse (hoje conscientemente fora).  
-2. **Produtos vendidos no atendimento** (além de estoque 0149) — se existir report de venda de produto.  
+1. **Comissões** — ✅ **spike feito** (`docs/spike-avec-comissoes.md`): reports **8123** (líquido detalhado), **0029** (descontos), **0028** (pagas). MVP = espelhar, não recalcular.  
+2. **Produtos vendidos no atendimento** (além de estoque 0149) — ex. 0121.  
 3. **Profissionais / escala** — se houver report de horas/bloqueios (hoje só ocupação 0126).  
 4. **Assinaturas / créditos de pacote restantes** — 0061 é venda; saldo de pacote pode ser outro ID.  
 5. **Documentar IDs ⚪** da Postman que testamos e descartamos (evitar redescoberta).
