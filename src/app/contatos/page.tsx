@@ -92,7 +92,7 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
-        <UserPlus size={10} /> Novo
+        <UserPlus size={10} /> Novo cliente
       </span>
     )
   }
@@ -314,8 +314,17 @@ function ContatosPageContent() {
           if (urlStatus) params.set('status', urlStatus)
           if (hasUrlFilter) params.set('limit', '250')
         }
+        // Badges Atrasados/Vencendo/Agendados: lista filtrada sozinha não basta —
+        // puxa counts em paralelo (e a API também manda queues no meta).
+        const countsPromise =
+          mode === 'reactivate'
+            ? apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
+                .then((r) => r.json())
+                .catch(() => null)
+            : Promise.resolve(null)
         const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
         const json = await res.json()
+        const countsJson = await countsPromise
         if (cancelled) return
         if (json.error) setError(json.error)
         else {
@@ -324,12 +333,22 @@ function ContatosPageContent() {
           setContacts(json.data ?? [])
           const total = json.meta?.total
           setTotalInBase(typeof total === 'number' ? total : null)
-          const q = json.meta?.queues
+          const q = (countsJson?.meta?.queues ?? json.meta?.queues) as
+            | Partial<{
+                overdue: number
+                due_soon: number
+                scheduled: number
+                novos: number
+                sem_servicos: number
+                ativados: number
+                base_ativa: number
+              }>
+            | undefined
           if (q && typeof q.overdue === 'number') {
             setQueueCounts({
               overdue: q.overdue,
-              due_soon: q.due_soon,
-              scheduled: q.scheduled,
+              due_soon: typeof q.due_soon === 'number' ? q.due_soon : 0,
+              scheduled: typeof q.scheduled === 'number' ? q.scheduled : 0,
               novos: typeof q.novos === 'number' ? q.novos : 0,
               sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
               ativados: typeof q.ativados === 'number' ? q.ativados : 0,
@@ -365,7 +384,7 @@ function ContatosPageContent() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} cliente${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : mode === 'sem_servicos'
@@ -409,7 +428,7 @@ function ContatosPageContent() {
               : mode === 'ativados'
                 ? 'Chamados pelo painel — aguardando agenda ou visita na Avec (30 dias)'
                 : mode === 'novos'
-                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Sem vínculo)`
+                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Novos clientes)`
                 : mode === 'sem_servicos'
                   ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
                   : hasUrlFilter
@@ -458,7 +477,7 @@ function ContatosPageContent() {
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <UserPlus size={16} className="text-gold" />
-            Novos
+            Novos clientes
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
             Últimos {NOVOS_WINDOW_DAYS} dias — ainda sem vínculo no banco Avec
@@ -478,7 +497,7 @@ function ContatosPageContent() {
           [
             { id: 'reactivate' as const, label: 'Reativar' },
             { id: 'ativados' as const, label: 'Ativados', count: queueCounts.ativados },
-            { id: 'novos' as const, label: 'Novos' },
+            { id: 'novos' as const, label: 'Novos clientes' },
             { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
@@ -560,7 +579,7 @@ function ContatosPageContent() {
 
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Sem vínculo: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro
+          Novos clientes: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro
           porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Não é “1ª
           visita no salão” do Cérebro/Visão. Fica aqui por {NOVOS_WINDOW_DAYS} dias; sai antes se
           fizer um serviço com cadência, e aí passa a aparecer em Vencendo/Atrasados.
