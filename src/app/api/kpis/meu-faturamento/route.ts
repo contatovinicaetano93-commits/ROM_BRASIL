@@ -2,7 +2,12 @@ import { NextRequest } from 'next/server'
 import { err, ok, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { findEmployeeById } from '@/lib/employees'
-import { resolveMeuFaturamento } from '@/lib/intranet/meu-faturamento'
+import { resolveMeuComissao, resolveMeuFaturamento } from '@/lib/intranet/meu-faturamento'
+import {
+  getLatestSalonCommissionsDaily,
+  getSalonCommissionsDailyNear,
+  type CommissionProfessionalRow,
+} from '@/lib/salon/commission-metrics'
 import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
 import { asJsonArray } from '@/lib/sql-json'
@@ -13,28 +18,43 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const monthParam = req.nextUrl.searchParams.get('month')?.trim()
-    const month =
-      monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : null
+    const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : null
 
     const employeeId = auth.session.employeeId
     const employee = employeeId ? await findEmployeeById(employeeId) : null
     const linkName =
-      employee?.professional_name?.trim() || employee?.name || auth.session.displayName || auth.session.user
+      employee?.professional_name?.trim() ||
+      employee?.name ||
+      auth.session.displayName ||
+      auth.session.user
 
-    const snapshot = month
+    const p1Snapshot = month
       ? await getSalonP1DailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
       : await getLatestSalonP1Daily()
 
-    const professionals = snapshot ? asJsonArray<P1ProfessionalRow>(snapshot.professionals) : []
+    const commissionSnapshot = month
+      ? await getSalonCommissionsDailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
+      : await getLatestSalonCommissionsDaily()
+
+    const professionals = p1Snapshot
+      ? asJsonArray<P1ProfessionalRow>(p1Snapshot.professionals)
+      : []
+    const commissionRows = commissionSnapshot
+      ? asJsonArray<CommissionProfessionalRow>(commissionSnapshot.professionals)
+      : []
+
     const metrics = resolveMeuFaturamento(professionals, linkName)
+    const commission = resolveMeuComissao(commissionRows, linkName)
 
     return ok({
-      month: month ?? snapshot?.day.slice(0, 7) ?? null,
-      reference_day: snapshot?.day ?? null,
+      month: month ?? p1Snapshot?.day.slice(0, 7) ?? commissionSnapshot?.day.slice(0, 7) ?? null,
+      reference_day: p1Snapshot?.day ?? null,
+      commission_reference_day: commissionSnapshot?.day ?? null,
       link_name: linkName || null,
       linked: Boolean(employee?.professional_name?.trim() || employee?.name),
       employee_id: employee?.id ?? null,
       ...metrics,
+      ...commission,
     })
   } catch (e) {
     return handleError(e)

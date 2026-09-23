@@ -77,6 +77,7 @@ import {
 } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncCommissions8123 } from '@/lib/avec/sync-commissions'
 import { syncP2Kpis } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
@@ -155,6 +156,7 @@ export interface AvecSyncStats {
   errors: string[]
   warnings: string[]
   p1_rows?: number
+  commissions_rows?: number
   p2_rows?: number
   p3_rows?: number
   /** Linhas 0223 com campo tempo válido (TM cadastrado). */
@@ -1696,6 +1698,7 @@ async function runAvecSyncBody(
       // Cada fatia tem cron próprio — cabe no orçamento sem abortar o core.
       const opsSteps = [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['8123', () => syncCommissions8123(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
