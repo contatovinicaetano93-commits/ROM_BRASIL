@@ -11,11 +11,9 @@ import {
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
-  type CommissionProfessionalRow,
 } from '@/lib/salon/commission-metrics'
-import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+import { getLatestSalonP1Daily, getSalonP1DailyNear } from '@/lib/salon/p1-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
-import { asJsonArray } from '@/lib/sql-json'
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,12 +39,9 @@ export async function GET(req: NextRequest) {
       ? await getSalonCommissionsDailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
       : await getLatestSalonCommissionsDaily()
 
-    const professionals = p1Snapshot
-      ? asJsonArray<P1ProfessionalRow>(p1Snapshot.professionals)
-      : []
-    const commissionRows = commissionSnapshot
-      ? asJsonArray<CommissionProfessionalRow>(commissionSnapshot.professionals)
-      : []
+    // BR: p1-metrics / commission-metrics já normalizam via asJsonArray (paridade IG)
+    const professionals = p1Snapshot?.professionals ?? []
+    const commissionRows = commissionSnapshot?.professionals ?? []
 
     const metrics = resolveMeuFaturamento(professionals, linkName)
     const commission = resolveMeuComissao(commissionRows, linkName)
