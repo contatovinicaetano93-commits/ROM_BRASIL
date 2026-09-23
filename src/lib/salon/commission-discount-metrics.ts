@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import type { NormalizedCommissionDiscountLine } from '@/lib/avec/normalize'
+import { asJsonArray } from '@/lib/sql-json'
 
 /** Snapshot 0029 por profissional/dia — espelho Avec (não recalcula). */
 export type CommissionDiscountLine = NormalizedCommissionDiscountLine
@@ -56,7 +57,7 @@ function mapRow(
   if (!row) return null
   return {
     ...row,
-    lines: Array.isArray(row.lines) ? row.lines : [],
+    lines: asJsonArray<CommissionDiscountLine>(row.lines),
   }
 }
 

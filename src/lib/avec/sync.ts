@@ -77,7 +77,7 @@ import {
 } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
-import { syncCommissions8123 } from '@/lib/avec/sync-commissions'
+import { syncCommissions8123, noteCommissions8123BudgetSkip } from '@/lib/avec/sync-commissions'
 import { syncP2Kpis } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
@@ -1719,6 +1719,7 @@ async function runAvecSyncBody(
       for (const [label, fn] of steps) {
         if (syncBudgetExhausted()) {
           markSyncBudgetExhausted(stats, `antes de ${label}`)
+          if (label === '8123') noteCommissions8123BudgetSkip(stats)
           break
         }
         try {

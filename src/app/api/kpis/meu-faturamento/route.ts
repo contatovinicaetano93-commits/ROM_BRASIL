@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth'
 import { findEmployeeById } from '@/lib/employees'
 import { getOrFetchCommissionDiscounts0029 } from '@/lib/avec/fetch-commission-discounts'
 import {
+  isMeuFaturamentoLinked,
   resolveAvecProId,
   resolveMeuComissao,
   resolveMeuFaturamento,
@@ -11,11 +12,9 @@ import {
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
-  type CommissionProfessionalRow,
 } from '@/lib/salon/commission-metrics'
-import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+import { getLatestSalonP1Daily, getSalonP1DailyNear } from '@/lib/salon/p1-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
-import { asJsonArray } from '@/lib/sql-json'
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,17 +40,14 @@ export async function GET(req: NextRequest) {
       ? await getSalonCommissionsDailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
       : await getLatestSalonCommissionsDaily()
 
-    const professionals = p1Snapshot
-      ? asJsonArray<P1ProfessionalRow>(p1Snapshot.professionals)
-      : []
-    const commissionRows = commissionSnapshot
-      ? asJsonArray<CommissionProfessionalRow>(commissionSnapshot.professionals)
-      : []
+    // BR: p1-metrics / commission-metrics já normalizam via asJsonArray (paridade IG)
+    const professionals = p1Snapshot?.professionals ?? []
+    const commissionRows = commissionSnapshot?.professionals ?? []
 
     const metrics = resolveMeuFaturamento(professionals, linkName)
     const commission = resolveMeuComissao(commissionRows, linkName)
 
-    const avecProId = resolveAvecProId(linkName)
+    const avecProId = resolveAvecProId(linkName, employee?.avec_pro_id)
     const anchorDay =
       commissionSnapshot?.day ??
       p1Snapshot?.day ??
@@ -70,7 +66,7 @@ export async function GET(req: NextRequest) {
       discount_reference_day: discounts.reference_day,
       avec_pro_id: avecProId,
       link_name: linkName || null,
-      linked: Boolean(employee?.professional_name?.trim() || employee?.name),
+      linked: isMeuFaturamentoLinked(employee),
       employee_id: employee?.id ?? null,
       ...metrics,
       ...commission,

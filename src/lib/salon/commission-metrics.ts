@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import type { NormalizedCommissionRow } from '@/lib/avec/normalize'
+import { asJsonArray } from '@/lib/sql-json'
 
 /** Snapshot 8123 por profissional — espelho Avec (não recalcula %). */
 export type CommissionProfessionalRow = NormalizedCommissionRow
@@ -50,7 +51,7 @@ function mapRow(row: SalonCommissionsDaily | null | undefined): SalonCommissions
   if (!row) return null
   return {
     ...row,
-    professionals: Array.isArray(row.professionals) ? row.professionals : [],
+    professionals: asJsonArray<CommissionProfessionalRow>(row.professionals),
   }
 }
 
