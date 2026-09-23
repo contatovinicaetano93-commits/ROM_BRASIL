@@ -250,7 +250,7 @@ function ContactDetailPageContent() {
   const isAdmin = Boolean(session?.can_view_revenue)
 
   const load = useCallback(async () => {
-    const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store', clientCache: false })
+    const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
     const json = await res.json()
     if (json.error) setError(json.error)
     else setData(json.data)
@@ -422,7 +422,9 @@ function ContactDetailPageContent() {
   if (loading) {
     return (
       <main className="flex flex-1 flex-col gap-4 px-5 py-6">
-        <div className="h-6 w-24 animate-pulse rounded bg-border" />
+        <button onClick={goBack} className="flex items-center gap-1 text-sm text-muted">
+          <ChevronLeft size={18} /> {backLabel}
+        </button>
         <div className="h-28 animate-pulse rounded-2xl bg-card" />
         <div className="h-40 animate-pulse rounded-2xl bg-card" />
       </main>
