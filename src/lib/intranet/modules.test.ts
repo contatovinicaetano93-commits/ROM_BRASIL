@@ -40,6 +40,10 @@ describe('roleModulePack / effectiveModules', () => {
   it('exporta o pacote fixo do papel', () => {
     expect(roleModulePack('estoque')).toEqual(['estoque'])
     expect(effectiveModules('staff', ['dashboard'])).toEqual(['pipeline', 'contatos', 'dashboard'])
+    expect(effectiveModules('mkt', [])).toEqual(['pipeline', 'contatos', 'ativacoes'])
+    expect(hasPanelModule('mkt', [], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', ['ativacoes'], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', [], 'ativacoes')).toBe(false)
   })
 })
 
