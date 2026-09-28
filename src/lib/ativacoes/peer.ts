@@ -20,7 +20,7 @@ function peerUnitOf(local: RomPanelId): AtivacaoUnit {
 /** Env canônica + legado — mesma ordem do Cérebro. */
 export function peekPeerDatabaseUrl(
   local: RomPanelId = getRomPanelId(),
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): string | null {
   const names =
     local === 'brasil'
