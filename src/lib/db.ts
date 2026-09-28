@@ -110,6 +110,13 @@ export function getSql(databaseUrl?: string): Sql {
   return wrap(getClient(url))
 }
 
+/** Cliente para URL explícita (ex.: banco da unidade irmã em Ativações). */
+export function getSqlForUrl(databaseUrl: string): Sql {
+  const url = databaseUrl.trim()
+  if (!url) throw new Error('DATABASE_URL não configurada')
+  return wrap(getClient(url))
+}
+
 /**
  * Banco da intranet (colaboradores, CMS, RomFlow).
  * `INTRANET_DATABASE_URL` quando definido; senão o mesmo `DATABASE_URL` do salão.
