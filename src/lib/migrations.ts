@@ -140,10 +140,36 @@ export async function runPendingMigrations(opts?: {
   }
 }
 
+/** Contagem leve de migrations pendentes — probe de health, sem aplicar.
+ *  Falha de query propaga: o health trata o throw como probe null (não inventa RED). */
+export async function getPendingMigrationsCount(opts?: {
+  panel?: RomPanelId
+  databaseUrl?: string
+  cwd?: string
+}): Promise<number> {
+  const status = await getMigrationStatus({ ...opts, throwOnError: true })
+  return status.pending.length
+}
+
+/**
+ * Em produção, pending > 0 é RED. Fora de prod (ou probe null) não inventa falha.
+ * Exportado puro para o teste provar que o health consegue ficar vermelho.
+ */
+export function migrationsPendingHealthOk(opts: {
+  isProduction: boolean
+  pendingCount: number | null
+}): boolean {
+  if (!opts.isProduction) return true
+  if (opts.pendingCount == null) return true
+  return opts.pendingCount === 0
+}
+
 export async function getMigrationStatus(opts?: {
   panel?: RomPanelId
   databaseUrl?: string
   cwd?: string
+  /** Health: timeout/blip não pode virar o catálogo inteiro como pendente. */
+  throwOnError?: boolean
 }): Promise<{
   panel: RomPanelId
   applied: string[]
@@ -165,7 +191,8 @@ export async function getMigrationStatus(opts?: {
       pending: registered.filter((m) => !appliedSet.has(m.id)),
       registered,
     }
-  } catch {
+  } catch (e) {
+    if (opts?.throwOnError) throw e
     return {
       panel,
       applied: [],

@@ -6,8 +6,8 @@ export interface ContactKpis {
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
   conversion: {
-    /** Convertidos ÷ funil ativo (sem importado). */
-    conversion_rate: number
+    /** Convertidos ÷ funil ativo (sem importado). null quando funil vazio. */
+    conversion_rate: number | null
     /** Base completa (inclui importado). */
     total_contacts: number
     /** Só status ≠ importado. */
@@ -62,11 +62,9 @@ export async function fetchContactKpis(
     `,
     sql`
       select
-        coalesce(
-          count(*) filter (where status = 'convertido')::float
-            / nullif(count(*) filter (where status <> 'importado'), 0)::float,
-          0
-        ) as conversion_rate,
+        count(*) filter (where status = 'convertido')::float
+          / nullif(count(*) filter (where status <> 'importado'), 0)::float
+          as conversion_rate,
         count(*)::int as total_contacts,
         count(*) filter (where status <> 'importado')::int as funnel_contacts,
         count(*) filter (where status = 'importado')::int as imported_contacts
@@ -85,7 +83,10 @@ export async function fetchContactKpis(
     byStatus: byStatus as ContactKpis['byStatus'],
     conversion: conversionRows[0]
       ? {
-          conversion_rate: Number(conversionRows[0].conversion_rate) || 0,
+          conversion_rate:
+            conversionRows[0].conversion_rate == null
+              ? null
+              : Number(conversionRows[0].conversion_rate),
           total_contacts: Number(conversionRows[0].total_contacts) || 0,
           funnel_contacts: Number(conversionRows[0].funnel_contacts) || 0,
           imported_contacts: Number(conversionRows[0].imported_contacts) || 0,

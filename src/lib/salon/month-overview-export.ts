@@ -212,8 +212,8 @@ export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
     ${row('Receita', money(overview.closing.revenue))}
     ${row('Atendidos', overview.closing.attended != null ? String(overview.closing.attended) : '—')}
     ${row('Ticket médio', money(overview.closing.ticket_avg))}
-    ${row('Cancelamentos', String(overview.closing.cancelled))}
-    ${row('No-shows', String(overview.closing.no_shows))}
+    ${row('Cancelamentos', overview.closing.cancelled != null ? String(overview.closing.cancelled) : '—')}
+    ${row('No-shows', overview.closing.no_shows != null ? String(overview.closing.no_shows) : '—')}
     ${row('Despesas', money(overview.closing.expenses))}
     ${row('CMV', money(overview.closing.cmv))}
     ${row('Fluxo de caixa', money(overview.closing.cash_flow))}

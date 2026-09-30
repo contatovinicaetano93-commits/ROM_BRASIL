@@ -71,7 +71,7 @@ interface FinanceKpiBucket {
   revenue_source: 'metrics' | 'payments_0081' | 'empty'
   expenses: number
   expenses_by_cnpj: ExpenseCnpjBreakdown
-  attended: number
+  attended: number | null
   ticket_avg: number | null
   daily: {
     day: string
@@ -304,7 +304,7 @@ const EMPTY_RECONCILIATION: PaymentReconciliation = {
 function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
   return {
     ...bucket,
-    attended: bucket.attended ?? 0,
+    attended: bucket.attended ?? null,
     ticket_avg: bucket.ticket_avg ?? null,
     daily: (bucket.daily ?? []).map((d) => ({
       ...d,
@@ -794,12 +794,15 @@ export default function FinanceiroPage() {
               ? '—'
               : awaitingCaixa
                 ? 'aguardando'
-                : String(kpis.current.attended ?? 0)
+                : kpis.current.attended == null ? '—' : String(kpis.current.attended)
           }
           delta={
             kpis && !awaitingCaixa
               ? (() => {
-                  const diff = (kpis.current.attended ?? 0) - (kpis.previous.attended ?? 0)
+                  const current = kpis.current.attended
+                  const previous = kpis.previous.attended
+                  if (current == null || previous == null) return null
+                  const diff = current - previous
                   if (diff === 0) return null
                   return `${diff > 0 ? '+' : ''}${diff}`
                 })()
@@ -807,8 +810,11 @@ export default function FinanceiroPage() {
           }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
-            kpis && !awaitingCaixa
-              ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0)
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.attended != null &&
+            kpis.previous.attended != null
+              ? kpis.current.attended >= kpis.previous.attended
               : null
           }
           loading={loading}

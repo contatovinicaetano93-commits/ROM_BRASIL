@@ -46,8 +46,8 @@ export interface MonthOverview {
   closing: {
     revenue: number | null
     attended: number | null
-    cancelled: number
-    no_shows: number
+    cancelled: number | null
+    no_shows: number | null
     ticket_avg: number | null
     expenses: number
     cmv: number
@@ -63,8 +63,8 @@ export interface MonthOverview {
   previous_closing: {
     revenue: number | null
     attended: number | null
-    cancelled: number
-    no_shows: number
+    cancelled: number | null
+    no_shows: number | null
     ticket_avg: number | null
     expenses: number
     cmv: number
