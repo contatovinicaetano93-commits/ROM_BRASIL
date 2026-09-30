@@ -3,6 +3,7 @@ import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
 import { isDbPoolExhaustedError } from '@/lib/db'
+import { isDbStatementTimeoutError } from '@/lib/db-statement-timeout'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('API')
@@ -45,6 +46,35 @@ export function handleError(e: unknown) {
   if (e instanceof ZodError) {
     return err(e.issues.map((i) => i.message).join(', '), 422)
   }
+  if (isDbQuotaError(e)) {
+    logger.error('DB quota blocked request', {
+      message: e instanceof Error ? e.message : String(e),
+    })
+    return err(dbQuotaUserMessage(e), 503)
+  }
+  if (isDbPoolExhaustedError(e)) {
+    return err(
+      isProduction()
+        ? 'Banco temporariamente ocupado — atualize a página em alguns segundos'
+        : e instanceof Error
+          ? e.message
+          : String(e),
+      503,
+    )
+  }
+  if (isDbStatementTimeoutError(e)) {
+    logger.error('DB statement timeout in API route', {
+      message: e instanceof Error ? e.message : String(e),
+    })
+    return err(
+      isProduction()
+        ? 'Consulta demorou demais — tente de novo ou refine a busca'
+        : e instanceof Error
+          ? e.message
+          : String(e),
+      504,
+    )
+  }
   if (e instanceof Error) {
     // Log full error server-side, return generic message to client
     logger.error('Unhandled error in API route', {
@@ -52,20 +82,6 @@ export function handleError(e: unknown) {
       stack: e.stack,
       name: e.name,
     })
-    if (isDbQuotaError(e)) {
-      logger.error('DB quota blocked request', {
-        message: e.message,
-      })
-      return err(dbQuotaUserMessage(e), 503)
-    }
-    if (isDbPoolExhaustedError(e)) {
-      return err(
-        isProduction()
-          ? 'Banco temporariamente ocupado — atualize a página em alguns segundos'
-          : e.message,
-        503,
-      )
-    }
     const clientMessage = isProduction() ? 'Erro interno do servidor' : e.message
     return err(clientMessage, 500)
   }
