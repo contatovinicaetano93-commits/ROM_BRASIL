@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { coalesceProfessionalsOccupancy } from '@/lib/director-report/match-pro'
+import { asJsonArray } from '@/lib/sql-json'
 
 export interface P1ProfessionalRow {
   name: string
@@ -73,11 +74,11 @@ export async function upsertSalonP1Daily(
   const existing = (await sql`
     select * from salon_p1_daily where day = ${day}::date limit 1
   `) as SalonP1Daily[]
-  const cur = existing[0]
+  const cur = mapSalonP1Row(existing[0])
 
-  const professionals = patch.professionals ?? (cur?.professionals as P1ProfessionalRow[] | undefined) ?? []
-  const services = patch.services ?? (cur?.services as P1ServiceRow[] | undefined) ?? []
-  const acquisition = patch.acquisition ?? (cur?.acquisition as P1AcquisitionRow[] | undefined) ?? []
+  const professionals = patch.professionals ?? cur?.professionals ?? []
+  const services = patch.services ?? cur?.services ?? []
+  const acquisition = patch.acquisition ?? cur?.acquisition ?? []
   const reactivation_count =
     patch.reactivation_count ?? Number(cur?.reactivation_count ?? 0)
 
@@ -104,10 +105,14 @@ export async function upsertSalonP1Daily(
 
 function mapSalonP1Row(row: SalonP1Daily | null | undefined): SalonP1Daily | null {
   if (!row) return null
-  const professionals = Array.isArray(row.professionals) ? row.professionals : []
+  const professionals = coalesceProfessionalsOccupancy(
+    asJsonArray<P1ProfessionalRow>(row.professionals),
+  )
   return {
     ...row,
-    professionals: coalesceProfessionalsOccupancy(professionals),
+    professionals,
+    services: asJsonArray<P1ServiceRow>(row.services),
+    acquisition: asJsonArray<P1AcquisitionRow>(row.acquisition),
   }
 }
 

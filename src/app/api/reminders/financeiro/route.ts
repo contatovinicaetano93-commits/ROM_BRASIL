@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { sendFinanceReminder } from '@/lib/whatsapp/reminders'
 
-/** GET — cron semanal (CRON_SECRET) ou admin manual. Lembrete WhatsApp de lançamento de despesas. */
+/** GET — cron semanal segunda 12:00 UTC ≈ 09:00 America/Sao_Paulo (CRON_SECRET) ou admin manual. Lembrete WhatsApp de lançamento de despesas. */
 export async function GET(req: NextRequest) {
   try {
     if (!isCronAuthorized(req)) {
