@@ -442,6 +442,17 @@ export async function ensureServiceCadence(
   return rows[0] ?? null
 }
 
+/** Remove cadência de placeholder genérico (ex.: Atendimento) — não é ciclo real. */
+export async function clearServiceCadence(serviceId: string): Promise<ClientService | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    update client_services set cadence_days = null
+    where id = ${serviceId} and cadence_days is not null
+    returning *
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
 export async function clearServiceSchedule(serviceId: string): Promise<ClientService | null> {
   const sql = getSql()
   const rows = (await sql`
