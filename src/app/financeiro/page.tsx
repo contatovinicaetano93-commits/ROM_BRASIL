@@ -799,7 +799,10 @@ export default function FinanceiroPage() {
           delta={
             kpis && !awaitingCaixa
               ? (() => {
-                  const diff = (kpis.current.attended ?? 0) - (kpis.previous.attended ?? 0)
+                  const current = kpis.current.attended
+                  const previous = kpis.previous.attended
+                  if (current == null || previous == null) return null
+                  const diff = current - previous
                   if (diff === 0) return null
                   return `${diff > 0 ? '+' : ''}${diff}`
                 })()
@@ -807,8 +810,11 @@ export default function FinanceiroPage() {
           }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
-            kpis && !awaitingCaixa
-              ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0)
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.attended != null &&
+            kpis.previous.attended != null
+              ? kpis.current.attended >= kpis.previous.attended
               : null
           }
           loading={loading}
