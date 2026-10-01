@@ -8,6 +8,7 @@ import {
   type FolhaDraft,
 } from '@/lib/folha/draft-from-8123'
 import {
+  isSnapshotDayInQuinzena,
   listRecentQuinzenas,
   resolveFolhaQuinzena,
   todayIsoSaoPaulo,
@@ -83,8 +84,21 @@ export async function listFolhaPeriodSummaries(
 }
 
 /**
+ * Snapshot 8123 da quinzena: último dia ≤ `q.to` que ainda cai em [q.from, q.to].
+ * Near (45 dias) pode devolver a quinzena anterior; o fallback global pode
+ * devolver um dia depois de `q.to`. Nenhum dos dois entra neste período.
+ */
+function snapshotForQuinzena<T extends { day: string }>(
+  snapshot: T | null,
+  quinzena: FolhaQuinzena,
+): T | null {
+  if (!snapshot || !isSnapshotDayInQuinzena(snapshot.day, quinzena)) return null
+  return snapshot
+}
+
+/**
  * Carrega (ou cria) o rascunho da quinzena alvo.
- * Snapshot 8123: dia fim da quinzena (`q.to`) — MTD naquele dia.
+ * Snapshot 8123: dia dentro da quinzena, de preferência `q.to` (MTD naquele dia).
  */
 export async function loadOrCreateFolhaDraft(
   panel: RomPanelId,
@@ -101,7 +115,10 @@ export async function loadOrCreateFolhaDraft(
     today,
   })
   const persisted = await getFolhaPeriod(quinzena.id)
-  const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
+  const snapshot = snapshotForQuinzena(
+    await getLatestSalonCommissionsNearOrLatest(quinzena.to),
+    quinzena,
+  )
 
   if (!snapshot && !persisted) {
     return { draft: null, period: null, quinzena }
@@ -153,7 +170,10 @@ export async function refreshFolhaDraft(
     day: opts?.referenceDay,
     today,
   })
-  const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
+  const snapshot = snapshotForQuinzena(
+    await getLatestSalonCommissionsNearOrLatest(quinzena.to),
+    quinzena,
+  )
   if (!snapshot || snapshot.professionals.length === 0) {
     throw new Error(`Sem snapshot 8123 até ${quinzena.to} para montar a Folha`)
   }

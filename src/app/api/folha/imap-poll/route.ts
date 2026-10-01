@@ -5,10 +5,12 @@ import { getRomPanelId } from '@/lib/brand'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { canAccessFolha } from '@/lib/folha/access'
 import { pollFolhaImapInbox } from '@/lib/folha/imap-poll'
+import { parseFolhaPeriodId } from '@/lib/folha/period'
 
 /**
  * GET — cron (CRON_SECRET) ou sessão com módulo folha.
- * Lê UNSEEN com DARF/DAS na caixa FOLHA_IMAP_* e aplica no período atual.
+ * Lê UNSEEN com DARF/DAS na caixa FOLHA_IMAP_* e aplica na quinzena
+ * de pagamento (ou em `period`, quando a tela informa a quinzena aberta).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -21,8 +23,13 @@ export async function GET(req: NextRequest) {
     }
 
     const day = req.nextUrl.searchParams.get('day')?.trim()
+    const period = req.nextUrl.searchParams.get('period')?.trim()
     const referenceDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined
-    const result = await pollFolhaImapInbox(getRomPanelId(), { day: referenceDay })
+    const periodId = period && parseFolhaPeriodId(period) ? period : undefined
+    const result = await pollFolhaImapInbox(getRomPanelId(), {
+      day: referenceDay,
+      periodId,
+    })
     return ok(result)
   } catch (e) {
     return handleError(e)

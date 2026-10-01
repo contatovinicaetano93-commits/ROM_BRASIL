@@ -1,5 +1,6 @@
 /**
- * Poll IMAP → parse DARF/DAS → aplica no período Folha aberto.
+ * Poll IMAP → parse DARF/DAS → aplica na quinzena de pagamento
+ * (a mesma que a Folha abre por padrão) ou no `periodId` informado.
  */
 
 import type { RomPanelId } from '@/lib/brand'
@@ -9,7 +10,7 @@ import {
   readFolhaImapConfig,
   type FolhaImapMessage,
 } from '@/lib/folha/imap-client'
-import { quinzenaForDay, todayIsoSaoPaulo } from '@/lib/folha/period'
+import { resolveFolhaQuinzena, todayIsoSaoPaulo } from '@/lib/folha/period'
 import { ingestFolhaTaxEmail, loadOrCreateFolhaDraft } from '@/lib/folha/service'
 import { folhaTaxSourceExists, getFolhaPeriod } from '@/lib/folha/store'
 
@@ -54,7 +55,7 @@ async function processMessage(
 
 export async function pollFolhaImapInbox(
   panel: RomPanelId,
-  opts?: { day?: string; markSeen?: boolean },
+  opts?: { day?: string; periodId?: string; markSeen?: boolean },
 ): Promise<FolhaImapPollResult> {
   const cfg = readFolhaImapConfig()
   if (!cfg) {
@@ -70,9 +71,15 @@ export async function pollFolhaImapInbox(
     }
   }
 
-  const day = opts?.day ?? todayIsoSaoPaulo()
-  await loadOrCreateFolhaDraft(panel, { referenceDay: day, actor: 'imap-cron' })
-  const periodId = quinzenaForDay(day).id
+  const today = opts?.day ?? todayIsoSaoPaulo()
+  // `day` só ancora "hoje". Sem periodId, a quinzena é a do pagamento
+  // (defaultFolhaQuinzena) — não a quinzena civil de hoje.
+  const quinzena = resolveFolhaQuinzena({
+    periodId: opts?.periodId,
+    today,
+  })
+  await loadOrCreateFolhaDraft(panel, { periodId: quinzena.id, actor: 'imap-cron' })
+  const periodId = quinzena.id
   const period = await getFolhaPeriod(periodId)
   if (!period) {
     return {

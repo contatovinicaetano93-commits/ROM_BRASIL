@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultFolhaQuinzena,
   formatPayDateBr,
+  isSnapshotDayInQuinzena,
   listRecentQuinzenas,
   parseFolhaPeriodId,
   payDateForHalf,
@@ -37,6 +38,22 @@ describe('folha period pay dates', () => {
     expect(parseFolhaPeriodId('2026-09-q2')?.from).toBe('2026-09-16')
     expect(resolveFolhaQuinzena({ periodId: '2026-10-q1' }).payDate).toBe('2026-10-20')
     expect(formatPayDateBr('2026-10-05')).toBe('05/10/2026')
+  })
+
+  it('resolve sem day segue a quinzena de pagamento, não a civil', () => {
+    expect(resolveFolhaQuinzena({ today: '2026-10-01' }).id).toBe('2026-09-q2')
+    expect(resolveFolhaQuinzena({ today: '2026-10-16' }).id).toBe('2026-10-q1')
+    expect(resolveFolhaQuinzena({ periodId: '2026-10-q2', today: '2026-10-01' }).id).toBe(
+      '2026-10-q2',
+    )
+  })
+
+  it('snapshot 8123 só vale dentro da quinzena', () => {
+    const q2 = quinzenaForDay('2026-09-30')
+    expect(isSnapshotDayInQuinzena('2026-09-30', q2)).toBe(true)
+    expect(isSnapshotDayInQuinzena('2026-09-16', q2)).toBe(true)
+    expect(isSnapshotDayInQuinzena('2026-09-15', q2)).toBe(false)
+    expect(isSnapshotDayInQuinzena('2026-10-01', q2)).toBe(false)
   })
 
   it('lista recentes inclui mês passado', () => {

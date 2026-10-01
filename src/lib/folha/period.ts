@@ -86,6 +86,12 @@ export function quinzenaForDay(day: string): FolhaQuinzena {
   return quinzenaForYearMonthHalf(yearMonth, dom <= 15 ? 1 : 2)
 }
 
+/** Dia de snapshot 8123 pertence à quinzena só se cai em [from, to]. */
+export function isSnapshotDayInQuinzena(day: string, quinzena: FolhaQuinzena): boolean {
+  const iso = day.slice(0, 10)
+  return iso >= quinzena.from && iso <= quinzena.to
+}
+
 /** Parse `YYYY-MM-q1` / `YYYY-MM-q2`. */
 export function parseFolhaPeriodId(id: string): FolhaQuinzena | null {
   const m = /^(\d{4}-\d{2})-q([12])$/i.exec(id.trim())
