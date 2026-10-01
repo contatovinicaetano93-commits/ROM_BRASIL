@@ -861,6 +861,12 @@ export default function FolhaPage() {
                 30/40/50% no acumulado do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
+              <li>
+                Olerite: se o 8123 zera taxa_adm e embute adm↔meio em descontos, a Folha
+                desmembra (Tx adm / Meio / Outros). Assistente-como-pro (todos, incl.
+                Romeu): taxa adm 3% sobre o serviço. Rateio − cartão ≈ comissão/rateio do
+                recibo (produto ≠ cartão).
+              </li>
             </ul>
           </div>
         ) : null}
