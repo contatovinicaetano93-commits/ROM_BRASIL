@@ -475,6 +475,59 @@ describe('buildFolhaDraftLine', () => {
     expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
+  it('Brasil Q2: Jefferson 17958.05 → top-up 10%; Gabriela 24700.03 → 20% (faixa, não célula E14)', () => {
+    const jeff = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'JEFFERSON POLICARPO DOS SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: null,
+        service_share: 500,
+        product_share: 0,
+        other_share: 0,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: 0,
+        net_payable: 2000,
+        house_share: 1000,
+      },
+      { acumulado_mes: 17_958.05 },
+      { applyTaxExtras: false },
+    )
+    expect(jeff.folha_extras.romeu_comissao_parcela).toBeCloseTo(1795.805, 5)
+    // Path B só com meio; aqui descontos=0 e sem meio → não inventa 3%×charged
+    expect(jeff.proposed_pay).toBeCloseTo(2000 + 1795.805, 2)
+
+    const gabi = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'GABRIELA DA SILVA SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: null,
+        service_share: 6000,
+        product_share: 0,
+        other_share: 0,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: 0,
+        net_payable: 3000,
+        house_share: 15000,
+      },
+      { acumulado_mes: 24_700.03, servicos_assistente_como_pro: 21_290.03 },
+      { applyTaxExtras: false },
+    )
+    expect(gabi.folha_extras.romeu_comissao_parcela).toBeCloseTo(4940.006, 5)
+    // U/V/W conferência (W BR=3%); líquido = a_pagar + top-up
+    expect(gabi.folha_extras.taxa_servicos).toBeCloseTo(21_290.03 * 0.03, 2)
+    expect(gabi.proposed_pay).toBeCloseTo(3000 + 4940.006, 2)
+  })
+
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {
     const line = buildFolhaDraftLine('brasil', {
       ...jefferson,
