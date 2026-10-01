@@ -8,7 +8,7 @@ create table if not exists intranet_employee_modules (
 );
 
 -- Amplia / recria o check (CREATE IF NOT EXISTS não atualiza constraint antiga).
--- Inclui 'ativacoes' (calendário de marcas no lavatório).
+-- Inclui 'ativacoes' (calendário de marcas no lavatório) e 'folha'.
 alter table intranet_employee_modules
   drop constraint if exists intranet_employee_modules_module_key_check;
 
@@ -19,6 +19,7 @@ alter table intranet_employee_modules
     'contatos',
     'ativacoes',
     'financeiro',
+    'folha',
     'estoque',
     'relatorios',
     'dashboard'
