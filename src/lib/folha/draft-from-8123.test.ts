@@ -147,7 +147,7 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(9472.05, 2)
   })
 
-  it('BR cabeleireiro: taxa adm motor 7% quando 8123 veio 0', () => {
+  it('BR cabeleireiro: taxa adm motor 5% quando 8123 veio 0', () => {
     const line = buildFolhaDraftLine(
       'brasil',
       {
@@ -169,9 +169,46 @@ describe('buildFolhaDraftLine', () => {
       undefined,
       { applyTaxExtras: false },
     )
-    expect(line.taxa_administrativa).toBe(700)
-    expect(line.taxa_administrativa_rate).toBe(0.07)
-    expect(line.proposed_pay).toBe(4300)
+    expect(line.taxa_administrativa).toBe(500)
+    expect(line.taxa_administrativa_rate).toBe(0.05)
+    expect(line.proposed_pay).toBe(4500)
+  })
+
+  it('Alison BR Q2: adm 5% + a_pagar já neteado (descontos=0) → não reabate; +Baru = olerite', () => {
+    const row = {
+      tip: 0,
+      name: 'ALISON ALVAREZ',
+      role: 'Cabeleireiro',
+      charged: 41399.00002908707,
+      card_fee: -588.0097188055515,
+      admin_fee: 0,
+      house_share: 20825.500014543533,
+      net_payable: 14583.246296279132,
+      product_share: 0,
+      other_share: 0,
+      product_spend: -1262.890000499785,
+      service_share: 20573.500014543533,
+      other_discounts: 0,
+      assistant_discount: -4139.3539989590645,
+    }
+    const bare = buildFolhaDraftLine('brasil', row, undefined, {
+      applyTaxExtras: false,
+    })
+    expect(bare.taxa_administrativa_rate).toBe(0.05)
+    expect(bare.taxa_administrativa).toBeCloseTo(2069.95, 1)
+    expect(bare.rateio_apos_cartao).toBeCloseTo(19985.48, 1)
+    expect(bare.flags).toContain('taxa_adm_em_descontos')
+    expect(bare.flags).not.toContain('taxa_adm_motor')
+    // a_pagar Avec já fechou adm/meio; falta só Baru do olerite
+    expect(bare.proposed_pay).toBeCloseTo(14583.25, 1)
+
+    const withBaru = buildFolhaDraftLine(
+      'brasil',
+      row,
+      { descontos_diversos: 324.65 },
+      { applyTaxExtras: false },
+    )
+    expect(withBaru.proposed_pay).toBeCloseTo(14258.6, 0)
   })
 
   it('Brunna IG: taxa adm 5% (exceção), não 7%', () => {
