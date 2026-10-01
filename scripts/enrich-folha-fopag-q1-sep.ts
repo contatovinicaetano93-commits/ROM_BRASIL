@@ -13,7 +13,7 @@
 import ExcelJS from 'exceljs'
 import { getFolhaPeriod, saveFolhaPeriodLines } from '../src/lib/folha/store'
 import { patchFolhaLineExtras } from '../src/lib/folha/workflow'
-import { occupancyMergeKey } from '../src/lib/director-report/match-pro'
+import { firstAndLastTokenKey, occupancyMergeKey } from '../src/lib/director-report/match-pro'
 import type { FolhaDraftLine } from '../src/lib/folha/draft-from-8123'
 import type { RomPanelId } from '../src/lib/brand'
 
@@ -31,6 +31,10 @@ function numOrNull(v: unknown): number | null {
     const n = Number(t)
     if (!Number.isFinite(n) || Math.abs(n) < 1e-9) return null
     return Math.round(n * 100) / 100
+  }
+  // ExcelJS formula / shared formula: { formula|sharedFormula, result }
+  if (typeof v === 'object' && v && 'result' in v) {
+    return numOrNull((v as { result: unknown }).result)
   }
   return null
 }
@@ -158,7 +162,11 @@ async function loadFopagRows(
   return out
 }
 
-function findLineIndex(lines: FolhaDraftLine[], name: string): number {
+function findLineIndex(
+  lines: FolhaDraftLine[],
+  name: string,
+  used: ReadonlySet<number>,
+): number {
   const key = occupancyMergeKey(name)
   const exact = lines.findIndex((l) => l.name === name)
   if (exact >= 0) return exact
@@ -166,18 +174,18 @@ function findLineIndex(lines: FolhaDraftLine[], name: string): number {
     const byKey = lines.findIndex((l) => occupancyMergeKey(l.name) === key)
     if (byKey >= 0) return byKey
   }
-  // first+last token fallback
-  const tokens = key.split(/\s+/).filter(Boolean)
-  if (tokens.length >= 2) {
-    const fl = `${tokens[0]} ${tokens[tokens.length - 1]}`
-    return lines.findIndex((l) => {
-      const lk = occupancyMergeKey(l.name)
-      const lt = lk.split(/\s+/).filter(Boolean)
-      if (lt.length < 2) return false
-      return `${lt[0]} ${lt[lt.length - 1]}` === fl
-    })
+  // first+last só com um candidato ainda não usado — ambíguo não adivinha
+  const fl = firstAndLastTokenKey(key)
+  if (!fl) return -1
+  let hit = -1
+  for (let i = 0; i < lines.length; i++) {
+    const lineFl = firstAndLastTokenKey(occupancyMergeKey(lines[i]!.name))
+    if (lineFl !== fl) continue
+    if (hit >= 0) return -1
+    hit = i
   }
-  return -1
+  if (hit < 0 || used.has(hit)) return -1
+  return hit
 }
 
 function sumProposed(lines: FolhaDraftLine[]): number | null {
@@ -213,13 +221,15 @@ async function main() {
   let matched = 0
   let unmatched: string[] = []
   let patchedFields = 0
+  const used = new Set<number>()
 
   for (const row of withExtras) {
-    const idx = findLineIndex(lines, row.name)
+    const idx = findLineIndex(lines, row.name, used)
     if (idx < 0) {
       unmatched.push(row.name)
       continue
     }
+    used.add(idx)
     matched += 1
     patchedFields += Object.keys(row.extras).length
     const source =
