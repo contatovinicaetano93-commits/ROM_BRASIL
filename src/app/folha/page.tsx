@@ -882,10 +882,11 @@ export default function FolhaPage() {
                 Brunna/Joah/Marcela ficam em 5%
               </li>
               <li>
-                Exceções: Pedro/Dayana meio a meio 5%; Romeu 50%; Walter assistente 30% /
-                Dani Rocha 35%; Brunna/Joah/Marcela taxa U 5% (2%+3%); assistentes Romeu:
-                30% já nas quinzenas; no dia 05 top-up +10% (10–20k) / +20% (acima de 20k)
-                sobre o acumulado U do mês
+                Exceções: Pedro/Dayana meio a meio 5% (salão 5% + pro 5%; excedente do
+                assistente &gt;10% no pro); Romeu 50%; Walter assistente 30%; Dani Rocha
+                comissão 55% + meio 50%; Liria taxa adm 7% sem bônus esteticista;
+                Brunna/Joah/Marcela taxa U 5% (2%+3%); assistentes Romeu 30/40/50% no
+                acumulado do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>
