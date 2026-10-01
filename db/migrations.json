@@ -341,6 +341,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "043_folha",
+      "file": "delta-folha.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }
