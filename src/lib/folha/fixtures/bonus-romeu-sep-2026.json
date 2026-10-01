@@ -1,0 +1,31 @@
+{
+  "period": "2026-09",
+  "source": "Fopag 16.09–30.09.2026(2) - META ROMEU.xlsx · aba Bonus",
+  "rule": {
+    "month_total": "soma U Romeu Q1+Q2 (Serviços 30%)",
+    "base_rate_paid_in_quinzenas": 0.3,
+    "top_up_paid": "once on day 05 (Q2)",
+    "bands": [
+      { "min": 1000, "max": 10000, "rate": 0.3, "top_up": 0 },
+      { "min": 10000.01, "max": 20000, "rate": 0.4, "top_up_pct": 0.1 },
+      { "min": 20000.01, "max": 30000, "rate": 0.5, "top_up_pct": 0.2 },
+      { "min": 30000.01, "max": null, "rate": 0.5, "top_up_pct": 0.2 }
+    ]
+  },
+  "iguatemi": [
+    { "name": "Gabriela Santos", "q1": 5299.99, "q2": 4930.04, "total": 10230.03, "sheet_col_e": 1023.003, "motor_top_up": 1023.003 },
+    { "name": "JEFFERSON POLICARPO DOS SANTOS", "q1": 1689.99, "q2": 0, "total": 1689.99, "sheet_col_e": 0, "motor_top_up": 0 },
+    { "name": "LUCAS RODRIGUES", "q1": 2250, "q2": 2730, "total": 4980, "sheet_col_e": 0, "motor_top_up": 0 },
+    { "name": "PEDRO CARDI", "q1": 0, "q2": 0, "total": 0, "sheet_col_e": 0, "motor_top_up": null },
+    { "name": "NICOLE MOURA", "q1": 0, "q2": 0, "total": 0, "sheet_col_e": 0, "motor_top_up": null },
+    { "name": "JONATHAN DIAS DOS SANTOS", "q1": 0, "q2": 0, "total": 0, "sheet_col_e": null, "motor_top_up": null }
+  ],
+  "brasil": [
+    { "name": "Gabriela Santos", "q1": 3410, "q2": 21290.03, "total": 24700.03, "sheet_col_e": 2470.003, "motor_top_up": 4940.006, "note": "E14 shows 10%; band 20k–30k = 50% → +20%. Motor prefers band." },
+    { "name": "JEFFERSON POLICARPO DOS SANTOS", "q1": 16328.05, "q2": 1630, "total": 17958.05, "sheet_col_e": 1795.805, "motor_top_up": 1795.805 },
+    { "name": "LUCAS RODRIGUES", "q1": 600, "q2": 5350, "total": 5950, "sheet_col_e": 0, "motor_top_up": 0 },
+    { "name": "PEDRO CARDI", "q1": 0, "q2": 0, "total": 0, "sheet_col_e": 0, "motor_top_up": null },
+    { "name": "NICOLE MOURA", "q1": 2049.99, "q2": 0, "total": 2049.99, "sheet_col_e": 0, "motor_top_up": 0 },
+    { "name": "JONATHAN DIAS DOS SANTOS", "q1": 600.01, "q2": 0, "total": 600.01, "sheet_col_e": 0, "motor_top_up": null }
+  ]
+}
