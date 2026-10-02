@@ -157,6 +157,42 @@ describe('buildFolhaDraftLine', () => {
     expect(withBaru.proposed_pay).toBeCloseTo(9472.05, 2)
   })
 
+  it('manicure: descontos = só Baru já no a_pagar → coluna Baru sem reabater', () => {
+    const row = {
+      name: 'MANICURE BARU EMBUTIDO',
+      role: 'Manicure',
+      charged: 4000,
+      service_share: 2000,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: null,
+      card_fee: null,
+      admin_fee: 0,
+      assistant_discount: null,
+      other_discounts: -219.24,
+      net_payable: 1780.76,
+      house_share: null,
+    }
+    const bare = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
+    expect(bare.taxa_administrativa).toBeNull()
+    expect(bare.outros_descontos).toBeCloseTo(219.24, 2)
+    expect(bare.proposed_pay).toBeCloseTo(1780.76, 2)
+
+    const withBaru = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { consumo_baru: 219.24 },
+      { applyTaxExtras: false },
+    )
+    expect(withBaru.folha_extras.consumo_baru).toBeCloseTo(219.24, 2)
+    expect(withBaru.outros_descontos).toBeNull()
+    expect(withBaru.proposed_pay).toBeCloseTo(1780.76, 2)
+    expect(withBaru.flags).not.toContain('taxa_adm_em_descontos')
+  })
+
   it('BR cabeleireiro: taxa adm motor 5% quando 8123 veio 0', () => {
     const line = buildFolhaDraftLine(
       'brasil',

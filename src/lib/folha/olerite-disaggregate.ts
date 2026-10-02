@@ -82,21 +82,22 @@ export function rateioAposCartao(args: {
 }
 
 /**
- * Quando o residual olerite (após adm↔meio) já é o Consumo Baru do 8123,
+ * Quando o residual olerite já é o Consumo Baru (tolerância R$ 2),
  * a coluna Baru é só conferência — não reabater no proposed_pay nem
- * duplicar em Outros.
+ * duplicar em Outros. O residual saiu de `descontos` 8123, então já
+ * está no a_pagar mesmo sem adm↔meio (manicure: descontos = só Baru).
  *
- * Alison BR (descontos=0, a_pagar já neteou adm/meio): residual null →
- * Baru do RH/Zig ainda abate.
+ * Alison BR (descontos=0, residual null): Baru do RH/Zig ainda abate.
+ * Crédito (Brunna) não entra aqui — o caller passa residual null.
  */
 export function resolveBaruVsOleriteResidual(args: {
-  /** Residual após desmembrar adm↔meio (coluna Outros bruta). */
+  /** Residual de débito após desmembrar adm↔meio (coluna Outros bruta). */
   outrosResiduais: number | null
   /** Consumo Baru informado (RH / Zig / Fopag). */
   consumoBaru: number | null | undefined
   /**
-   * True se `descontos` já neteou adm↔meio (a_pagar fechou o residual).
-   * Sem isso, residual/Baru ainda precisa abater.
+   * True se o residual de débito já está no a_pagar e o Baru é só parte
+   * dele (sobra fica em Outros). Residual ≈ Baru não depende disto.
    */
   residualAlreadyInNet: boolean
 }): {
@@ -126,11 +127,8 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
-  if (
-    args.residualAlreadyInNet &&
-    residual != null &&
-    Math.abs(residual - baru) <= 2
-  ) {
+  // Residual ≈ Baru: o débito 8123 já saiu do a_pagar. Não exige adm↔meio.
+  if (residual != null && Math.abs(residual - baru) <= 2) {
     return {
       outrosDescontos: null,
       consumoBaru: roundFolha(baru, 4),

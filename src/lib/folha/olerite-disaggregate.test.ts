@@ -234,6 +234,28 @@ describe('resolveBaruVsOleriteResidual', () => {
     expect(r.consumoBaru).toBeCloseTo(324.65, 2)
     expect(r.baruAlreadyInNet).toBe(false)
   })
+
+  it('manicure: residual = Baru sem adm↔meio → não reabate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 219.24,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Baru menor que o residual, sem adm embutido, ainda abate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 400,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.baruAlreadyInNet).toBe(false)
+    expect(r.outrosDescontos).toBe(400)
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+  })
 })
 
 describe('buildFolhaDraftLine olerite columns', () => {

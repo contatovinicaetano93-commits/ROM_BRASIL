@@ -1,10 +1,14 @@
 /**
- * Reenrich Folha Q2: U/Baru (e acumulado Romeu) da Fopag + rehydrate colunas
+ * Reenrich Folha Q2: U/Baru (e acumulado Romeu) da Fopag IG + rehydrate colunas
  * (Tx adm / Meio / Outros) sem reabater Baru embutido.
+ *
+ * A Fopag deste script é só Iguatemi. PANEL=brasil rehidrata o Neon BR
+ * sem gravar U, Baru ou bônus Romeu da IG (nome em comum não herda a outra
+ * unidade). O companion `reenrich-br-rehydrate-only.mts` faz o mesmo.
  *
  * Run (IG):
  *   node --import ./scripts/mock-server-only.cjs --import tsx scripts/reenrich-folha-fopag-columns.mts
- * Run (BR DB):
+ * Run (BR DB — só rehydrate, sem overlay IG):
  *   DATABASE_URL=$DATABASE_URL_BR PANEL=brasil node --import ./scripts/mock-server-only.cjs --import tsx scripts/reenrich-folha-fopag-columns.mts
  */
 import { readFileSync } from 'node:fs'
@@ -64,22 +68,24 @@ async function main() {
       : process.env.DATABASE_URL
   if (!dbUrl) throw new Error('DATABASE_URL missing')
 
-  const fixture = JSON.parse(
-    readFileSync(
-      join(process.cwd(), 'src/lib/folha/fixtures/fopag-ig-q2-parsed.json'),
-      'utf8',
-    ),
-  ) as { fopag_ig_q2: FopagRow[]; bonus_romeu_ig?: BonusRow[] }
-
   const fopagByKey = new Map<string, FopagRow>()
-  for (const r of fixture.fopag_ig_q2) {
-    const k = occupancyMergeKey(r.name)
-    if (k) fopagByKey.set(k, r)
-  }
   const bonusByKey = new Map<string, BonusRow>()
-  for (const b of fixture.bonus_romeu_ig ?? []) {
-    const k = occupancyMergeKey(b.name)
-    if (k) bonusByKey.set(k, b)
+  if (panel === 'iguatemi') {
+    const fixture = JSON.parse(
+      readFileSync(
+        join(process.cwd(), 'src/lib/folha/fixtures/fopag-ig-q2-parsed.json'),
+        'utf8',
+      ),
+    ) as { fopag_ig_q2: FopagRow[]; bonus_romeu_ig?: BonusRow[] }
+
+    for (const r of fixture.fopag_ig_q2) {
+      const k = occupancyMergeKey(r.name)
+      if (k) fopagByKey.set(k, r)
+    }
+    for (const b of fixture.bonus_romeu_ig ?? []) {
+      const k = occupancyMergeKey(b.name)
+      if (k) bonusByKey.set(k, b)
+    }
   }
 
   const sql = postgres(dbUrl, { max: 1, prepare: false })

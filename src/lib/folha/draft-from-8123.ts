@@ -632,9 +632,10 @@ export function buildFolhaDraftLine(
 
   /**
    * Baru vs residual olerite (Fopag: colunas separadas).
-   * Débito residual ≈ Baru embutido no a_pagar → coluna Baru, Outros null,
-   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros e
-   * já é estornado via descontos_diversos; Baru do RH ainda abate.
+   * Residual ≈ Baru já no a_pagar → coluna Baru, Outros null, sem reabater.
+   * Vale com adm↔meio (Ana), crédito parcial (Joanides) e sem taxa adm
+   * (manicure: descontos = só Baru). Crédito a estornar (Brunna/Romeu)
+   * não entra no residual — Baru do RH ainda abate.
    */
   const debitResidualForBaru =
     olerite.embeddedCreditResidual != null ? null : olerite.outrosResiduais
