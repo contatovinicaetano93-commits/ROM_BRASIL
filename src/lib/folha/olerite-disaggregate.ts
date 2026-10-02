@@ -12,7 +12,8 @@
  *      descontos=0 NÃO é path A (senão impliedAdm=meio e embute falso).
  *   B) `descontos` = 0 e taxa_adm 8123 = 0 — Lucas: adm = U × alíquota
  *      → exige `assistantAdminBase` (U); a_pagar ainda sem meio/adm.
- *   C) `descontos` ≈ +meio — meio já no a_pagar; só falta abater adm (com U).
+ *   C) `descontos` ≈ +meio — meio já no a_pagar (não recreditar).
+ *      adm = U × alíquota só com U; sem U, J fica pendente.
  *
  * Profissional: `descontos` ≈ (adm − meio) + residual (Ana/Amauri).
  * Às vezes o 8123 embute W (taxa serviços 3%/4%) reduzindo o débito —
@@ -193,8 +194,10 @@ export function disaggregateOleriteDescontos(args: {
   assistantAdminRate?: number | null
   /**
    * Base da taxa adm assistente (coluna U / Serviços 30%).
-   * Obrigatória para path B/C. Quem chama passa U do RH ou charged quando
-   * o 8123 já é U (assistente Romeu). Faturado C de multiplicador NÃO serve.
+   * Obrigatória para path B e para J no path C. O crédito de meio
+   * (descontos ≈ +meio) não depende de U. Quem chama passa U do RH ou
+   * charged quando o 8123 já é U (assistente Romeu). Faturado C de
+   * multiplicador NÃO serve.
    */
   assistantAdminBase?: number | null
   /**
@@ -273,22 +276,23 @@ export function disaggregateOleriteDescontos(args: {
         }
       }
 
-      // C) descontos ≈ +meio — meio já no a_pagar; adm = U × alíquota.
-      // Exige U explícito: sem U não inventar charged×% (Amanda/Edijane/Islay).
-      if (
-        hasExplicitU &&
-        meioAMeio > 0.02 &&
-        expectedAdm != null &&
-        expectedAdm > 0.02 &&
-        admPlausibleVsAssist &&
-        Math.abs(signedOther - meioAMeio) <= 0.05
-      ) {
+      // C) descontos ≈ +meio — meio já no a_pagar.
+      // O crédito de meio não depende de U. J = U × alíquota só com U
+      // explícito e plausível; sem U, J fica pendente — não inventar
+      // charged×% (Amanda/Edijane/Islay).
+      if (meioAMeio > 0.02 && Math.abs(signedOther - meioAMeio) <= 0.05) {
         return {
           embeddedAdminMeio: false,
           meioCreditedInNet: true,
           embeddedShortfall: null,
           embeddedCreditResidual: null,
-          taxaAdm: expectedAdm,
+          taxaAdm:
+            hasExplicitU &&
+            expectedAdm != null &&
+            expectedAdm > 0.02 &&
+            admPlausibleVsAssist
+              ? expectedAdm
+              : null,
           meioAMeio,
           outrosResiduais: null,
           descontos8123Signed: signedOther,

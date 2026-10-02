@@ -199,6 +199,24 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioAMeio).toBeCloseTo(42.5, 2)
   })
 
+  it('Lucas Q1 sem U: descontos ≈ +meio credita meio no net; J fica pendente', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 2250,
+      adminFee8123: 0,
+      assistantDiscount: -85,
+      otherDiscounts: 42.5,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(true)
+    expect(d.taxaAdm).toBeNull()
+    expect(d.meioAMeio).toBeCloseTo(42.5, 2)
+    expect(d.outrosResiduais).toBeNull()
+    expect(d.embeddedCreditResidual).toBeNull()
+  })
+
   it('Brunna: crédito descontos ≈ (meio − adm 5%) + residual', () => {
     const d = disaggregateOleriteDescontos({
       charged: 125630,

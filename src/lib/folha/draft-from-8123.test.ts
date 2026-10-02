@@ -430,6 +430,36 @@ describe('buildFolhaDraftLine', () => {
     expect(line.flags).not.toContain('taxa_adm_em_descontos')
   })
 
+  it('multiplicador sem U: descontos ≈ +meio não recredita meio; J pendente', () => {
+    const net = 800
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'MARIA MULTIPLICADORA TESTE',
+        role: 'MULTIPLICADOR',
+        charged: 2250,
+        service_share: 900,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -85,
+        other_discounts: 42.5,
+        net_payable: net,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.meio_a_meio).toBeCloseTo(42.5, 2)
+    expect(line.taxa_administrativa).toBeNull()
+    expect(line.flags).not.toContain('taxa_adm_motor')
+    // a_pagar já inclui o meio; sem U não inventar J nem somar meio de novo.
+    expect(line.proposed_pay).toBeCloseTo(net, 2)
+  })
+
   it('Amanda (assistente sem meio): NÃO abate 3%×faturado; proposed = a_pagar', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
