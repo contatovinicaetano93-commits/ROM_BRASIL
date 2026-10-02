@@ -3,11 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
-import {
-  folhaFaturadoDisplay,
-  type FolhaDraft,
-  type FolhaDraftLine,
-} from '@/lib/folha/draft-from-8123'
+import { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
+import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import type { FolhaPeriodStatus, FolhaShellStatus } from '@/lib/folha/types'
 
 function pct(rate: number): string {

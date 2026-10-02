@@ -41,6 +41,8 @@ import {
   type CommissionProfessionalRow,
 } from '@/lib/salon/commission-metrics'
 
+export { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
+
 /** Magnitude de abatimento Avec (8123 guarda negativos). Ausente → null. */
 export function deductionMagnitude(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null
@@ -318,17 +320,6 @@ export function stripFolhaTaxExtras(
     das: null,
     mensalidade_contabilidade: null,
   }
-}
-
-/**
- * Fat. na UI/export: olerite/Fopag Total Faturado quando o RH/reenrich
- * informou; senão o `valor_cobrado` Avec (8123).
- * Não alimenta adm/meio — só a coluna de conferência.
- */
-export function folhaFaturadoDisplay(line: FolhaDraftLine): number | null {
-  const ref = line.folha_extras.faturado_referencia
-  if (ref != null && !Number.isNaN(ref)) return ref
-  return line.avec.charged
 }
 
 function applyFolhaExtras(
