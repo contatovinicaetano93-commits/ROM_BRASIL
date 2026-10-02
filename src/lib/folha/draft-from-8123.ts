@@ -101,6 +101,11 @@ export type FolhaDraftLine = {
     div_ativa: number | null
     mensalidade_contabilidade: number | null
     descontos_diversos: number | null
+    /**
+     * Consumo Baru (RH) — abate no líquido. Separado de descontos_diversos
+     * para a planilha ter coluna própria por profissional/unidade.
+     */
+    consumo_baru: number | null
     produtos_black: number | null
     servicos_assistente_como_pro: number | null
     valor_a_pagar_profissional: number | null
@@ -233,6 +238,7 @@ function applyFolhaExtras(
     n(extras.div_ativa) -
     n(extras.mensalidade_contabilidade) -
     n(extras.descontos_diversos) -
+    n(extras.consumo_baru) -
     n(extras.produtos_black) -
     n(extras.taxa_administrativa) +
     n(meioAMeio) +
@@ -412,13 +418,17 @@ export function buildFolhaDraftLine(
     div_ativa: extras?.div_ativa ?? null,
     mensalidade_contabilidade: extras?.mensalidade_contabilidade ?? null,
     descontos_diversos: extras?.descontos_diversos ?? null,
+    consumo_baru: extras?.consumo_baru ?? null,
     produtos_black: extras?.produtos_black ?? null,
     servicos_assistente_como_pro: extras?.servicos_assistente_como_pro ?? null,
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
     taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
-    esteticista_bonus: extras?.esteticista_bonus ?? null,
+    // Liria suprime o bônus mesmo se o rascunho antigo já gravou os 10%.
+    esteticista_bonus: person?.suppressEsteticistaBonus
+      ? null
+      : (extras?.esteticista_bonus ?? null),
     acumulado_mes: extras?.acumulado_mes ?? null,
     romeu_comissao_parcela: romeuParcela,
   }
@@ -483,6 +493,7 @@ export function buildFolhaDraftLine(
       divAtiva: folha_extras.div_ativa,
       mensalidadeContabilidade: folha_extras.mensalidade_contabilidade,
       descontosDiversos: folha_extras.descontos_diversos,
+      consumoBaru: folha_extras.consumo_baru,
       produtosBlack: folha_extras.produtos_black,
       servicosAssistenteComoPro: u,
       valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
@@ -598,6 +609,7 @@ export function buildFolhaDraftLine(
           divAtiva: folha_extras.div_ativa,
           mensalidadeContabilidade: folha_extras.mensalidade_contabilidade,
           descontosDiversos: folha_extras.descontos_diversos,
+          consumoBaru: folha_extras.consumo_baru,
           produtosBlack: folha_extras.produtos_black,
           servicosAssistenteComoPro: folha_extras.servicos_assistente_como_pro,
           valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
