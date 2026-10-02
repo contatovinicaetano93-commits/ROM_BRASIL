@@ -13,17 +13,17 @@ function row(
     name: p.name,
     role: p.role ?? null,
     charged: p.charged ?? null,
-    service_share: null,
-    product_share: null,
-    other_share: null,
-    tip: null,
+    service_share: p.service_share ?? null,
+    product_share: p.product_share ?? null,
+    other_share: p.other_share ?? null,
+    tip: p.tip ?? null,
     product_spend: p.product_spend ?? null,
     card_fee: p.card_fee ?? null,
     admin_fee: p.admin_fee ?? 0,
     assistant_discount: p.assistant_discount ?? null,
     other_discounts: p.other_discounts ?? null,
     net_payable: p.net_payable ?? null,
-    house_share: null,
+    house_share: p.house_share ?? null,
   }
 }
 
@@ -56,6 +56,58 @@ describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
     expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(36, 2)
     expect(line.folha_extras.taxa_servicos).toBeCloseTo(54, 2)
     expect(line.proposed_pay).toBeCloseTo(3301.4, 1)
+  })
+
+  it('Islayquiel recibo Avec: other=0 sem U NÃO congela líquido (crédita meio)', () => {
+    // PDF olerite 16–30/09: rateio 3457.40 −80 −80 = 3297.40 no 8123;
+    // + meio 40 − adm 36 = 3301.40. Sem U o motor não inventa J; só +meio.
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'Islayquiel Rodrigues de Sena',
+        role: 'MULTIPLICADOR',
+        charged: 2404,
+        service_share: 3427.2,
+        product_share: 30.2,
+        product_spend: -80,
+        assistant_discount: -80,
+        admin_fee: 0,
+        other_discounts: 0,
+        net_payable: 3297.4,
+      }),
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).not.toContain('taxa_adm_em_descontos')
+    expect(line.meio_a_meio).toBeCloseTo(40, 2)
+    expect(line.taxa_administrativa).toBeNull()
+    expect(line.proposed_pay).toBeCloseTo(3337.4, 1)
+  })
+
+  it('Islayquiel recibo Avec: com U=1800 → Total a Receber 3301.40', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'Islayquiel Rodrigues de Sena',
+        role: 'MULTIPLICADOR',
+        charged: 31276,
+        service_share: 3427.2,
+        product_share: 30.2,
+        product_spend: -80,
+        assistant_discount: -80,
+        admin_fee: 0,
+        other_discounts: 0,
+        net_payable: 3297.4,
+      }),
+      { servicos_assistente_como_pro: 1800 },
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(36, 2)
+    expect(line.taxa_administrativa_rate).toBe(0.02)
+    expect(line.meio_a_meio).toBeCloseTo(40, 2)
+    expect(line.proposed_pay).toBeCloseTo(3301.4, 1)
+    expect(line.flags).toContain('taxa_adm_motor')
+    expect(line.flags).not.toContain('taxa_adm_em_descontos')
   })
 
   it('Marcelo Sabino: adm=U×2%; Baru abate; líquido Fopag', () => {
