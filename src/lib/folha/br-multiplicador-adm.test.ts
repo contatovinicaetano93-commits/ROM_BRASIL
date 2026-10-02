@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
+import {
+  buildFolhaDraftLine,
+  folhaFaturadoDisplay,
+} from '@/lib/folha/draft-from-8123'
 import {
   BR_ASSISTANT_AS_PRO_ADMIN_TAX,
   resolveAssistantAdminTaxRate,
@@ -152,5 +155,91 @@ describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
     expect(line.folha_extras.taxa_servicos).toBeCloseTo(99.12, 1)
     expect(line.taxa_administrativa).toBeCloseTo(66.08, 1)
     expect(line.proposed_pay).toBeCloseTo(3628.6, 1)
+  })
+
+  it('Fat. UI: faturado_referencia (olerite 31.276) ≠ charged 8123 (2.404); líquido intacto', () => {
+    // Mesmo erro sistêmico dos outros multi: Total Faturado do recibo ≠ valor_cobrado.
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'Islayquiel Rodrigues de Sena',
+        role: 'MULTIPLICADOR',
+        charged: 2404,
+        service_share: 3427.2,
+        product_share: 30.2,
+        product_spend: -80,
+        assistant_discount: -80,
+        admin_fee: 0,
+        other_discounts: 0,
+        net_payable: 3297.4,
+      }),
+      {
+        servicos_assistente_como_pro: 1800,
+        faturado_referencia: 31_276,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.avec.charged).toBe(2404)
+    expect(line.folha_extras.faturado_referencia).toBe(31_276)
+    expect(folhaFaturadoDisplay(line)).toBe(31_276)
+    expect(line.taxa_administrativa).toBeCloseTo(36, 2)
+    expect(line.proposed_pay).toBeCloseTo(3301.4, 1)
+  })
+
+  it('Fat. UI: sem referência cai no charged Avec', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'ALCIDES ALEX DE MELO ALMEIDA',
+        role: 'MULTIPLICADOR',
+        charged: 551,
+        net_payable: 3040.8,
+      }),
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(folhaFaturadoDisplay(line)).toBe(551)
+    expect(line.folha_extras.faturado_referencia).toBeNull()
+  })
+
+  it('Ariane: adm = U×2% (não C×%); Y = G − J', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'ARIANE CRISTINA DOS SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 480,
+        card_fee: -14.4,
+        net_payable: 139.68,
+      }),
+      { servicos_assistente_como_pro: 480, faturado_referencia: 480 },
+      { applyTaxExtras: false },
+    )
+    expect(folhaFaturadoDisplay(line)).toBe(480)
+    expect(line.taxa_administrativa).toBeCloseTo(9.6, 2)
+    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(9.6, 2)
+    expect(line.proposed_pay).toBeCloseTo(130.08, 1)
+  })
+
+  it('Alcides: rascunho sticky charged×3% cede a U×2% (J Fopag)', () => {
+    // Neon tinha taxa_administrativa=16.53 (551×3% IG) travando o abate.
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'ALCIDES ALEX DE MELO ALMEIDA',
+        role: 'MULTIPLICADOR',
+        charged: 551,
+        net_payable: 3040.8,
+      }),
+      {
+        servicos_assistente_como_pro: 4223.23,
+        taxa_administrativa: 16.53,
+        faturado_referencia: 18_144.85,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(folhaFaturadoDisplay(line)).toBeCloseTo(18_144.85, 2)
+    expect(line.taxa_administrativa).toBeCloseTo(84.46, 1)
+    expect(line.proposed_pay).toBeCloseTo(2956.34, 1)
   })
 })

@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
-import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
+import {
+  folhaFaturadoDisplay,
+  type FolhaDraft,
+  type FolhaDraftLine,
+} from '@/lib/folha/draft-from-8123'
 import type { FolhaPeriodStatus, FolhaShellStatus } from '@/lib/folha/types'
 
 function pct(rate: number): string {
@@ -679,7 +683,11 @@ export default function FolhaPage() {
                     <div>
                       <span className="text-muted">Faturado</span>
                       <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.avec.charged)}
+                        {formatMoney(
+                          selectedLine
+                            ? folhaFaturadoDisplay(selectedLine)
+                            : null,
+                        )}
                       </p>
                     </div>
                     <div>
@@ -1031,7 +1039,7 @@ export default function FolhaPage() {
                               {formatMoneyCompact(line.proposed_pay)}
                             </td>
                             <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.avec.charged)}
+                              {formatMoneyCompact(folhaFaturadoDisplay(line))}
                             </td>
                             <td className="py-1 pr-1 text-right tabular-nums">
                               {formatDeductionCompact(line.avec.card_fee)}
@@ -1142,8 +1150,10 @@ export default function FolhaPage() {
               <li>
                 Olerite: se o 8123 zera taxa_adm e embute adm↔meio (+Baru) em descontos,
                 a Folha desmembra colunas Fopag (Tx adm / Meio / Outros / Baru / U / W)
-                sem reabater o que já está no a_pagar. Assistente-como-pro (todos, incl.
-                Romeu): taxa adm 3% sobre o serviço. Rateio − cartão ≈ comissão/rateio do
+                sem reabater o que já está no a_pagar. Assistente-como-pro: taxa adm sobre
+                U — BR 2% / IG 3% (não sobre o faturado C). Fat. na grade usa Total
+                Faturado do olerite/Fopag quando houver (`faturado_referencia`); o líquido
+                segue o 8123 (`valor_cobrado` + U). Rateio − cartão ≈ comissão/rateio do
                 recibo (produto ≠ cartão).
               </li>
             </ul>

@@ -73,6 +73,7 @@ const sampleDraft: FolhaDraft = {
         liquido_referencia: null,
         fat_liquido_referencia: null,
         produto_referencia: null,
+        faturado_referencia: null,
       },
       proposed_pay: 6032.64,
       formula_y_preview: null,
@@ -133,6 +134,7 @@ const sampleDraft: FolhaDraft = {
         liquido_referencia: null,
         fat_liquido_referencia: null,
         produto_referencia: null,
+        faturado_referencia: null,
       },
       proposed_pay: null,
       formula_y_preview: null,
@@ -153,6 +155,7 @@ describe('folhaLineToExportRow', () => {
     const row = folhaLineToExportRow(sampleDraft.lines[0]!)
     expect(row).toHaveLength(FOLHA_EXPORT_HEADERS.length)
     expect(row[0]).toBe('JEFFERSON POLICARPO DOS SANTOS')
+    expect(row[2]).toBe(12_000) // Fat. = charged (sem faturado_referencia)
     expect(row[7]).toBe(150) // Assistente
     expect(row[8]).toBe(75) // Meio a meio
     expect(row[10]).toBe(707.19) // Outros (olerite)
@@ -161,6 +164,19 @@ describe('folhaLineToExportRow', () => {
     expect(row[22]).toBeNull() // Top-up meta Romeu
     expect(row[23]).toBe(6032.64) // Líquido
     expect(row[24]).toBe('romeu_assistant')
+  })
+
+  it('Fat. export prefer faturado_referencia (olerite) ao charged 8123', () => {
+    const line = {
+      ...sampleDraft.lines[0]!,
+      avec: { ...sampleDraft.lines[0]!.avec, charged: 2404 },
+      folha_extras: {
+        ...sampleDraft.lines[0]!.folha_extras,
+        faturado_referencia: 31_276,
+      },
+    }
+    const row = folhaLineToExportRow(line)
+    expect(row[2]).toBe(31_276)
   })
 })
 

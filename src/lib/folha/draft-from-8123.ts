@@ -215,6 +215,13 @@ export type FolhaDraftLine = {
      * (Diana: Avec 9.50 vs Fopag 42.68). Interno — não exporta.
      */
     produto_referencia: number | null
+    /**
+     * Total Faturado do olerite/Fopag (coluna C da planilha). No BR,
+     * multiplicador/assistente frequentemente diverge do `valor_cobrado`
+     * 8123 (Avec charged) — C costuma ser sintético ≈10×G. Só display /
+     * export; o motor continua em `avec.charged` + U.
+     */
+    faturado_referencia: number | null
   }
   /**
    * a_pagar 8123 ± extras Folha.
@@ -311,6 +318,17 @@ export function stripFolhaTaxExtras(
     das: null,
     mensalidade_contabilidade: null,
   }
+}
+
+/**
+ * Fat. na UI/export: olerite/Fopag Total Faturado quando o RH/reenrich
+ * informou; senão o `valor_cobrado` Avec (8123).
+ * Não alimenta adm/meio — só a coluna de conferência.
+ */
+export function folhaFaturadoDisplay(line: FolhaDraftLine): number | null {
+  const ref = line.folha_extras.faturado_referencia
+  if (ref != null && !Number.isNaN(ref)) return ref
+  return line.avec.charged
 }
 
 function applyFolhaExtras(
@@ -551,11 +569,11 @@ export function buildFolhaDraftLine(
   ) {
     meioForProposedPay = roundFolha(meio_a_meio - sheetMeio, 4)
   }
-  /** Exibição: adm do 8123/motor, ou adm 3% (desmembrada ou charged×3%). */
+  /** Exibição: adm do 8123/motor, ou adm assistente (U×2% BR / U×3% IG). */
   let taxaAdmDisplay = admin.amount ?? olerite.taxaAdm
   /**
-   * Abate no proposed_pay: motor BR 5%/IG 7% (pro) ou adm 3% assistente quando
-   * a_pagar ainda não fechou a taxa (Lucas: descontos=0).
+   * Abate no proposed_pay: motor BR 5%/IG 7% (pro) ou adm assistente sobre U
+   * quando a_pagar ainda não fechou a taxa (Lucas: descontos=0).
    * null explícito em extras antigos NÃO sobrescreve o motor.
    */
   const assistantAdmMotorExtra =
@@ -741,6 +759,7 @@ export function buildFolhaDraftLine(
     liquido_referencia: extras?.liquido_referencia ?? null,
     fat_liquido_referencia: extras?.fat_liquido_referencia ?? null,
     produto_referencia: extras?.produto_referencia ?? null,
+    faturado_referencia: extras?.faturado_referencia ?? null,
   }
   if (!applyTaxExtras) {
     folha_extras = stripFolhaTaxExtras(folha_extras)
@@ -843,11 +862,21 @@ export function buildFolhaDraftLine(
       folha_extras.taxa_adm_assistente > 0.02
     ) {
       const admU = folha_extras.taxa_adm_assistente
-      const falseChargedAdm =
-        row.charged != null &&
-        assistantAdminRate != null &&
-        taxaAdmDisplay != null &&
-        Math.abs(taxaAdmDisplay - row.charged * assistantAdminRate) <= 1
+      /**
+       * Rascunho antigo às vezes guardou charged×3% (alíquota IG) no BR, ou
+       * charged×2% antes de informar U. Qualquer um é falso frente a U×alíquota.
+       */
+      const looksLikeChargedAssistAdm = (value: number | null | undefined) => {
+        if (value == null || row.charged == null || row.charged <= 0.02) {
+          return false
+        }
+        for (const rate of [assistantAdminRate, 0.02, 0.03]) {
+          if (rate == null) continue
+          if (Math.abs(value - row.charged * rate) <= 1) return true
+        }
+        return false
+      }
+      const falseChargedAdm = looksLikeChargedAssistAdm(taxaAdmDisplay)
       if (taxaAdmDisplay == null || falseChargedAdm) {
         taxaAdmDisplay = admU
       }
@@ -865,18 +894,9 @@ export function buildFolhaDraftLine(
         (otherDiscountsMag == null || otherDiscountsMag <= 0.02) &&
         ((meio_a_meio != null && meio_a_meio > 0.02) ||
           (panel === 'brasil' && admU > 0.02))
-      /**
-       * Rascunho antigo / applyExtras às vezes carrega taxa_administrativa =
-       * charged×alíquota (antes de informar U). Com U na mão, isso é falso —
-       * trocar por admU (BR 2% / IG 3% sobre U).
-       */
-      const extrasIsFalseChargedAdm =
-        folha_extras.taxa_administrativa != null &&
-        row.charged != null &&
-        assistantAdminRate != null &&
-        Math.abs(
-          folha_extras.taxa_administrativa - row.charged * assistantAdminRate,
-        ) <= 1
+      const extrasIsFalseChargedAdm = looksLikeChargedAssistAdm(
+        folha_extras.taxa_administrativa,
+      )
       if (shouldAbateAdmU) {
         if (
           folha_extras.taxa_administrativa == null ||
