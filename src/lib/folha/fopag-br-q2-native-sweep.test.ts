@@ -161,7 +161,7 @@ describe('Fopag BR Q2 native sweep', () => {
       }
 
       let target = f.liquido
-      // Fopag coluna meio às vezes 50% genérico; motor usa exceção (Dayana 5%, Walter 70%).
+      // Fopag coluna meio às vezes 50% genérico; motor usa exceção (Dayana 5%, Walter 60%).
       if (f.desc_assistente > 0.02) {
         const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
         if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
