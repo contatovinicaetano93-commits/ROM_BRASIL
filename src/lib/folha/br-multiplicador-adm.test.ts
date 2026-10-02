@@ -79,4 +79,26 @@ describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
     expect(line.folha_extras.taxa_servicos).toBeCloseTo(166.5, 2)
     expect(line.proposed_pay).toBeCloseTo(4552.7, 1)
   })
+
+  it('Auricaliane: Y = G − J + V(earn 30%) − W − diversos', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'AURICALIANE DA SILVA DANTAS',
+        role: 'MULTIPLICADOR',
+        charged: 3438.72,
+        net_payable: 2879.65,
+      }),
+      {
+        servicos_assistente_como_pro: 3304,
+        descontos_diversos: 77.05,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('auricaliane')
+    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(991.2, 1)
+    expect(line.folha_extras.taxa_servicos).toBeCloseTo(99.12, 1)
+    expect(line.taxa_administrativa).toBeCloseTo(66.08, 1)
+    expect(line.proposed_pay).toBeCloseTo(3628.6, 1)
+  })
 })

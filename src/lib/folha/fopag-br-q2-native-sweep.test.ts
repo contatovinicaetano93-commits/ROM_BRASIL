@@ -24,10 +24,12 @@ type FopagRow = {
   taxa_adm: number
   desc_assistente: number
   meio_a_meio: number
+  parc: number
   baru: number
   U: number
   V: number
   W: number
+  desc_diversos_02: number
   liquido: number
 }
 
@@ -136,6 +138,23 @@ describe('Fopag BR Q2 native sweep', () => {
       }
       if (u > 0.02) extras.servicos_assistente_como_pro = u
       if (f.baru > 0.02) extras.consumo_baru = f.baru
+      // RH extras — mesma entrada do sweep IG (parc / diversos / adm manicure).
+      if (f.parc > 0.02) {
+        extras.parc = f.parc
+        notes.push('parc')
+      }
+      if (f.desc_diversos_02 > 0.02) {
+        extras.descontos_diversos = f.desc_diversos_02
+        notes.push('desc_diversos_02')
+      }
+      if (
+        cargo === 'manicure' &&
+        f.taxa_adm > 0.02 &&
+        (f.U <= 0.02 || !isAssist)
+      ) {
+        extras.taxa_administrativa = f.taxa_adm
+        notes.push('manicure_taxa_adm')
+      }
       if (person?.isRomeuAssistant && bonus && bonus.total > 0.02) {
         extras.acumulado_mes = bonus.total
         notes.push(`romeu_acumulado=${bonus.total}`)
@@ -197,6 +216,7 @@ describe('Fopag BR Q2 native sweep', () => {
           'alison',
           'walter martinho',
           'alan fern',
+          'auricaliane',
         ].some((h) => p.name.toLowerCase().includes(h)),
       ),
       gaps: gaps.map((g) => ({
@@ -230,8 +250,10 @@ describe('Fopag BR Q2 native sweep', () => {
     expect(by('islayquiel')?.motor_proposed).toBeCloseTo(3301.4, 0)
     expect(by('marcelo sabino')?.motor_proposed).toBeCloseTo(4552.7, 0)
 
-    // Soft floor: multiplicador BR fechado; cabeleireiros com Y ≠ G−… ficam gap
-    expect(matches.length / scored.length).toBeGreaterThanOrEqual(0.85)
+    expect(by('auricaliane')?.status).toBe('match')
+    expect(by('dayana')?.status).toBe('match')
+    // Soft floor: extras RH (parc/diversos) + Auricaliane earn-in-pay
+    expect(matches.length / scored.length).toBeGreaterThanOrEqual(0.97)
     expect(by('walter')?.status).toBe('match')
   })
 })
