@@ -13,9 +13,8 @@ try {
  * Cliente postgres.js + helpers neon-compat (query / transaction).
  * Também expõe o helper de lista: sql`… where id in ${sql(ids)}`.
  *
- * Do NOT switch back to neon() from @neondatabase/serverless:
- * neon() is HTTP-only and fails against *.supabase.com / pooler hosts.
- * BR e IG usam Supabase; só o Cérebro usa Neon.
+ * Do NOT switch back to neon() from @neondatabase/serverless (HTTP-only).
+ * Unidades usam Neon via postgres.js + DATABASE_URL; Supabase é legado.
  */
 export type Sql = {
   // Tagged template + helper sql(ids) para IN (...)
