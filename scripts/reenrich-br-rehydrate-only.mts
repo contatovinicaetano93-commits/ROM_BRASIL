@@ -1,6 +1,7 @@
 /**
  * Rehydrate Folha BR Q2 columns (Tx adm / Meio / Outros / Baru) and persist.
- * Does NOT overlay IG Fopag U values.
+ * Does NOT overlay Fopag U/Fat. — para isso use
+ * `PANEL=brasil scripts/reenrich-folha-fopag-columns.mts` (lê fopag_br_q2).
  */
 import postgres from 'postgres'
 import { rehydrateFolhaDraftFromPeriod } from '../src/lib/folha/workflow'

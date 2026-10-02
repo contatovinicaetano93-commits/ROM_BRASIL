@@ -4,7 +4,11 @@
 
 import ExcelJS from 'exceljs'
 import { getBrand, type RomPanelId } from '@/lib/brand'
-import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
+import {
+  folhaFaturadoDisplay,
+  type FolhaDraft,
+  type FolhaDraftLine,
+} from '@/lib/folha/draft-from-8123'
 
 export type FolhaExportResult = {
   buffer: Buffer
@@ -55,7 +59,7 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
   return [
     line.name,
     line.cargo_raw ?? line.cargo,
-    line.avec.charged,
+    folhaFaturadoDisplay(line),
     exportMagnitude(line.avec.card_fee),
     line.rateio_apos_cartao,
     exportMagnitude(line.avec.product_spend),
@@ -134,7 +138,8 @@ export async function buildFolhaWorkbook(
       const cell = row.getCell(col)
       if (typeof cell.value === 'number') cell.numFmt = '#,##0.00'
     }
-    const pctCell = row.getCell(9)
+    // Col 10 = "Meio a meio %" (col 9 é o valor em R$).
+    const pctCell = row.getCell(10)
     if (typeof pctCell.value === 'number') pctCell.numFmt = '0%'
   }
 

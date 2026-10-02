@@ -7,11 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
-import {
-  resolveFolhaPersonRules,
-  resolveMeioAMeioRate,
-  usesNamedMeioOverride,
-} from '@/lib/folha/exceptions'
+import { resolveFolhaPersonRules } from '@/lib/folha/exceptions'
 import { normalizeFolhaCargo } from '@/lib/folha/rules'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
@@ -25,6 +21,10 @@ type FopagRow = {
   desc_assistente: number
   meio_a_meio: number
   parc: number
+  das?: number
+  darf?: number
+  div_ativa?: number
+  mensalidade?: number
   baru: number
   U: number
   V: number
@@ -131,21 +131,41 @@ describe('Fopag BR Q2 native sweep', () => {
 
       const extras: NonNullable<Parameters<typeof buildFolhaDraftLine>[2]> = {}
       let u = f.U
-      // Fopag BR às vezes põe J = constante×2% com coluna U vazia (Alberto).
-      if (isAssist && u <= 0.02 && f.taxa_adm > 0.02) {
+      // J = constante×2% com U vazio (Alberto): deriva U só se NÃO for earn-in
+      // (Auricaliane com T vazio — Y não inclui V−W; só −J).
+      if (
+        isAssist &&
+        u <= 0.02 &&
+        f.taxa_adm > 0.02 &&
+        person?.assistantEarnInPay !== true
+      ) {
         u = f.taxa_adm / 0.02
         notes.push(`U_from_adm=${u.toFixed(2)}`)
       }
       if (u > 0.02) extras.servicos_assistente_como_pro = u
+      else if (
+        isAssist &&
+        f.taxa_adm > 0.02 &&
+        person?.assistantEarnInPay === true
+      ) {
+        extras.taxa_administrativa = f.taxa_adm
+        notes.push(`adm_only_no_U=${f.taxa_adm}`)
+      }
       if (f.baru > 0.02) extras.consumo_baru = f.baru
-      // RH extras — mesma entrada do sweep IG (parc / diversos / adm manicure).
       if (f.parc > 0.02) {
         extras.parc = f.parc
         notes.push('parc')
       }
-      if (f.desc_diversos_02 > 0.02) {
-        extras.descontos_diversos = f.desc_diversos_02
-        notes.push('desc_diversos_02')
+      // Q2 stripFolhaTaxExtras zera DAS/DARF — embute em descontos_diversos.
+      const taxLike =
+        (f.das ?? 0) +
+        (f.darf ?? 0) +
+        (f.div_ativa ?? 0) +
+        (f.mensalidade ?? 0) +
+        (f.desc_diversos_02 > 0.02 ? f.desc_diversos_02 : 0)
+      if (taxLike > 0.02) {
+        extras.descontos_diversos = taxLike
+        notes.push(`tax_diversos=${taxLike}`)
       }
       if (
         cargo === 'manicure' &&
@@ -155,22 +175,11 @@ describe('Fopag BR Q2 native sweep', () => {
         extras.taxa_administrativa = f.taxa_adm
         notes.push('manicure_taxa_adm')
       }
-      if (person?.isRomeuAssistant && bonus && bonus.total > 0.02) {
-        extras.acumulado_mes = bonus.total
-        notes.push(`romeu_acumulado=${bonus.total}`)
-      }
+      // Romeu top-up (acumulado→meta) NÃO está no Y desta Fopag incompleta.
+      // Não passar acumulado_mes — proposed deve bater a coluna X.
+      void bonus
 
-      let target = f.liquido
-      // Fopag coluna meio às vezes 50% genérico; motor usa exceção (Dayana 5%, Walter 60%).
-      if (f.desc_assistente > 0.02) {
-        const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
-        if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
-          target = f.liquido - f.meio_a_meio + motorMeio
-          notes.push(
-            `target_meio_corrected=${target.toFixed(2)} (fopag=${f.meio_a_meio})`,
-          )
-        }
-      }
+      const target = f.liquido
 
       const line = buildFolhaDraftLine('brasil', row, extras, {
         applyTaxExtras: false,

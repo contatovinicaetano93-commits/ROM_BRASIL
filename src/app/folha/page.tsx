@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
+import { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
 import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import type { FolhaPeriodStatus, FolhaShellStatus } from '@/lib/folha/types'
 
@@ -679,7 +680,11 @@ export default function FolhaPage() {
                     <div>
                       <span className="text-muted">Faturado</span>
                       <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.avec.charged)}
+                        {formatMoney(
+                          selectedLine
+                            ? folhaFaturadoDisplay(selectedLine)
+                            : null,
+                        )}
                       </p>
                     </div>
                     <div>
@@ -1031,7 +1036,7 @@ export default function FolhaPage() {
                               {formatMoneyCompact(line.proposed_pay)}
                             </td>
                             <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.avec.charged)}
+                              {formatMoneyCompact(folhaFaturadoDisplay(line))}
                             </td>
                             <td className="py-1 pr-1 text-right tabular-nums">
                               {formatDeductionCompact(line.avec.card_fee)}
@@ -1130,20 +1135,24 @@ export default function FolhaPage() {
               </li>
               <li>
                 Exceções: Diello IG / Dayana BR / Gildenice IG — meio a meio 5% (salão
-                5%; excedente do assistente &gt;10% no pro); Romeu 50%; Walter assistente
-                30%; Dani Rocha comissão 55% + meio 50%; Liria taxa adm 7%; Brunna/Joah/
-                Marcela taxa U 5% (2%+3%) + time (Gabriela Martins, Graciele, Camila,
-                Tatiana, Patrícia Aguiar); assistentes Romeu: 30% já nas quinzenas; no
-                dia 05 top-up +10% (10–20k) / +20% (acima de 20k) sobre o acumulado U do
-                mês. Lucas Campos: meta = +14% vs mesmo mês ano anterior; Q1 cobra adm;
-                se bater, Q2 isenta adm e devolve a adm da Q1. Esteticistas: sem bônus.
+                5%; excedente do assistente &gt;10% no pro); Romeu 50%; Walter BR: meio
+                a meio 60% + comissão 60%, remessa assistente-como-pro 30% (≠ padrão
+                20%); Dani Rocha comissão 55% + meio 50%; IG Liria taxa adm 7%; IG
+                Brunna/Joah/Marcela: adm 5% sobre C + split U 2%+3% + time (Gabriela
+                Martins, Graciele, Camila, Tatiana, Patrícia Aguiar); assistentes Romeu:
+                30% já nas quinzenas; no dia 05 top-up +10% (10–20k) / +20% (acima de
+                20k) sobre o acumulado U do mês. Lucas Campos BR: meta = +14% vs mesmo
+                mês ano anterior; Q1 cobra adm; se bater, Q2 isenta adm e devolve a adm
+                da Q1. Esteticistas: sem bônus. Auricaliane BR: V=U×30% no líquido.
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>
                 Olerite: se o 8123 zera taxa_adm e embute adm↔meio (+Baru) em descontos,
                 a Folha desmembra colunas Fopag (Tx adm / Meio / Outros / Baru / U / W)
-                sem reabater o que já está no a_pagar. Assistente-como-pro (todos, incl.
-                Romeu): taxa adm 3% sobre o serviço. Rateio − cartão ≈ comissão/rateio do
+                sem reabater o que já está no a_pagar. Assistente-como-pro: taxa adm sobre
+                U — BR 2% / IG 3% (não sobre o faturado C). Fat. na grade usa Total
+                Faturado do olerite/Fopag quando houver (`faturado_referencia`); o líquido
+                segue o 8123 (`valor_cobrado` + U). Rateio − cartão ≈ comissão/rateio do
                 recibo (produto ≠ cartão).
               </li>
             </ul>
