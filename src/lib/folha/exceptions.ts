@@ -35,6 +35,7 @@ export type FolhaExceptionId =
   | 'lucas_campos'
   | 'romeu_assistant'
   | 'auricaliane'
+  | 'victor_chaves'
 
 export type FolhaServiceTaxSplit = {
   /** Soma das alíquotas (ex.: 0.05). */
