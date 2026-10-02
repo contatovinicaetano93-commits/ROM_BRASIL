@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Fail if ROM_PANEL=brasil but DATABASE_URL points at Neon (unidades usam Supabase).
- * Brasil must use Supabase pooler (*.supabase.com). Iguatemi may stay on neon.tech.
+ * Fail if ROM_PANEL=brasil but DATABASE_URL does not point at Neon.
+ * Unidades (BR e IG) usam Neon; Supabase é legado.
  *
  * Usage:
  *   ROM_PANEL=brasil DATABASE_URL=... node scripts/check-brasil-db-host.mjs
@@ -35,19 +35,19 @@ if (!host) {
   process.exit(1)
 }
 
-if (/neon\.tech$/i.test(host) || /\.neon\.tech$/i.test(host)) {
+if (/supabase\.com$/i.test(host) || /\.supabase\.com$/i.test(host)) {
   console.error(
-    `check-brasil-db-host FAILED: Brasil DATABASE_URL host is Neon (${host}).`,
+    `check-brasil-db-host FAILED: Brasil DATABASE_URL host is Supabase legado (${host}).`,
   )
   console.error(
-    '  Use Supabase pooler (aws-*.pooler.supabase.com:5432 session or :6543 tx), ssl require, prepare:false.',
+    '  Use Neon pooler (*.aws.neon.tech / *.neon.tech), sslmode=require.',
   )
   process.exit(1)
 }
 
-if (!/supabase\.com$/i.test(host) && !/\.supabase\.com$/i.test(host)) {
+if (!/neon\.tech$/i.test(host) && !/\.neon\.tech$/i.test(host)) {
   console.warn(
-    `check-brasil-db-host WARN: host ${host} is not *.supabase.com — confirm this is intentional for Brasil.`,
+    `check-brasil-db-host WARN: host ${host} is not *.neon.tech — confirm this is intentional for Brasil.`,
   )
 }
 
