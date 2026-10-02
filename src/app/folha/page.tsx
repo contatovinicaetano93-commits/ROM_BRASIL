@@ -878,7 +878,7 @@ export default function FolhaPage() {
                 {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
               </li>
               <li>
-                Taxa adm profissional: 7% sobre faturado bruto (BR e IG) — só
+                Taxa adm profissional: BR 5% / IG 7% sobre faturado bruto — no IG,
                 Brunna/Joah/Marcela ficam em 5%
               </li>
               <li>
