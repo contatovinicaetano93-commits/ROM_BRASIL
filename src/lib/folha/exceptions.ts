@@ -119,7 +119,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // BR — mesma regra Diello (RH): salão 5%; se assistente 13%, pro arca 8%.
+    // Base Folha BR Q2 (16–30/09): L = K/2 (50%). Fórmula X inclui +U−V.
+    // Override antigo de 5% (RH Diello) não bate a planilha BR — usar 50%.
     id: 'dayana',
     aliases: [
       'dayana marques silva pinto',
@@ -128,7 +129,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
       'daiana marques',
       'daiana',
     ],
-    meioAMeioRate: 0.05,
+    meioAMeioRate: 0.5,
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
@@ -170,8 +171,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // RH: meio a meio 60%; comissão do profissional 60%.
-    // Remessa sobre serviços assistente como pro = 30% (não o padrão 20%).
+    // Base Folha BR Q2: L = K/2 (50%); U = T×30% (remessa); V = T×3%; X inclui +U−V.
+    // Comissão contrato 60% permanece; meio na planilha é 50% (não 60%).
     id: 'walter_leal',
     aliases: [
       'walter martinho leal filho cabeleireiro',
@@ -179,7 +180,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
       'walter leal',
       'walter',
     ],
-    meioAMeioRate: 0.6,
+    meioAMeioRate: 0.5,
     assistantRemitRate: 0.3,
     proCommissionRate: 0.6,
     serviceTaxSplit: null,
@@ -392,6 +393,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   {
     // Base Folha BR Q2: Y = G − J + V − W − diversos, com V = U×30% (earn).
     // Diferente de Eliseu/Marcelo (U/V/W só conferência).
+    // Se T/U vazios na planilha, NÃO derivar U de J — só −J −parc −Baru.
     id: 'auricaliane',
     aliases: [
       'auricaliane da silva dantas',
@@ -399,6 +401,25 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     ],
     meioAMeioRate: null,
     assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: null,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+    assistantEarnInPay: true,
+  },
+  {
+    // Base Folha BR Q2: X compartilha fórmula com +U−V (Vanessa/X206).
+    // U excel = T×20% (remessa padrão), não earn 30% da Auricaliane.
+    id: 'victor_chaves',
+    aliases: [
+      'victor chaves santos',
+      'victor chaves',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: 0.2,
     proCommissionRate: null,
     serviceTaxSplit: null,
     adminFeeRate: null,
@@ -474,7 +495,7 @@ export function resolveFolhaPersonRules(
 
 /**
  * Taxa de meio a meio efetiva para o profissional.
- * Preferência: `meioAMeioRate` explícito (Walter 60%, Diello 5%).
+ * Preferência: `meioAMeioRate` explícito (Walter/Dayana BR 50%, Diello 5%).
  * Senão, se só há `assistantRemitRate`, meio = 1 − repasse.
  */
 export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
@@ -499,13 +520,9 @@ export function resolveEsteticistaBonusRate(
   return null
 }
 
-/** Pedro/Dayana/Gildenice: Fopag fórmula meio=50% genérica — motor manda 5%. */
+/** Pedro/Gildenice: Fopag fórmula meio=50% genérica — motor manda 5%. Dayana BR = 50%. */
 export function usesNamedMeioOverride(rules: FolhaPersonRules | null): boolean {
-  return (
-    rules?.id === 'pedro_diello' ||
-    rules?.id === 'dayana' ||
-    rules?.id === 'gildenice'
-  )
+  return rules?.id === 'pedro_diello' || rules?.id === 'gildenice'
 }
 
 /**

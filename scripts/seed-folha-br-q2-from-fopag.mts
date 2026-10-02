@@ -13,10 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import postgres from 'postgres'
 import { buildFolhaDraftLine } from '../src/lib/folha/draft-from-8123'
-import {
-  resolveFolhaPersonRules,
-  resolveMeioAMeioRate,
-} from '../src/lib/folha/exceptions'
+import { resolveFolhaPersonRules } from '../src/lib/folha/exceptions'
 import { quinzenaForYearMonthHalf } from '../src/lib/folha/period'
 import { normalizeFolhaCargo } from '../src/lib/folha/rules'
 import type { CommissionProfessionalRow } from '../src/lib/salon/commission-metrics'
@@ -31,6 +28,10 @@ type FopagRow = {
   desc_assistente: number
   meio_a_meio: number
   parc: number
+  das?: number
+  darf?: number
+  div_ativa?: number
+  mensalidade?: number
   baru: number
   U: number
   V: number
@@ -131,19 +132,38 @@ async function main() {
 
     const extras: NonNullable<Parameters<typeof buildFolhaDraftLine>[2]> = {}
     let u = f.U
-    if (isAssist && u <= 0.02 && f.taxa_adm > 0.02) {
+    if (
+      isAssist &&
+      u <= 0.02 &&
+      f.taxa_adm > 0.02 &&
+      person?.assistantEarnInPay !== true
+    ) {
       u = f.taxa_adm / 0.02
       notes.push(`U_from_adm=${u.toFixed(2)}`)
     }
     if (u > 0.02) extras.servicos_assistente_como_pro = u
+    else if (
+      isAssist &&
+      f.taxa_adm > 0.02 &&
+      person?.assistantEarnInPay === true
+    ) {
+      extras.taxa_administrativa = f.taxa_adm
+      notes.push(`adm_only_no_U=${f.taxa_adm}`)
+    }
     if (f.baru > 0.02) extras.consumo_baru = f.baru
     if (f.parc > 0.02) {
       extras.parc = f.parc
       notes.push('parc')
     }
-    if (f.desc_diversos_02 > 0.02) {
-      extras.descontos_diversos = f.desc_diversos_02
-      notes.push('desc_diversos_02')
+    const taxLike =
+      (f.das ?? 0) +
+      (f.darf ?? 0) +
+      (f.div_ativa ?? 0) +
+      (f.mensalidade ?? 0) +
+      (f.desc_diversos_02 > 0.02 ? f.desc_diversos_02 : 0)
+    if (taxLike > 0.02) {
+      extras.descontos_diversos = taxLike
+      notes.push(`tax_diversos=${taxLike}`)
     }
     if (
       cargo === 'manicure' &&
@@ -153,21 +173,10 @@ async function main() {
       extras.taxa_administrativa = f.taxa_adm
       notes.push('manicure_taxa_adm')
     }
-    if (person?.isRomeuAssistant && bonus && bonus.total > 0.02) {
-      extras.acumulado_mes = bonus.total
-      notes.push(`romeu_acumulado=${bonus.total}`)
-    }
+    // Meta Romeu (acumulado) fora do Y desta Fopag incompleta.
+    void bonus
 
-    let target = f.liquido
-    if (f.desc_assistente > 0.02) {
-      const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
-      if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
-        target = f.liquido - f.meio_a_meio + motorMeio
-        notes.push(
-          `target_meio_corrected=${target.toFixed(2)} (fopag=${f.meio_a_meio})`,
-        )
-      }
-    }
+    const target = f.liquido
 
     const line = buildFolhaDraftLine('brasil', row, extras, {
       applyTaxExtras: false,

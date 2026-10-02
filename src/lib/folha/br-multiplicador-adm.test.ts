@@ -282,8 +282,8 @@ describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
       { applyTaxExtras: false },
     )
     expect(line.exception_id).toBe('dayana')
-    expect(line.meio_a_meio_rate).toBe(0.05)
-    expect(line.meio_a_meio).toBeCloseTo(2295.8 * 0.05, 1)
+    expect(line.meio_a_meio_rate).toBe(0.5)
+    expect(line.meio_a_meio).toBeCloseTo(2295.8 * 0.5, 1)
   })
 
   it('Auricaliane: other=diversos NÃO bloqueia −J; Y = G − J + V − W − div', () => {

@@ -46,15 +46,15 @@ describe('resolveFolhaPersonRules', () => {
     )
   })
 
-  it('casa Dayana/Gildenice 5%, Romeu 50%, Walter meio 60% + remessa 30%, Dani 55%', () => {
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.05)
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.05)
+  it('casa Dayana 50% (Fopag BR), Gildenice 5%, Romeu 50%, Walter meio 50% + remessa 30%, Dani 55%', () => {
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.5)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.5)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Gildenice Teixeira'))).toBe(
       0.05,
     )
     expect(resolveFolhaPersonRules('Gildenice')?.id).toBe('gildenice')
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Romeu Felipe'))).toBe(0.5)
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.6)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.5)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daniela Machado Rocha'))).toBe(
       0.5,
     )
@@ -255,10 +255,10 @@ describe('meio a meio nomeado no draft + calc', () => {
     expect(line.exception_id).toBe('pedro_diello')
   })
 
-  it('Walter: meio a meio 60%; remessa 30% (não 20%)', () => {
+  it('Walter: meio a meio 50% (Fopag L=K/2); remessa 30% (não 20%)', () => {
     const line = buildFolhaDraftLine('brasil', row('Walter Martinho Leal Filho Cabeleireiro'))
-    expect(line.meio_a_meio_rate).toBe(0.6)
-    expect(line.meio_a_meio).toBe(600)
+    expect(line.meio_a_meio_rate).toBe(0.5)
+    expect(line.meio_a_meio).toBe(500)
 
     const y = calculateFolhaLine({
       panel: 'brasil',
@@ -286,7 +286,7 @@ describe('meio a meio nomeado no draft + calc', () => {
       hasDepilacao: false,
       waiveAdminFee: false,
     })
-    expect(roundFolha(y.meioAMeio, 2)).toBe(600)
+    expect(roundFolha(y.meioAMeio, 2)).toBe(500)
     // Remessa Walter = 30% × serviços assistente como pro (padrão geral é 20%).
     expect(roundFolha(y.valorAPagarProfissional, 2)).toBe(300)
   })
