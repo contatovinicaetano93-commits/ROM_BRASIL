@@ -119,32 +119,42 @@ describe('buildFolhaDraftLine', () => {
   })
 
   it('Ana Matsumoto IG: recibo 9472 com adm embutida em descontos', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'ANA CRISTINA MATSUMOTO',
-        role: 'Cabeleireiro',
-        charged: 29216.2,
-        service_share: 14608.1,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -840.13,
-        card_fee: -412.9,
-        admin_fee: 0,
-        assistant_discount: -2901.62,
-        // 387.08 (BARU) + 2045.13 (adm) − 1450.81 (meio)
-        other_discounts: -981.4,
-        net_payable: 9472.05,
-        house_share: 14608.1,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
+    const row = {
+      name: 'ANA CRISTINA MATSUMOTO',
+      role: 'Cabeleireiro',
+      charged: 29216.2,
+      service_share: 14608.1,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: -840.13,
+      card_fee: -412.9,
+      admin_fee: 0,
+      assistant_discount: -2901.62,
+      // 387.08 (BARU) + 2045.13 (adm) − 1450.81 (meio)
+      other_discounts: -981.4,
+      net_payable: 9472.05,
+      house_share: 14608.1,
+    }
+    const line = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
     expect(line.taxa_administrativa).toBeCloseTo(2045.134, 2)
     expect(line.meio_a_meio).toBeCloseTo(1450.81, 2)
+    expect(line.outros_descontos).toBeCloseTo(387.08, 2)
     expect(line.flags).toContain('taxa_adm_em_descontos')
     expect(line.proposed_pay).toBeCloseTo(9472.05, 2)
+
+    // Fopag: Baru na coluna própria; não reabate (já no a_pagar).
+    const withBaru = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { consumo_baru: 387.08 },
+      { applyTaxExtras: false },
+    )
+    expect(withBaru.folha_extras.consumo_baru).toBeCloseTo(387.08, 2)
+    expect(withBaru.outros_descontos).toBeNull()
+    expect(withBaru.proposed_pay).toBeCloseTo(9472.05, 2)
   })
 
   it('BR cabeleireiro: taxa adm motor 5% quando 8123 veio 0', () => {
@@ -513,6 +523,38 @@ describe('buildFolhaDraftLine', () => {
     expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
+  it('Liria descarta bônus esteticista já gravado nos extras', () => {
+    const liria: CommissionProfessionalRow = {
+      name: 'Liria Pereira Colman',
+      role: 'Esteticista',
+      charged: 5968,
+      service_share: null,
+      product_share: null,
+      other_share: null,
+      tip: null,
+      product_spend: null,
+      card_fee: null,
+      admin_fee: -417.76,
+      assistant_discount: null,
+      other_discounts: null,
+      net_payable: 2598.12,
+      house_share: null,
+    }
+    const staleBonus = 596.8
+    const line = buildFolhaDraftLine('iguatemi', liria, {
+      esteticista_bonus: staleBonus,
+    })
+    expect(line.folha_extras.esteticista_bonus).toBeNull()
+    expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
+
+    const kept = buildFolhaDraftLine(
+      'iguatemi',
+      { ...liria, name: 'Esteticista Teste' },
+      { esteticista_bonus: staleBonus },
+    )
+    expect(kept.folha_extras.esteticista_bonus).toBe(staleBonus)
+  })
+
   it('Brasil Q2: Jefferson 17958.05 → top-up 10%; Gabriela 24700.03 → 20% (faixa, não célula E14)', () => {
     const jeff = buildFolhaDraftLine(
       'brasil',
@@ -564,38 +606,6 @@ describe('buildFolhaDraftLine', () => {
     // U/V/W conferência (W BR=3%); líquido = a_pagar + top-up
     expect(gabi.folha_extras.taxa_servicos).toBeCloseTo(21_290.03 * 0.03, 2)
     expect(gabi.proposed_pay).toBeCloseTo(3000 + 4940.006, 2)
-  })
-
-  it('Liria descarta bônus esteticista já gravado nos extras', () => {
-    const liria = {
-      name: 'Liria Pereira Colman',
-      role: 'Esteticista',
-      charged: 5968,
-      service_share: null,
-      product_share: null,
-      other_share: null,
-      tip: null,
-      product_spend: null,
-      card_fee: null,
-      admin_fee: -417.76,
-      assistant_discount: null,
-      other_discounts: null,
-      net_payable: 2598.12,
-      house_share: null,
-    }
-    const staleBonus = 596.8
-    const line = buildFolhaDraftLine('iguatemi', liria, {
-      esteticista_bonus: staleBonus,
-    })
-    expect(line.folha_extras.esteticista_bonus).toBeNull()
-    expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
-
-    const kept = buildFolhaDraftLine(
-      'iguatemi',
-      { ...liria, name: 'Esteticista Teste' },
-      { esteticista_bonus: staleBonus },
-    )
-    expect(kept.folha_extras.esteticista_bonus).toBe(staleBonus)
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {
