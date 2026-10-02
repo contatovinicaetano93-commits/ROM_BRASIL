@@ -25,21 +25,43 @@ export async function GET(req: NextRequest) {
     const referenceDay =
       dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : undefined
 
-    const { draft, period, quinzena } = await loadOrCreateFolhaDraft(panel, {
-      periodId: periodParam || undefined,
-      referenceDay,
-      actor: auth.session.user,
-    })
+    const { draft, period, quinzena, source } = await loadOrCreateFolhaDraft(
+      panel,
+      {
+        periodId: periodParam || undefined,
+        referenceDay,
+        actor: auth.session.user,
+      },
+    )
 
     const periods = await listFolhaPeriodSummaries()
     const upcoming = buildUpcomingPayments()
     const withPay = draft?.lines.filter((l) => l.proposed_pay != null).length ?? 0
+    let windowHint = ''
+    if (source != null) {
+      switch (source) {
+        case 'avec_window':
+          windowHint = ' · janela Avec'
+          break
+        case 'db_quinzena_slice':
+          windowHint = ' · fatia MTD→quinzena'
+          break
+        case 'db_snapshot':
+          windowHint = ' · snapshot MTD (atualize do 8123)'
+          break
+        default: {
+          const _exhaustive: never = source
+          void _exhaustive
+          break
+        }
+      }
+    }
 
     const payload: FolhaShellStatus = {
       shell_only: draft == null,
       rules_locked: true,
       message: draft
-        ? `${quinzena.label} · paga ${formatPayDateBr(quinzena.payDate)} · 8123 ${quinzena.from}–${draft.reference_day} · ${withPay}/${draft.line_count} com a_pagar.`
+        ? `${quinzena.label} · paga ${formatPayDateBr(quinzena.payDate)} · 8123 ${quinzena.from}–${quinzena.to}${windowHint} · ${withPay}/${draft.line_count} com a_pagar.`
         : `Sem 8123 para ${quinzena.label} (${quinzena.from}–${quinzena.to}, paga ${formatPayDateBr(quinzena.payDate)}). Use Atualizar do 8123 ou outra quinzena.`,
       rules,
       draft,
