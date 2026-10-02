@@ -34,6 +34,8 @@ type FopagRow = {
   liquido: number
   fat_liquido?: number
   produto?: number
+  parc?: number
+  desc_diversos_02?: number
 }
 
 type BonusRow = {
@@ -139,6 +141,8 @@ async function main() {
     let clearedBaru = 0
     let patchedBonus = 0
     let patchedFatRef = 0
+    let patchedDiversos = 0
+    let patchedParc = 0
 
     const withExtras = lines.map((line) => {
       const f = lookupByNameKey(fopagByKey, line.name)
@@ -200,6 +204,49 @@ async function main() {
         if (f.faturado != null && f.faturado > 0.005) {
           extras.faturado_referencia = f.faturado
           patchedFatRef++
+        }
+        /**
+         * RH extras da Base Folha BR. Só grava se o 8123 ainda NÃO trouxe
+         * o mesmo valor em `other_discounts` (senão double-abate: Dayana
+         * parc=232.74 já em outros; Janderson div02=3546 já em outros).
+         */
+        const otherMag =
+          line.avec.other_discounts == null
+            ? null
+            : Math.abs(line.avec.other_discounts)
+        const otherAlreadyHas = (amount: number) =>
+          otherMag != null && Math.abs(otherMag - amount) <= 2
+        if (
+          panel === 'brasil' &&
+          (f.desc_diversos_02 ?? 0) > 0.005 &&
+          !otherAlreadyHas(f.desc_diversos_02!)
+        ) {
+          extras.descontos_diversos = f.desc_diversos_02!
+          patchedDiversos++
+        } else if (
+          panel === 'brasil' &&
+          (f.desc_diversos_02 ?? 0) > 0.005 &&
+          otherAlreadyHas(f.desc_diversos_02!) &&
+          extras.descontos_diversos != null &&
+          Math.abs(extras.descontos_diversos - f.desc_diversos_02!) <= 2
+        ) {
+          extras.descontos_diversos = null
+        }
+        if (
+          panel === 'brasil' &&
+          (f.parc ?? 0) > 0.005 &&
+          !otherAlreadyHas(f.parc!)
+        ) {
+          extras.parc = f.parc!
+          patchedParc++
+        } else if (
+          panel === 'brasil' &&
+          (f.parc ?? 0) > 0.005 &&
+          otherAlreadyHas(f.parc!) &&
+          extras.parc != null &&
+          Math.abs(extras.parc - f.parc!) <= 2
+        ) {
+          extras.parc = null
         }
       }
       if (bonus && extras.acumulado_mes == null) {
@@ -266,6 +313,8 @@ async function main() {
         clearedBaru,
         patchedBonus,
         patchedFatRef,
+        patchedDiversos,
+        patchedParc,
         total_before: row.total_proposed_pay,
         total_after: total,
         with_taxa_adm: rehydrated.filter((l) => l.taxa_administrativa != null)

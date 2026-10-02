@@ -242,4 +242,70 @@ describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
     expect(line.taxa_administrativa).toBeCloseTo(84.46, 1)
     expect(line.proposed_pay).toBeCloseTo(2956.34, 1)
   })
+
+  it('Path C + U≈charged (Ariane): não apaga J; proposed = a_pagar − U×2%', () => {
+    // other≈+meio → Path C. U=charged fazia looksLikeChargedAssistAdm
+    // tratar U×2% como falso e zerar taxa_administrativa no pay.
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'ARIANE CRISTINA DOS SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 480,
+        assistant_discount: -80,
+        other_discounts: 40, // ≈ +meio
+        admin_fee: 0,
+        net_payable: 179.68,
+      }),
+      { servicos_assistente_como_pro: 480, faturado_referencia: 480 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(9.6, 2)
+    expect(line.folha_extras.taxa_administrativa).toBeCloseTo(9.6, 2)
+    expect(line.proposed_pay).toBeCloseTo(170.08, 1)
+  })
+
+  it('Dayana BR: meio 5% (não 50%); delta no pay quando a_pagar veio na forma 50%', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'DAYANA MARQUES SILVA PINTO',
+        role: 'Cabeleireiro',
+        charged: 18_660,
+        assistant_discount: -2295.8,
+        product_spend: -751.95,
+        admin_fee: 0,
+        // a_pagar já na forma Fopag (meio 50% embutido)
+        net_payable: 5742.05 + 265.71, // ≈ Y + Baru (Baru ainda abate)
+      }),
+      { consumo_baru: 265.71 },
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('dayana')
+    expect(line.meio_a_meio_rate).toBe(0.05)
+    expect(line.meio_a_meio).toBeCloseTo(2295.8 * 0.05, 1)
+  })
+
+  it('Auricaliane: other=diversos NÃO bloqueia −J; Y = G − J + V − W − div', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      row({
+        name: 'AURICALIANE DA SILVA DANTAS',
+        role: 'MULTIPLICADOR',
+        charged: 3438.72,
+        other_discounts: -77.05,
+        net_payable: 2879.65 - 77.05, // G − div (J ainda não)
+      }),
+      {
+        servicos_assistente_como_pro: 3304,
+        faturado_referencia: 3438.72,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('auricaliane')
+    expect(line.taxa_administrativa).toBeCloseTo(66.08, 1)
+    // V=U×30%=991.2; W=99.12; J=66.08
+    // net(2802.6) + V − W − J = 3628.6
+    expect(line.proposed_pay).toBeCloseTo(3628.6, 1)
+  })
 })

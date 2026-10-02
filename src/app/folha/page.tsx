@@ -1138,13 +1138,15 @@ export default function FolhaPage() {
               </li>
               <li>
                 Exceções: Diello IG / Dayana BR / Gildenice IG — meio a meio 5% (salão
-                5%; excedente do assistente &gt;10% no pro); Romeu 50%; Walter assistente
-                30%; Dani Rocha comissão 55% + meio 50%; Liria taxa adm 7%; Brunna/Joah/
-                Marcela taxa U 5% (2%+3%) + time (Gabriela Martins, Graciele, Camila,
-                Tatiana, Patrícia Aguiar); assistentes Romeu: 30% já nas quinzenas; no
-                dia 05 top-up +10% (10–20k) / +20% (acima de 20k) sobre o acumulado U do
-                mês. Lucas Campos: meta = +14% vs mesmo mês ano anterior; Q1 cobra adm;
-                se bater, Q2 isenta adm e devolve a adm da Q1. Esteticistas: sem bônus.
+                5%; excedente do assistente &gt;10% no pro); Romeu 50%; Walter BR: meio
+                a meio 60% + comissão 60%, remessa assistente-como-pro 30% (≠ padrão
+                20%); Dani Rocha comissão 55% + meio 50%; IG Liria taxa adm 7%; IG
+                Brunna/Joah/Marcela: adm 5% sobre C + split U 2%+3% + time (Gabriela
+                Martins, Graciele, Camila, Tatiana, Patrícia Aguiar); assistentes Romeu:
+                30% já nas quinzenas; no dia 05 top-up +10% (10–20k) / +20% (acima de
+                20k) sobre o acumulado U do mês. Lucas Campos BR: meta = +14% vs mesmo
+                mês ano anterior; Q1 cobra adm; se bater, Q2 isenta adm e devolve a adm
+                da Q1. Esteticistas: sem bônus. Auricaliane BR: V=U×30% no líquido.
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>

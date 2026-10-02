@@ -643,8 +643,32 @@ export function buildFolhaDraftLine(
     otherDiscountsMag > 0.02
   ) {
     if (otherDiscountsSigned != null && otherDiscountsSigned < -0.02) {
-      assistantOleriteClosed =
-        baruForClose == null || otherDiscountsMag + 0.05 >= baruForClose
+      if (baruForClose != null) {
+        // Débito other ≥ Baru (Jefferson/Wesley other≈Baru[+parc])
+        assistantOleriteClosed = otherDiscountsMag + 0.05 >= baruForClose
+      } else {
+        /**
+         * Sem Baru: só fecha se other ≈ J (Tatiana/Gabriela Martins).
+         * Diversos sozinho (Auricaliane 77) NÃO fecha — senão bloqueia −J.
+         */
+        const uBase =
+          extras?.servicos_assistente_como_pro != null &&
+          extras.servicos_assistente_como_pro > 0.02
+            ? extras.servicos_assistente_como_pro
+            : null
+        const expectedJ =
+          assistantAdminRate != null && uBase != null
+            ? roundFolha(uBase * assistantAdminRate, 4)
+            : assistantAdminRate != null &&
+                row.charged != null &&
+                row.charged > 0.02
+              ? roundFolha(row.charged * assistantAdminRate, 4)
+              : null
+        assistantOleriteClosed =
+          expectedJ != null &&
+          expectedJ >= 5 &&
+          Math.abs(otherDiscountsMag - expectedJ) <= 1
+      }
     } else if (
       otherDiscountsSigned != null &&
       otherDiscountsSigned > 0.02 &&
@@ -865,11 +889,14 @@ export function buildFolhaDraftLine(
       /**
        * Rascunho antigo às vezes guardou charged×3% (alíquota IG) no BR, ou
        * charged×2% antes de informar U. Qualquer um é falso frente a U×alíquota.
+       * Nunca tratar U×alíquota como "falso" — quando U≈charged (Ariane),
+       * charged×2% === U×2% e a guarda antiga apagava J no Path C.
        */
       const looksLikeChargedAssistAdm = (value: number | null | undefined) => {
         if (value == null || row.charged == null || row.charged <= 0.02) {
           return false
         }
+        if (Math.abs(value - admU) <= 1) return false
         for (const rate of [assistantAdminRate, 0.02, 0.03]) {
           if (rate == null) continue
           if (Math.abs(value - row.charged * rate) <= 1) return true
@@ -881,17 +908,24 @@ export function buildFolhaDraftLine(
         taxaAdmDisplay = admU
       }
       /**
-       * Abate J = U×alíquota quando a_pagar ainda não fechou:
-       * - com meio (path B clássico Lucas/Islay), ou
-       * - BR sem meio: Fopag ainda faz Y = G − J (Alberto/Alcides/Eliseu).
-       * Não abater se other já embute J/Baru (Gabriela Martins) nem se
-       * olerite fechou.
+       * Abate J = U×alíquota quando a_pagar ainda não fechou adm:
+       * - Path B: meio presente, descontos vazios
+       * - Path C: other≈+meio (meioCreditedInNet olerite) — a_pagar já
+       *   creditou meio, ainda falta −J (não confundir com aPagarNetsAdminMeio)
+       * - BR sem meio: Y = G − J (Alberto/Alcides/Eliseu)
+       * Não abater se a_pagar já neteou adm+meio, other embute J/Baru, ou olerite fechou.
        */
       const shouldAbateAdmU =
         !embeddedInDescontos &&
         !assistantOleriteClosed &&
-        !meioCreditedInNet &&
-        (otherDiscountsMag == null || otherDiscountsMag <= 0.02) &&
+        !aPagarNetsAdminMeio &&
+        (otherDiscountsMag == null ||
+          otherDiscountsMag <= 0.02 ||
+          olerite.meioCreditedInNet ||
+          // Auricaliane: other=diversos; earn-in ainda precisa −J.
+          (panel === 'brasil' &&
+            person?.assistantEarnInPay === true &&
+            admU > 0.02)) &&
         ((meio_a_meio != null && meio_a_meio > 0.02) ||
           (panel === 'brasil' && admU > 0.02))
       const extrasIsFalseChargedAdm = looksLikeChargedAssistAdm(
