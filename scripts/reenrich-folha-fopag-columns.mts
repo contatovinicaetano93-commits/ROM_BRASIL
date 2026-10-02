@@ -24,7 +24,11 @@ import type { RomPanelId } from '../src/lib/brand'
 
 type FopagRow = {
   name: string
+  cargo?: string
   U: number
+  V?: number
+  W?: number
+  taxa_adm?: number
   baru: number
   liquido: number
   fat_liquido?: number
@@ -121,6 +125,20 @@ async function main() {
         if (f.U > 0.005) {
           extras.servicos_assistente_como_pro = f.U
           patchedU++
+        }
+        if ((f.V ?? 0) > 0.005 && !(f.U > 0.005)) {
+          extras.valor_a_pagar_profissional = f.V!
+        }
+        if ((f.taxa_adm ?? 0) > 0.005 && !(f.U > 0.005)) {
+          const cargo = String(f.cargo ?? line.cargo_raw ?? '').toLowerCase()
+          if (
+            /assist|multi|color/i.test(cargo) ||
+            line.cargo === 'assistente' ||
+            line.cargo === 'multiplicador' ||
+            line.cargo === 'colorista'
+          ) {
+            extras.taxa_adm_assistente = f.taxa_adm!
+          }
         }
         if (f.baru > 0.005) {
           extras.consumo_baru = f.baru
