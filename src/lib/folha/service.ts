@@ -16,6 +16,7 @@ import {
   parseFolhaPeriodId,
   quinzenaAvecRangeBr,
   resolveFolhaQuinzena,
+  shouldRefreshInProgressFolhaDraft,
   todayIsoSaoPaulo,
   type FolhaQuinzena,
 } from '@/lib/folha/period'
@@ -248,6 +249,30 @@ export async function loadOrCreateFolhaDraft(
         }
       }
     }
+    if (
+      shouldRefreshInProgressFolhaDraft({
+        status: persisted.status,
+        quinzena,
+        today,
+        referenceDay: persisted.reference_day,
+      })
+    ) {
+      try {
+        const fresh = await refreshFolhaDraft(panel, {
+          ...opts,
+          periodId: quinzena.id,
+          today,
+        })
+        return {
+          draft: fresh.draft,
+          period: fresh.period,
+          quinzena: fresh.quinzena,
+          source: fresh.source,
+        }
+      } catch {
+        // Mantém sticky se Avec/DB falhar — UI ainda pode “Atualizar do 8123”.
+      }
+    }
     return {
       draft: periodRowToDraft(panel, persisted),
       period: persisted,
@@ -351,14 +376,14 @@ export type FolhaDailyRefreshItem = {
   period_id: string
   outcome: 'refreshed' | 'skipped_locked' | 'error'
   period_status?: FolhaPeriodStatus
-  source?: 'avec_window' | 'db_snapshot'
+  source?: Folha8123Source
   error?: string
 }
 
 /**
  * Cron diário: recalcula rascunhos abertos (draft / ready_for_review)
- * da quinzena do próximo pagamento e da quinzena civil de hoje.
- * Não toca períodos já aprovados ou pagos.
+ * da quinzena em curso (hoje entre from e to). Não reabre Q2 fechada
+ * nem toca períodos já aprovados ou pagos.
  */
 export async function runFolhaDailyRefresh(
   panel: RomPanelId,
