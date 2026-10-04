@@ -21,6 +21,11 @@ import {
   type FolhaQuinzena,
 } from '@/lib/folha/period'
 import {
+  canPersistCardFeeOverlay,
+  overlayMissing8123CardFee,
+  sourceMissingCardFee,
+} from '@/lib/folha/overlay-8123-card-fee'
+import {
   draftLikelySeededFromMtd,
   isoDayBefore,
   sliceQuinzenaFromMtdSnapshots,
@@ -200,6 +205,48 @@ async function resolveQuinzena8123Professionals(
 }
 
 /**
+ * Rascunho Fopag/sticky sem taxa cartão 8123: puxa só o campo Avec.
+ * Não substitui a_pagar. Aprovado/pago: só leitura, não grava.
+ */
+async function overlayStickyMissingCardFee(
+  panel: RomPanelId,
+  quinzena: FolhaQuinzena,
+  today: string,
+  persisted: FolhaPeriodRow,
+  actor?: string | null,
+): Promise<FolhaPeriodRow> {
+  if (!sourceMissingCardFee(persisted.source_professionals)) return persisted
+  try {
+    const resolved = await resolveQuinzena8123Professionals(quinzena, today)
+    const { rows, changed } = overlayMissing8123CardFee(
+      persisted.source_professionals,
+      resolved.professionals,
+    )
+    if (!changed) return persisted
+    if (!canPersistCardFeeOverlay(persisted.status)) {
+      return { ...persisted, source_professionals: rows }
+    }
+    const draft = refreshDraftPreservingExtras({
+      panel,
+      referenceDay: persisted.reference_day ?? quinzena.to,
+      professionals: rows,
+      previousLines: persisted.lines,
+      quinzenaDay: quinzena.to,
+    })
+    draft.quinzena = quinzena
+    return await upsertFolhaPeriodFromDraft({
+      draft,
+      sourceProfessionals: rows,
+      updatedBy: actor ?? 'folha-card-fee-overlay',
+      status: persisted.status,
+      forceStatus: true,
+    })
+  } catch {
+    return persisted
+  }
+}
+
+/**
  * Carrega (ou cria) o rascunho da quinzena alvo.
  *
  * Nunca semeia Q2 com MTD cru do Neon (isso inflava faturado bruto de todo
@@ -273,9 +320,16 @@ export async function loadOrCreateFolhaDraft(
         // Mantém sticky se Avec/DB falhar — UI ainda pode “Atualizar do 8123”.
       }
     }
+    const withCard = await overlayStickyMissingCardFee(
+      panel,
+      quinzena,
+      today,
+      persisted,
+      opts?.actor,
+    )
     return {
-      draft: periodRowToDraft(panel, persisted),
-      period: persisted,
+      draft: periodRowToDraft(panel, withCard),
+      period: withCard,
       quinzena,
     }
   }
