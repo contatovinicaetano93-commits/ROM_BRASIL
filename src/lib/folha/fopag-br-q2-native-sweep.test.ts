@@ -120,6 +120,7 @@ describe('Fopag BR Q2 native sweep', () => {
         other_share: null,
         tip: null,
         product_spend: f.produto > 0.02 ? -f.produto : null,
+        // Fopag BR.taxa_cartao ≠ 8123 (Alison: 1183 vs 588). Overlay na carga.
         card_fee: null,
         admin_fee: 0,
         assistant_discount:
