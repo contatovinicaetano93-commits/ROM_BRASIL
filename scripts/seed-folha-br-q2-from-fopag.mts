@@ -121,6 +121,7 @@ async function main() {
       other_share: null,
       tip: null,
       product_spend: f.produto > 0.02 ? -f.produto : null,
+      // Fopag BR.taxa_cartao ≠ 8123 (Alison: 1183,31 vs −588). Overlay na carga.
       card_fee: null,
       admin_fee: 0,
       assistant_discount:
@@ -285,7 +286,11 @@ async function main() {
       )
       on conflict (id) do update set
         reference_day = excluded.reference_day,
-        status = excluded.status,
+        -- Não rebaixa approved/paid ao reseedar quinzena fechada.
+        status = case
+          when folha_periods.status in ('approved', 'paid') then folha_periods.status
+          else excluded.status
+        end,
         lines = excluded.lines,
         source_professionals = excluded.source_professionals,
         total_proposed_pay = excluded.total_proposed_pay,

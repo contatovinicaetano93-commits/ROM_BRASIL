@@ -174,6 +174,14 @@ async function main() {
         }
         if (u > 0.005) {
           extras.servicos_assistente_como_pro = u
+          extras.valor_a_pagar_profissional = null
+          extras.taxa_servicos = null
+          patchedU++
+        } else if (extras.servicos_assistente_como_pro != null) {
+          extras.servicos_assistente_como_pro = null
+          extras.valor_a_pagar_profissional = null
+          extras.taxa_servicos = null
+          extras.taxa_adm_assistente = null
           patchedU++
         }
         if ((f.V ?? 0) > 0.005 && !(u > 0.005)) {
