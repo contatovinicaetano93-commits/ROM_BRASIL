@@ -5,6 +5,7 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { getLastStockSync, runStockSync, stockPaginationPlan, type StockSyncMode } from '@/lib/avec/sync-stock'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 /** Sync de estoque pode demorar (vários relatórios paginados). */
 export const maxDuration = 300
@@ -77,6 +78,17 @@ async function execute(req: NextRequest, cron: boolean) {
         })
       }
       return err(e.message, 429)
+    }
+    if (isDbQuotaError(e)) {
+      if (cron) {
+        return ok({
+          skipped: true,
+          reason: 'db_quota',
+          mode,
+          note: dbQuotaUserMessage(e),
+        })
+      }
+      return err(dbQuotaUserMessage(e), 503)
     }
     throw e
   }
