@@ -17,7 +17,7 @@ async function authorize(req: NextRequest) {
 
 /**
  * POST — preenche client_services.last_done_at com ultima_visita real (Avec 0002).
- * Body: { daysBack?: number (7–366, default 180), maxPages?: number }
+ * Body: { daysBack?: number (7–364, default 180), maxPages?: number, chunkDays?: number }
  * Não inventa visitas; só grava datas que a Avec reporta.
  */
 export async function POST(req: NextRequest) {
@@ -46,8 +46,12 @@ export async function POST(req: NextRequest) {
       typeof body.maxPages === 'number' && Number.isFinite(body.maxPages)
         ? body.maxPages
         : undefined
+    const chunkDays =
+      typeof body.chunkDays === 'number' && Number.isFinite(body.chunkDays)
+        ? body.chunkDays
+        : undefined
 
-    const stats = await runLastDoneBackfill({ daysBack, maxPages })
+    const stats = await runLastDoneBackfill({ daysBack, maxPages, chunkDays })
     return ok(stats)
   } catch (e) {
     return handleError(e)
