@@ -61,10 +61,15 @@ function getClient(databaseUrl: string): PostgresSql {
   const resolved = resolveDatabaseUrl(databaseUrl)
   let client = clients.get(resolved)
   if (!client) {
+    const poolMax = Math.min(
+      Math.max(Number(process.env.DATABASE_POOL_MAX || 1) || 1, 1),
+      20,
+    )
     client = postgres(resolved, {
       ssl: 'require',
-      // 1 conn por isolate serverless — várias lambdas × max:3 estouravam o pooler.
-      max: 1,
+      // Default 1 conn por isolate serverless — várias lambdas × max>1 estouravam o pooler.
+      // Scripts longos (ex.: last-done-backfill) podem subir via DATABASE_POOL_MAX.
+      max: poolMax,
       // Transaction/Session pooler: prepared statements quebram no modo transaction.
       prepare: false,
       idle_timeout: 5,
