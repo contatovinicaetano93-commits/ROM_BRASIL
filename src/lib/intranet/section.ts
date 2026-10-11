@@ -23,6 +23,7 @@ const EXACT: Record<string, string> = {
   '/meu-faturamento': 'Meu faturamento',
   '/checks-diario': 'Checks diários',
   '/curriculos': 'Currículos',
+  '/sala-reuniao': 'Sala de reunião',
   '/recepcao': 'Recepção',
   '/pos-venda': 'Pós-venda',
 }
@@ -51,6 +52,7 @@ const PREFIXES: Array<{ prefix: string; label: string }> = [
   { prefix: '/meu-faturamento', label: 'Meu faturamento' },
   { prefix: '/checks-diario', label: 'Checks diários' },
   { prefix: '/curriculos', label: 'Currículos' },
+  { prefix: '/sala-reuniao', label: 'Sala de reunião' },
   { prefix: '/recepcao', label: 'Recepção' },
   { prefix: '/pos-venda', label: 'Pós-venda' },
 ]
