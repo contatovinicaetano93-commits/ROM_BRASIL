@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ROM Brasil</string>
+    <string name="title_activity_main">ROM Brasil</string>
+    <string name="package_name">com.rom.brasil</string>
+    <string name="custom_url_scheme">com.rom.brasil</string>
+</resources>
