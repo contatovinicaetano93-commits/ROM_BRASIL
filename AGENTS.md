@@ -62,5 +62,5 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
-- **`maxDuration = 800` nas rotas `/api/avec/sync*` exige Vercel Fluid Compute (Pro).** Sem Fluid, a Vercel capa em 300s — as rotas logam aviso no cold start (`warnIfLongMaxDuration`). Não baixar para 300 sem confirmar que o full cabe no budget.
+- **Fluid Compute está ON** (`vercel.json` `fluid:true` + `resourceConfig.fluid`); `classic_300s_hits` em `/api/health` é o RED se Classic voltar a capar em 300s. `warnIfLongMaxDuration` é só lembrete. Timeout real restante: **IG `full/catalog` estoura maxDuration=800** (não baixar para 300).
 - **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any` + `react-hooks/refs`; `set-state-in-effect` já zerou).
