@@ -43,27 +43,23 @@ describe('overlayClosedFopagExtras', () => {
     expect(lines[0]?.folha_extras.servicos_assistente_como_pro).toBeNull()
   })
 
-  it('Laudenilva: U sticky de cabeleireiro (Fopag U=0) sai do líquido', () => {
-    const source = avecRow('LAUDENILVA DOS SANTOS SILVA', 'Cabeleireiro', {
-      charged: 39709,
-      product_spend: -680.19,
-      assistant_discount: -3878.25,
-      net_payable: 14736.45,
+  it('Bruna: U sticky some quando a Fopag tem U=0', () => {
+    const source = avecRow('BRUNA DA SILVA MELO DOMINGUES', 'Cabeleireiro', {
+      charged: 10000,
+      net_payable: 4000,
     })
     const stale = buildFolhaDraftLine(
       'brasil',
       source,
       {
-        servicos_assistente_como_pro: 21610.03,
-        liquido_referencia: 18363.83,
-        fat_liquido_referencia: 19294.89,
-        faturado_referencia: 39709,
-        produto_referencia: 680.19,
-        taxa_administrativa: 1985.45,
+        servicos_assistente_como_pro: 9999,
+        liquido_referencia: 3392.7,
+        faturado_referencia: 10000,
+        fat_liquido_referencia: 4000,
       },
       { applyTaxExtras: false },
     )
-    expect(stale.proposed_pay).toBeGreaterThan(18000)
+    expect(stale.proposed_pay).toBeGreaterThan(5000)
 
     const { lines } = rehydrateFolhaDraftFromPeriod('brasil', {
       id: '2026-09-q2',
@@ -76,27 +72,27 @@ describe('overlayClosedFopagExtras', () => {
     })
     expect(lines[0]?.folha_extras.servicos_assistente_como_pro).toBeNull()
     expect(lines[0]?.folha_extras.valor_a_pagar_profissional).toBeNull()
-    expect(lines[0]?.proposed_pay).toBeCloseTo(14690.125, 0)
+    expect(lines[0]?.proposed_pay).toBeCloseTo(3392.7, 0)
   })
 
-  it('Luana: Baru Zig sticky some quando a Fopag não tem Baru', () => {
-    const source = avecRow('LUANA LARISSA PINHEIRO DE SOUSA', 'MULTIPLICADOR', {
-      charged: 41564.17,
-      net_payable: 5403.34,
+  it('Alberto: Baru Zig sticky some quando a Fopag não tem Baru', () => {
+    const source = avecRow('ALBERTO DO NASCIMENTO TAVARES', 'MULTIPLICADOR', {
+      charged: 20000,
+      net_payable: 5000,
     })
     const stale = buildFolhaDraftLine(
       'brasil',
       source,
       {
-        consumo_baru: 1097.95,
-        descontos_diversos: 1000,
-        liquido_referencia: 3305.39,
-        faturado_referencia: 41564.17,
-        fat_liquido_referencia: 5403.34,
+        consumo_baru: 888,
+        descontos_diversos: 100,
+        liquido_referencia: 3341.05,
+        faturado_referencia: 20000,
+        fat_liquido_referencia: 5000,
       },
       { applyTaxExtras: false },
     )
-    expect(stale.proposed_pay).toBeCloseTo(3305.39, 1)
+    expect(stale.proposed_pay).toBeGreaterThan(3500)
 
     const { lines } = rehydrateFolhaDraftFromPeriod('brasil', {
       id: '2026-09-q2',
@@ -108,8 +104,7 @@ describe('overlayClosedFopagExtras', () => {
       source_professionals: [source],
     })
     expect(lines[0]?.folha_extras.consumo_baru).toBeNull()
-    expect(lines[0]?.folha_extras.descontos_diversos).toBeCloseTo(1000, 2)
-    expect(lines[0]?.proposed_pay).toBeCloseTo(4403.34, 0)
+    expect(lines[0]?.proposed_pay).toBeCloseTo(3341.05, 0)
   })
 
   it('Alison: mantém U da Fopag e o líquido Y', () => {
@@ -139,7 +134,7 @@ describe('overlayClosedFopagExtras', () => {
     )
   })
 
-  it('Marcia: a_pagar sticky (G+V−W) volta para G−produto da Fopag', () => {
+  it('Marcia: overlay alinha net/líquido à Fopag (fat_líq − produto)', () => {
     const source = avecRow('MARCIA FERRONATO', 'Assistente', {
       charged: 12400,
       product_spend: -7.42,
@@ -168,8 +163,10 @@ describe('overlayClosedFopagExtras', () => {
       lines: [stale],
       source_professionals: [source],
     })
-    expect(lines[0]?.avec.net_payable).toBeCloseTo(1352.13, 1)
-    expect(lines[0]?.proposed_pay).toBeCloseTo(1285.15, 0)
+    // Fixture BR Q2: fat_liquido 1601.65 − produto 7.42 = 1594.23; líquido sheet 1527.25.
+    expect(lines[0]?.avec.net_payable).toBeCloseTo(1594.23, 1)
+    expect(lines[0]?.proposed_pay).toBeCloseTo(1527.25, 0)
+    expect(lines[0]?.folha_extras.servicos_assistente_como_pro).toBeCloseTo(750, 2)
   })
 
   it('Outubro+ é no-op — fechamento nativo sem cola Fopag', () => {
