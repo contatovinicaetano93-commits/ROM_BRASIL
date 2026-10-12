@@ -23,7 +23,7 @@
     "imapflow": "^1.7.1",
     "lucide-react": "^1.23.0",
     "mailparser": "^3.9.38",
-    "next": "16.2.10",
+    "next": "16.4.0",
     "pdf-parse": "^1.1.1",
     "postgres": "^3.4.9",
     "posthog-js": "^1.410.10",
@@ -41,7 +41,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"
