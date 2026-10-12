@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Plus, X, Trash2, Download, Camera, Paperclip, FileText, RefreshCw } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
+import { financeReceiptBlobPathname } from '@/lib/finance/receipt-url'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
   CollapsibleBody,
@@ -1279,7 +1280,7 @@ export default function FinanceiroPage() {
                 <div className="flex shrink-0 items-center gap-3">
                   {e.receipt_url && (
                     <a
-                      href={e.receipt_url}
+                      href={`/api/financeiro/despesas/${e.id}/receipt`}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="Ver nota fiscal"
@@ -1364,8 +1365,8 @@ function AddExpenseSheet({
     setReceiptUploading(true)
     setReceiptErr(null)
     try {
-      const blob = await upload(file.name, file, {
-        access: 'public',
+      const blob = await upload(financeReceiptBlobPathname(file.name), file, {
+        access: 'private',
         handleUploadUrl: '/api/financeiro/upload',
       })
       setReceiptUrl(blob.url)
