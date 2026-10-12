@@ -73,9 +73,10 @@ export function validateDeploymentEnv(): DeploymentValidation {
     warnings.push('AVEC_API_TOKEN ausente — cada unidade precisa do token Avec da própria loja.')
   }
 
-  if (!process.env.ROM_SESSION_SECRET?.trim() && process.env.VERCEL_ENV === 'production') {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (!process.env.ROM_SESSION_SECRET?.trim() && (vercelEnv === 'production' || vercelEnv === 'preview')) {
     warnings.push(
-      'CRÍTICO: ROM_SESSION_SECRET ausente em produção — sessões usam fallback da senha admin; defina um segredo dedicado e peça relogin.',
+      'CRÍTICO: ROM_SESSION_SECRET ausente em produção/preview — sessões falham fechado (sem fallback da senha admin); defina um segredo dedicado e peça relogin.',
     )
   }
 
