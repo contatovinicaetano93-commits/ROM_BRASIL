@@ -207,6 +207,8 @@ export default function RelatorioDiretoriaPage() {
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
   const [directorVisitsStatus, setDirectorVisitsStatus] = useState<DirectorVisitsStatusPayload | null>(null)
+  const [directorSyncing, setDirectorSyncing] = useState(false)
+  const [directorSyncMsg, setDirectorSyncMsg] = useState<string | null>(null)
   const loadAbortRef = useRef<AbortController | null>(null)
 
   const loadDirectorVisitsStatus = useCallback(async (signal?: AbortSignal) => {
@@ -233,6 +235,31 @@ export default function RelatorioDiretoriaPage() {
       if (!signal?.aborted) setDirectorVisitsStatus(null)
     }
   }, [])
+
+  const runDirectorVisitsSync = useCallback(async () => {
+    setDirectorSyncing(true)
+    setDirectorSyncMsg(null)
+    try {
+      const res = await apiFetch('/api/avec/sync/director-visits?force=1', {
+        method: 'POST',
+        cache: 'no-store',
+        clientCache: false,
+        timeoutMs: 720_000,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        setDirectorSyncMsg(json.error ?? `Falha no sync (${res.status})`)
+        return
+      }
+      const status = (json.data as { status?: string } | undefined)?.status ?? 'ok'
+      setDirectorSyncMsg(`Sync visitas: ${status}`)
+      await loadDirectorVisitsStatus()
+    } catch (e) {
+      setDirectorSyncMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDirectorSyncing(false)
+    }
+  }, [loadDirectorVisitsStatus])
 
   /** Carrega por etapa — 0011 não espera o 0021 (e vice-versa). */
   const load = useCallback(async () => {
@@ -607,8 +634,26 @@ export default function RelatorioDiretoriaPage() {
         </div>
       )}
 
-      {isAdmin && directorVisitsStatus && (
-        <DirectorVisitsCoverageStrip status={directorVisitsStatus} />
+      {isAdmin && (
+        <div className="space-y-2">
+          {directorVisitsStatus ? (
+            <DirectorVisitsCoverageStrip status={directorVisitsStatus} />
+          ) : (
+            <p className="text-xs text-muted">Cobertura 0011 ainda não carregada.</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={directorSyncing}
+              onClick={() => void runDirectorVisitsSync()}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-gold disabled:opacity-60"
+            >
+              <RefreshCw size={14} className={directorSyncing ? 'animate-spin' : ''} />
+              {directorSyncing ? 'Sincronizando visitas…' : 'Sincronizar visitas 0011 agora'}
+            </button>
+            {directorSyncMsg ? <span className="text-xs text-muted">{directorSyncMsg}</span> : null}
+          </div>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">
