@@ -3,35 +3,35 @@
   "crons": [
     {
       "path": "/api/avec/refresh-token",
-      "schedule": "0 */3 * * *"
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "15 * * * *"
+      "schedule": "15 */2 * * *"
     },
     {
       "path": "/api/avec/sync/full/ops",
-      "schedule": "20 10,22 * * *"
+      "schedule": "20 14 * * *"
     },
     {
       "path": "/api/avec/sync/full/agenda",
-      "schedule": "40 10,22 * * *"
+      "schedule": "40 14 * * *"
     },
     {
       "path": "/api/avec/sync/full/catalog",
-      "schedule": "55 */6 * * *"
+      "schedule": "55 11 * * *"
     },
     {
       "path": "/api/avec/sync/director-visits",
-      "schedule": "10 11,23 * * *"
+      "schedule": "10 14 * * *"
     },
     {
       "path": "/api/avec/sync/director-0021",
-      "schedule": "25 11,23 * * *"
+      "schedule": "25 14 * * *"
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "5 */6 * * *"
+      "schedule": "5 10,22 * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
@@ -47,7 +47,7 @@
     },
     {
       "path": "/api/reminders/aftercare",
-      "schedule": "25 */4 * * *"
+      "schedule": "25 */6 * * *"
     },
     {
       "path": "/api/reminders/financeiro",
@@ -59,11 +59,11 @@
     },
     {
       "path": "/api/folha/imap-poll",
-      "schedule": "5,35 * * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/folha/daily-refresh",
-      "schedule": "30 11,23 * * *"
+      "schedule": "30 15 * * *"
     }
   ]
 }
