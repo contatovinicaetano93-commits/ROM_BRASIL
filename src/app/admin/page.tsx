@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { RefreshCw, ChevronRight, Database, Link2 } from 'lucide-react'
-import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL, PrimaryButton } from '../_components/ui'
+import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
 import { LogoutButton } from '../_components/LogoutButton'
 import { SetupChecklist } from './SetupChecklist'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
@@ -125,7 +125,7 @@ export default function AdminPage() {
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
   const [seedPreset, setSeedPreset] = useState<RomSeedPreset>(brand.panel)
@@ -302,20 +302,23 @@ export default function AdminPage() {
     }
   }
 
-  async function runAvecSync() {
-    setSyncing(true)
+  async function runAvecSyncStage(stage: string, path: string) {
+    setSyncing(stage)
     setSyncMsg(null)
     try {
       const json = await readApiJson(
-        await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' }),
+        await apiFetch(path, { method: 'POST', cache: 'no-store' }),
       )
-      if (json.error) setSyncMsg(`Erro: ${json.error}`)
-      else setSyncMsg(`Sync ${(json.data as { status?: string } | undefined)?.status ?? 'ok'} — recarregando…`)
+      if (json.error) setSyncMsg(`${stage}: ${json.error}`)
+      else {
+        const status = (json.data as { status?: string } | undefined)?.status ?? 'ok'
+        setSyncMsg(`${stage}: ${status} — recarregando…`)
+      }
       await load()
     } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : String(e))
+      setSyncMsg(`${stage}: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setSyncing(false)
+      setSyncing(null)
     }
   }
 
@@ -607,14 +610,42 @@ export default function AdminPage() {
               </button>
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
-                <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
+                <span className="font-semibold text-gold">Cadência lean:</span> cron 1×/dia de manhã
+                (pacote staggered). Mid-day: use os botões por seção. Webhook{' '}
                 <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 20 min + full 2×/dia
-                como backup; webhook dispara só sync fast.
+                <code className="text-[0.7rem]">x-avec-secret</code>) dispara só sync fast. Evite
+                disparar full em sequência — cada um consome egress Neon.
               </p>
-              <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
-                {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
-              </PrimaryButton>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    { id: 'fast', label: 'Sync fast', path: '/api/avec/sync' },
+                    { id: 'ops', label: 'Full ops (KPIs)', path: '/api/avec/sync/full/ops' },
+                    { id: 'agenda', label: 'Full agenda', path: '/api/avec/sync/full/agenda' },
+                    { id: 'catalog', label: 'Full catalog', path: '/api/avec/sync/full/catalog' },
+                    {
+                      id: 'director',
+                      label: 'Director visitas 0011',
+                      path: '/api/avec/sync/director-visits?force=1',
+                    },
+                    {
+                      id: 'director0021',
+                      label: 'Director 0021',
+                      path: '/api/avec/sync/director-0021?force=1',
+                    },
+                  ] as const
+                ).map((btn) => (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    disabled={syncing !== null || !avec.configured}
+                    onClick={() => void runAvecSyncStage(btn.label, btn.path)}
+                    className="rounded-2xl border border-border bg-surface px-3 py-2.5 text-xs font-semibold text-foreground/90 disabled:opacity-60 lg:hover:border-gold/40 lg:hover:text-gold"
+                  >
+                    {syncing === btn.label ? 'Sincronizando…' : btn.label}
+                  </button>
+                ))}
+              </div>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
             </div>
           ) : (

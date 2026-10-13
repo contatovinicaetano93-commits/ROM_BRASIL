@@ -50,20 +50,20 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '5,25,45 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '30 10 * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: 'ops/agenda/catalog 2×/dia (10h/22h UTC)',
+          schedule: 'ops 0 12 · agenda 25 12 · catalog 40 11 UTC (1×/dia)',
           mode: 'full',
           path: '/api/avec/sync/full/{ops,agenda,catalog}',
-          note: 'min-gap 5h ok / 45m partial·error; catalog dump 0004 + 20h gap; /full monolítico só admin',
+          note: 'pacote matinal lean; mid-day via botões admin por seção',
         },
         purge: {
-          schedule: '10 7 * * *',
+          schedule: '10 10 * * *',
           path: '/api/avec/purge-snapshots',
-          note: '04:10 America/Sao_Paulo — mantém 1 snapshot/report + limpa payloads legados',
+          note: '07:10 America/Sao_Paulo — mantém 1 snapshot/report + limpa payloads legados',
         },
         cadence:
-          'fast a cada 20 min · ops/agenda/catalog 2×/dia · director-visits 2×/dia · purge diário — webhook só fast',
+          '1×/dia matinal staggered (fast + full ops/agenda/catalog + director + estoque + folha) — mid-day só botão; webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
