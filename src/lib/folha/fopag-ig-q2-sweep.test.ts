@@ -430,18 +430,12 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('lucas rodrigues')?.motor_proposed).toBeCloseTo(777.56, 0)
     expect(by('maykon')?.motor_proposed).toBeCloseTo(22723.17, 0)
     expect(by('joanides')?.motor_proposed).toBeCloseTo(47658.4, 0)
-    // Gildenice: Fopag meio 50% → corrigido para 5% (RH)
-    expect(by('gildenice')?.motor_proposed).toBeCloseTo(
-      12253.695 - 2892.875 + 289.2875,
-      0,
-    )
+    // Avec/Fopag: meio 50% (sem correção RH 5%)
+    expect(by('gildenice')?.motor_proposed).toBeCloseTo(12253.695, 0)
     expect(by('gildenice')?.status).toBe('match')
     expect(by('romeu felipe')?.motor_proposed).toBeCloseTo(542.1, 0)
-    // Diello: Fopag meio 50% → corrigido para 5% (11599.01 − 2127.3 + 212.73)
-    expect(by('diello')?.motor_proposed).toBeCloseTo(
-      11599.01 - 2127.3 + 212.73,
-      0,
-    )
+    // Fixture Diello: a_pagar sintético 11599.01 (Fopag Y com Baru embutido)
+    expect(by('diello')?.motor_proposed).toBeCloseTo(11599.01, 0)
     expect(by('liria')?.motor_proposed).toBeCloseTo(2598.12, 0)
     expect(by('daniela machado')?.status).toBe('match')
     expect(by('diello')?.status).toBe('match')

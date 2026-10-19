@@ -103,13 +103,11 @@ const BRUNNA_TAX_SPLIT: FolhaServiceTaxSplit = {
  */
 export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   {
-    // RH: salão arca 5% do desconto assistente (meio a meio = 5%).
-    // Ex.: comissão do assistente 13% → salão 5%, profissional arca os 8%
-    // restantes (Avec já desconta o valor cheio). Fopag às vezes mostra
-    // meio=50% — ignorar a coluna e usar esta alíquota.
+    // Avec/Fopag validados (Out Q1 2026): meio a meio = 50% do desconto
+    // assistente. O a_pagar 8123/0123 já fecha nesse líquido — não forçar 5%.
     id: 'pedro_diello',
     aliases: ['pedro diello', 'pedro e f diello'],
-    meioAMeioRate: 0.05,
+    meioAMeioRate: 0.5,
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
@@ -141,14 +139,14 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // IG — mesma regra Diello/Dayana (RH): salão 5%; pro arca o restante.
+    // IG — mesma regra Diello/Dayana (Avec/Fopag): meio a meio 50%.
     id: 'gildenice',
     aliases: [
       'gildenice teixeira de medeiros',
       'gildenice teixeira',
       'gildenice',
     ],
-    meioAMeioRate: 0.05,
+    meioAMeioRate: 0.5,
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
@@ -496,7 +494,7 @@ export function resolveFolhaPersonRules(
 
 /**
  * Taxa de meio a meio efetiva para o profissional.
- * Preferência: `meioAMeioRate` explícito (Walter/Dayana BR 50%, Diello 5%).
+ * Preferência: `meioAMeioRate` explícito (Walter/Dayana/Diello 50%).
  * Senão, se só há `assistantRemitRate`, meio = 1 − repasse.
  */
 export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
