@@ -127,11 +127,11 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       cabeleireiro:
         'Taxa adm: BR 5% / IG 7% sobre faturado bruto. IG Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
       maquiador:
-        'Taxa adm: BR 5% / IG 7% sobre faturado − produto (IG Brunna/Joah/Marcela 5%).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado bruto (C). BR: Fopag Out Q1 usou fat. líquido por engano — motor corrige o gap. IG já estava certo.',
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:
-        'Taxa adm: BR 5% / IG 7% sobre faturado − produto. Sem bônus (RH 2026-10). Liria: adm 7% (sala de estética / manicure-depilação).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado bruto. Sem bônus (RH 2026-10). Liria: adm 7% (sala de estética / manicure-depilação).',
       assistente:
         'Atuando como pro: ganho ~30% + taxa adm sobre U (BR 2% / IG 3%; Brunna split 2%). Romeu: faixas 30/40/50% no acumulado mês (soma U Q1+Q2); top-up (rate−30%) pago no dia 05. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:
