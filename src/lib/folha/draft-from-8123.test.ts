@@ -48,6 +48,7 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
     const pay = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES', // 50% na Planilha Base
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -77,8 +78,8 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
         faturado_referencia: null,
       },
     })
-    // LP padrão 10000 − DAS 100 − Baru 50 = 9850
-    expect(roundFopagRom(pay, 2)).toBe(9_850)
+    // FL 10500 − 026 300 − adm 5%×20000 − DAS 100 − Baru 50 = 9050
+    expect(roundFopagRom(pay, 2)).toBe(9_050)
   })
 
   it('Walter sem V explícito: remessa 30%, não 20%', () => {
@@ -115,8 +116,8 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
         faturado_referencia: null,
       },
     })
-    // 60% × 10000 + 30% × 1000 = 6300
-    expect(roundFopagRom(pay, 2)).toBe(6_300)
+    // 60% × 10000 + 30% × 1000 − adm 5%×10000 = 5800
+    expect(roundFopagRom(pay, 2)).toBe(5_800)
   })
 
   it('multiplicador: U/V/W não entram no pay', () => {
@@ -219,10 +220,11 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       fat_liquido_referencia: null,
       faturado_referencia: null,
     }
-    // Adriana 50%: LP=10000 sem assistente
+    // Adriana 50%: FL 10500 − 026 300 − adm 1000 = 9200
     const without = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -230,11 +232,12 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       assistantDiscount: null,
       extras: emptyExtras,
     })
-    expect(roundFopagRom(without, 2)).toBe(10_000)
-    // Com K=1000 → 10000 − 1000 + 500 = 9500
+    expect(roundFopagRom(without, 2)).toBe(9_200)
+    // Com K=1000 → 9200 − 1000 + 500 = 8700
     const withAssist = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -242,7 +245,7 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       assistantDiscount: -1_000,
       extras: emptyExtras,
     })
-    expect(roundFopagRom(withAssist, 2)).toBe(9_500)
+    expect(roundFopagRom(withAssist, 2)).toBe(8_700)
   })
 })
 
@@ -260,8 +263,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
         net_payable: 1, // a_pagar ignorado pelo motor novo
       }),
     )
-    // salão 45% → FL 11400 − 300 − 200 = 10900
-    expect(line.proposed_pay).toBeCloseTo(10_900, 2)
+    // FL 11400 − 026 300 − adm 5%×20000 = 10100
+    expect(line.proposed_pay).toBeCloseTo(10_100, 2)
   })
 
   it('impostos/Baru digitados abatem', () => {
@@ -277,8 +280,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
       }),
       { das: 200, consumo_baru: 50 },
     )
-    // FL 11400 − meio 200 = 11200 − 200 − 50 = 10950
-    expect(line.proposed_pay).toBeCloseTo(10_950, 2)
+    // FL 11400 − adm 1000 − DAS 200 − Baru 50 = 10150
+    expect(line.proposed_pay).toBeCloseTo(10_150, 2)
   })
 
   it('multiplicador com U: colunas V/W ficam; pay não credita remessa', () => {
@@ -312,8 +315,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
       }),
       { das: 200 },
     )
-    // LP 10400 − DAS 200. Strip antigo zeraria o DAS.
-    expect(line.proposed_pay).toBeCloseTo(10_200, 2)
+    // FL 10600 − adm 1000 − DAS 200 = 9400
+    expect(line.proposed_pay).toBeCloseTo(9_400, 2)
   })
 
   it('crédito residual do olerite não debita o pay ROM', () => {
@@ -329,8 +332,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
         net_payable: 1,
       }),
     )
-    // LP 55%×10000=5500; 029 assistente −2000+1000; residual olerite não entra.
-    expect(line.proposed_pay).toBeCloseTo(4_500, 2)
+    // FL 5500 − K+meio (−2000+1000) − adm 500; residual olerite não entra.
+    expect(line.proposed_pay).toBeCloseTo(4_000, 2)
   })
 })
 

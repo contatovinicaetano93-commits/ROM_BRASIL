@@ -517,9 +517,20 @@ export function proposePayFromFopagRom(args: {
       : u != null && !Number.isNaN(u)
         ? u * resolveRemitRate(person)
         : null
+  /**
+   * Taxa adm automática: IG 7% / BR 5% × C (cargos isentos → null).
+   * Não lê extras.taxa_administrativa (coluna de display / olerite legado).
+   * Validação Daniela: FL − K + meio − 026 − C×7%.
+   */
+  const admRate = resolveGrossAdminFeeRate(args.panel, cargo, person)
+  const taxaAdministrativa =
+    admRate != null && args.charged != null && !Number.isNaN(args.charged)
+      ? Math.abs(args.charged) * admRate
+      : null
   return applyFopagRomManualExtras(rom.liquidoPadrao, {
     descontoAssistente: deductionMagnitude(args.assistantDiscount),
     meioAMeioAssistenteRate: resolveMeioAMeioRate(person),
+    taxaAdministrativa,
     servicoAssistenteBonus: bonus0186,
     servicoAssistenteDebito: uSoConferencia ? null : args.extras.taxa_servicos,
     consumoBaru: args.extras.consumo_baru,
