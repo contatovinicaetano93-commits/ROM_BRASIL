@@ -24,6 +24,7 @@ import {
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
   resolveQuinzenaMetaTarget,
+  resolveRemitRate,
   romeuAssistantMetaTopUp,
   usesNamedMeioOverride,
   type FolhaPersonRules,
@@ -318,28 +319,6 @@ function sanitizeTaxExtra(value: number | null | undefined): number | null {
 }
 
 /**
- * Quando o `a_pagar` já fecha no líquido Avec:
- * - impostos (DAS/DARF/mens) nunca rebatem no pay
- * - Baru/parc só em Q1 (`stripBaru`): em Q2 o Zig ainda pode abater
- *   (Alison/Monique — Y Fopag ≠ net).
- */
-export function stripClosedLiquidPayExtras(
-  extras: FolhaDraftLine['folha_extras'],
-  opts?: { stripBaru?: boolean },
-): FolhaDraftLine['folha_extras'] {
-  const next: FolhaDraftLine['folha_extras'] = {
-    ...extras,
-    darf: null,
-    das: null,
-    mensalidade_contabilidade: null,
-  }
-  if (opts?.stripBaru) {
-    return { ...next, consumo_baru: null, parc: null }
-  }
-  return next
-}
-
-/**
  * `a_pagar` 8123/0123 já é o líquido Avec: rateio_após_cartão + rateio
  * produtos + product_spend + assistente + outros (valores assinados).
  * Quando casa, o motor NÃO pode recreditar meio nem reabater taxa adm —
@@ -510,17 +489,31 @@ export function proposePayFromFopagRom(args: {
     report026: deductionMagnitude(args.productSpend),
     comissaoProfissional: rate,
   })
-  const u = args.extras.servicos_assistente_como_pro
-  const vExplicit = args.extras.valor_a_pagar_profissional
+  const person = resolveFolhaPersonRules(args.name)
+  const cargo = normalizeFolhaCargo(args.cargo)
+  /**
+   * Assistente/multiplicador/colorista: U/V/W são conferência (repasse no pro).
+   * Sem isso, V zerado + U presente virava crédito U×20% e W não abatia.
+   * Auricaliane/Victor (`assistantEarnInPay`) continuam com V−W.
+   */
+  const uSoConferencia =
+    (cargo === 'assistente' ||
+      cargo === 'multiplicador' ||
+      cargo === 'colorista') &&
+    person?.assistantEarnInPay !== true
+  const u = uSoConferencia ? null : args.extras.servicos_assistente_como_pro
+  const vExplicit = uSoConferencia
+    ? null
+    : args.extras.valor_a_pagar_profissional
   const bonus0186 =
     vExplicit != null && !Number.isNaN(vExplicit)
       ? vExplicit
       : u != null && !Number.isNaN(u)
-        ? u * 0.2
+        ? u * resolveRemitRate(person)
         : null
   return applyFopagRomManualExtras(rom.liquidoPadrao, {
     servicoAssistenteBonus: bonus0186,
-    servicoAssistenteDebito: args.extras.taxa_servicos,
+    servicoAssistenteDebito: uSoConferencia ? null : args.extras.taxa_servicos,
     consumoBaru: args.extras.consumo_baru,
     darf: sanitizeTaxExtra(args.extras.darf),
     das: sanitizeTaxExtra(args.extras.das),
@@ -1278,21 +1271,20 @@ export function buildFolhaDraftLine(
    * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
    *
-   * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
-   * já somou o residual; estornar via descontos_diversos no pay **só se**
-   * o líquido Avec NÃO fecha (senão Romeu/Walter BR Out Q1: −13k/−2k
-   * fantasma vs 0123/Fopag). Crédito órfão sem meio/adm (Romeu remessa
-   * charged=0) continua estornando — `embeddedAdminMeio` falso.
-   *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
+   * U também sai da cópia do pay: senão o passo 7 reconstrói a remessa.
    * Exceção: assistantEarnInPay (Auricaliane) — Y inclui V−W.
+   *
+   * Crédito residual do olerite não estorna em descontos_diversos: o pay
+   * parte do motor FOPAG ROM, que não somou esse crédito do a_pagar.
    */
   const assistantEarnInPay = person?.assistantEarnInPay === true
   let extrasForProposedPay: FolhaDraftLine['folha_extras'] =
     isAssistantLike && !assistantEarnInPay
       ? {
           ...folha_extras,
+          servicos_assistente_como_pro: null,
           valor_a_pagar_profissional: null,
           taxa_servicos: null,
         }
@@ -1312,28 +1304,11 @@ export function buildFolhaDraftLine(
     }
   }
 
-  const skipCreditResidualEstorno =
-    aPagarIsAvecLiquid && olerite.embeddedAdminMeio
-  if (
-    !skipCreditResidualEstorno &&
-    olerite.embeddedCreditResidual != null &&
-    olerite.embeddedCreditResidual > 0.02
-  ) {
-    extrasForProposedPay = {
-      ...extrasForProposedPay,
-      descontos_diversos: roundFolha(
-        (extrasForProposedPay.descontos_diversos ?? 0) +
-          olerite.embeddedCreditResidual,
-        4,
-      ),
-    }
-  }
-
   /**
    * Baru vs residual olerite (Fopag: colunas separadas).
    * Débito residual ≈ Baru embutido no a_pagar → coluna Baru, Outros null,
-   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros e
-   * já é estornado via descontos_diversos; Baru do RH ainda abate.
+   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros.
+   * Não estorna no pay (a base ROM não incluiu o crédito). Baru do RH abate.
    *
    * Assistente/manicure: descontos 8123 já fecha a_pagar (Baru±parc embutidos).
    * Sem Baru RH/Zig: promove residual Avec → coluna (exceto Beto = W).
@@ -1562,18 +1537,6 @@ export function buildFolhaDraftLine(
       ),
     }
     flags.push('maquiador_adm_no_bruto')
-  }
-
-  /**
-   * Hard gate: a_pagar já = líquido Avec → impostos nunca rebatem.
-   * Q1 (dia 20): Baru/parc também só coluna (Francine/Diego/Lucas Out Q1).
-   * Q2: Zig Baru ainda abate quando Y ≠ net (Alison/Monique).
-   * Nathan: match via charged−house fecha avecLiquidClosed → sem crédito residual.
-   */
-  if (aPagarIsAvecLiquid) {
-    extrasForProposedPay = stripClosedLiquidPayExtras(extrasForProposedPay, {
-      stripBaru: applyTaxExtras,
-    })
   }
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)

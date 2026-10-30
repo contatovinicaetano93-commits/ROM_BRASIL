@@ -81,6 +81,28 @@ describe('Planilha Base RH — alíquotas', () => {
     ).toBe(0.55)
   })
 
+  it('0.0 na planilha não é alíquota', () => {
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'WALTER MARTINHO LEAL FILHO CABELEIREIRO',
+      }),
+    ).toBe(0.6)
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'MAYARA MUNIZ PEREIRA',
+      }),
+    ).toBe(0.13)
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'DHANDARA VIEIRA GOMES',
+        cargo: 'Assistente',
+      }),
+    ).toBe(0.1)
+  })
+
   it('Romeu 100%: FL = serviço + 95% produtos − cartão', () => {
     const r = computeFopagRomFatLiquido({
       report0123: 10_000,

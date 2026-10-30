@@ -81,6 +81,83 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
     expect(roundFopagRom(pay, 2)).toBe(9_850)
   })
 
+  it('Walter sem V explícito: remessa 30%, não 20%', () => {
+    const pay = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'WALTER MARTINHO LEAL FILHO CABELEIREIRO',
+      cargo: 'Cabeleireiro',
+      charged: 10_000,
+      productShare: 0,
+      cardFee: 0,
+      productSpend: 0,
+      extras: {
+        parc: null,
+        darf: null,
+        das: null,
+        div_ativa: null,
+        mensalidade_contabilidade: null,
+        descontos_diversos: null,
+        consumo_baru: null,
+        produtos_black: null,
+        servicos_assistente_como_pro: 1000,
+        valor_a_pagar_profissional: null,
+        taxa_servicos: null,
+        taxa_administrativa: null,
+        esteticista_bonus: null,
+        romeu_comissao_parcela: null,
+        devolucao_taxa_adm_q1: null,
+        acumulado_mes: null,
+        faturado_mes: null,
+        faturado_mesmo_periodo_ano_anterior: null,
+        taxa_adm_q1: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        faturado_referencia: null,
+      },
+    })
+    // 60% × 10000 + 30% × 1000 = 6300
+    expect(roundFopagRom(pay, 2)).toBe(6_300)
+  })
+
+  it('multiplicador: U/V/W não entram no pay', () => {
+    const extras = {
+      parc: null,
+      darf: null,
+      das: null,
+      div_ativa: null,
+      mensalidade_contabilidade: null,
+      descontos_diversos: null,
+      consumo_baru: null,
+      produtos_black: null,
+      servicos_assistente_como_pro: 1000,
+      valor_a_pagar_profissional: 200,
+      taxa_servicos: 30,
+      taxa_administrativa: null,
+      esteticista_bonus: null,
+      romeu_comissao_parcela: null,
+      devolucao_taxa_adm_q1: null,
+      acumulado_mes: null,
+      faturado_mes: null,
+      faturado_mesmo_periodo_ano_anterior: null,
+      taxa_adm_q1: null,
+      liquido_referencia: null,
+      fat_liquido_referencia: null,
+      faturado_referencia: null,
+    }
+    const pay = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'JEFFERSON POLICARPO DOS SANTOS',
+      cargo: 'MULTIPLICADOR',
+      charged: 12_000,
+      productShare: 0,
+      cardFee: 0,
+      productSpend: -100,
+      extras,
+    })
+    // 15% × 12000 − produto 100. Sem +200 −30.
+    expect(roundFopagRom(pay, 2)).toBe(1_700)
+  })
+
   it('sem alíquota RH → null', () => {
     const pay = proposePayFromFopagRom({
       panel: 'brasil',
@@ -151,6 +228,58 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
     )
     // FL 11400 − meio 200 = 11200 − 200 − 50 = 10950
     expect(line.proposed_pay).toBeCloseTo(10_950, 2)
+  })
+
+  it('multiplicador com U: colunas V/W ficam; pay não credita remessa', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      pro({
+        name: 'JEFFERSON POLICARPO DOS SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 12_000,
+        product_share: 0,
+        product_spend: -100,
+        card_fee: 0,
+        net_payable: 5000,
+      }),
+      { servicos_assistente_como_pro: 1000 },
+    )
+    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(200, 2)
+    expect(line.folha_extras.taxa_servicos).toBeCloseTo(30, 2)
+    expect(line.proposed_pay).toBeCloseTo(1_700, 2)
+  })
+
+  it('a_pagar fechado não apaga DAS digitado', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      pro({
+        name: 'ALAN FERNADO DE ALBUQUERQUE',
+        charged: 20_000,
+        product_share: 0,
+        card_fee: -400,
+        net_payable: 9_600,
+      }),
+      { das: 200 },
+    )
+    // LP 10400 − DAS 200. Strip antigo zeraria o DAS.
+    expect(line.proposed_pay).toBeCloseTo(10_200, 2)
+  })
+
+  it('crédito residual do olerite não debita o pay ROM', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      pro({
+        name: 'ALAN FERNADO DE ALBUQUERQUE',
+        charged: 10_000,
+        product_share: 0,
+        card_fee: 0,
+        assistant_discount: -2_000,
+        other_discounts: 700,
+        net_payable: 1,
+      }),
+    )
+    // 55% × 10000. Residual ~200 não entra em descontos_diversos.
+    expect(line.proposed_pay).toBeCloseTo(5_500, 2)
   })
 })
 
