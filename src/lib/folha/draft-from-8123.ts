@@ -1,14 +1,18 @@
 /**
- * Rascunho da Folha a partir do snapshot 8123 (salon_commissions_daily).
+ * Rascunho da Folha a partir do snapshot 8123/0123 (salon_commissions_daily).
  *
- * O 8123 é espelho do fechamento Avec — não recalculamos % de comissão.
- * `proposed_pay` começa em `a_pagar` (net_payable) e abate/acresce camadas Folha:
- * DARF/DAS/mensalidade (Q1), U/V/W, meio a meio, taxa adm motor (quando 8123
- * veio zerado — ex.: IG 7% sobre faturado bruto).
+ * Motor FOPAG ROM (apresentações RH 27/10/2026): recalcula passos 1–6 a partir
+ * dos componentes Avec + alíquota da Planilha Base. Impostos e Baru são
+ * manuais (não entram sozinhos). Passo 7 (0186/U) só se RH preencher.
  */
 
 import type { RomPanelId } from '@/lib/brand'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
+import {
+  applyFopagRomManualExtras,
+  calculateFopagRom,
+} from '@/lib/folha/fopag-rom-calc'
+import { resolveRhCommissionRate } from '@/lib/folha/rh-commission-rates'
 import {
   lucasCamposAdminRefundQ2,
   quinzenaMetaHit,
@@ -20,6 +24,7 @@ import {
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
   resolveQuinzenaMetaTarget,
+  resolveRemitRate,
   romeuAssistantMetaTopUp,
   usesNamedMeioOverride,
   type FolhaPersonRules,
@@ -232,13 +237,12 @@ export type FolhaDraftLine = {
     faturado_referencia: number | null
   }
   /**
-   * a_pagar 8123 ± extras Folha.
-   * null se 8123 não trouxe a_pagar (não inventa 0).
+   * Motor FOPAG ROM (passos 1–6) ± manuais (impostos/Baru/0186).
+   * null se faltar bruto Avec ou alíquota na Planilha Base.
    */
   proposed_pay: number | null
   /**
-   * Preview da fórmula Y quando dá para remontar fat. líquido a partir do 8123.
-   * Só conferência — proposed_pay manda no pagamento.
+   * Preview legado (fórmula Y antiga) — só conferência.
    */
   formula_y_preview: number | null
   flags: FolhaDraftFlag[]
@@ -312,28 +316,6 @@ function sanitizeTaxExtra(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null
   if (isFolhaTaxPlaceholder(value)) return null
   return value
-}
-
-/**
- * Quando o `a_pagar` já fecha no líquido Avec:
- * - impostos (DAS/DARF/mens) nunca rebatem no pay
- * - Baru/parc só em Q1 (`stripBaru`): em Q2 o Zig ainda pode abater
- *   (Alison/Monique — Y Fopag ≠ net).
- */
-export function stripClosedLiquidPayExtras(
-  extras: FolhaDraftLine['folha_extras'],
-  opts?: { stripBaru?: boolean },
-): FolhaDraftLine['folha_extras'] {
-  const next: FolhaDraftLine['folha_extras'] = {
-    ...extras,
-    darf: null,
-    das: null,
-    mensalidade_contabilidade: null,
-  }
-  if (opts?.stripBaru) {
-    return { ...next, consumo_baru: null, parc: null }
-  }
-  return next
 }
 
 /**
@@ -470,6 +452,98 @@ export function stripFolhaTaxExtras(
   }
 }
 
+/**
+ * 041 a partir do rateio de produtos 8123 (taxa 5% da apresentação).
+ * Sem rateio → 0 (só serviços).
+ */
+export function deriveReport041From8123(
+  productShare: number | null | undefined,
+): number | null {
+  if (productShare == null || Number.isNaN(productShare)) return 0
+  return Math.abs(productShare) / 0.05
+}
+
+/**
+ * proposed_pay = motor FOPAG ROM (1–6) + manuais digitados.
+ * Impostos/Baru só entram se RH preencheu — sem auto Zig/IMAP.
+ */
+export function proposePayFromFopagRom(args: {
+  panel: RomPanelId
+  name: string
+  cargo?: string | null
+  charged: number | null | undefined
+  productShare: number | null | undefined
+  /** 029 — taxa de cartão (débito+crédito). */
+  cardFee: number | null | undefined
+  productSpend: number | null | undefined
+  /**
+   * 029 — Desconto Assistente (total). Motor: −K + meio×K (default 50%).
+   * Distinto de `cardFee` e do passo 7 (0186 / taxa_servicos).
+   */
+  assistantDiscount?: number | null
+  extras: FolhaDraftLine['folha_extras']
+}): number | null {
+  const rate = resolveRhCommissionRate({
+    panel: args.panel,
+    name: args.name,
+    cargo: args.cargo,
+  })
+  const person = resolveFolhaPersonRules(args.name)
+  const rom = calculateFopagRom({
+    report0123: args.charged ?? null,
+    report041: deriveReport041From8123(args.productShare),
+    report029: deductionMagnitude(args.cardFee),
+    report026: deductionMagnitude(args.productSpend),
+    comissaoProfissional: rate,
+  })
+  const cargo = normalizeFolhaCargo(args.cargo)
+  /**
+   * Assistente/multiplicador/colorista: U/V/W são conferência (repasse no pro).
+   * Sem isso, V zerado + U presente virava crédito U×20% e W não abatia.
+   * Auricaliane/Victor (`assistantEarnInPay`) continuam com V−W.
+   */
+  const uSoConferencia =
+    (cargo === 'assistente' ||
+      cargo === 'multiplicador' ||
+      cargo === 'colorista') &&
+    person?.assistantEarnInPay !== true
+  const u = uSoConferencia ? null : args.extras.servicos_assistente_como_pro
+  const vExplicit = uSoConferencia
+    ? null
+    : args.extras.valor_a_pagar_profissional
+  const bonus0186 =
+    vExplicit != null && !Number.isNaN(vExplicit)
+      ? vExplicit
+      : u != null && !Number.isNaN(u)
+        ? u * resolveRemitRate(person)
+        : null
+  /**
+   * Taxa adm automática: IG 7% / BR 5% × C (cargos isentos → null).
+   * Não lê extras.taxa_administrativa (coluna de display / olerite legado).
+   * Validação Daniela: FL − K + meio − 026 − C×7%.
+   */
+  const admRate = resolveGrossAdminFeeRate(args.panel, cargo, person)
+  const taxaAdministrativa =
+    admRate != null && args.charged != null && !Number.isNaN(args.charged)
+      ? Math.abs(args.charged) * admRate
+      : null
+  return applyFopagRomManualExtras(rom.liquidoPadrao, {
+    descontoAssistente: deductionMagnitude(args.assistantDiscount),
+    meioAMeioAssistenteRate: resolveMeioAMeioRate(person),
+    taxaAdministrativa,
+    servicoAssistenteBonus: bonus0186,
+    servicoAssistenteDebito: uSoConferencia ? null : args.extras.taxa_servicos,
+    consumoBaru: args.extras.consumo_baru,
+    darf: sanitizeTaxExtra(args.extras.darf),
+    das: sanitizeTaxExtra(args.extras.das),
+    mensalidade: sanitizeTaxExtra(args.extras.mensalidade_contabilidade),
+    parc: args.extras.parc,
+    divAtiva: args.extras.div_ativa,
+    descontosDiversos: args.extras.descontos_diversos,
+  })
+}
+
+/** @deprecated Legado a_pagar±extras — mantido para testes/preview. */
 function applyFolhaExtras(
   netPayable: number | null,
   extras: FolhaDraftLine['folha_extras'],
@@ -1216,21 +1290,20 @@ export function buildFolhaDraftLine(
    * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
    *
-   * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
-   * já somou o residual; estornar via descontos_diversos no pay **só se**
-   * o líquido Avec NÃO fecha (senão Romeu/Walter BR Out Q1: −13k/−2k
-   * fantasma vs 0123/Fopag). Crédito órfão sem meio/adm (Romeu remessa
-   * charged=0) continua estornando — `embeddedAdminMeio` falso.
-   *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
+   * U também sai da cópia do pay: senão o passo 7 reconstrói a remessa.
    * Exceção: assistantEarnInPay (Auricaliane) — Y inclui V−W.
+   *
+   * Crédito residual do olerite não estorna em descontos_diversos: o pay
+   * parte do motor FOPAG ROM, que não somou esse crédito do a_pagar.
    */
   const assistantEarnInPay = person?.assistantEarnInPay === true
   let extrasForProposedPay: FolhaDraftLine['folha_extras'] =
     isAssistantLike && !assistantEarnInPay
       ? {
           ...folha_extras,
+          servicos_assistente_como_pro: null,
           valor_a_pagar_profissional: null,
           taxa_servicos: null,
         }
@@ -1250,28 +1323,11 @@ export function buildFolhaDraftLine(
     }
   }
 
-  const skipCreditResidualEstorno =
-    aPagarIsAvecLiquid && olerite.embeddedAdminMeio
-  if (
-    !skipCreditResidualEstorno &&
-    olerite.embeddedCreditResidual != null &&
-    olerite.embeddedCreditResidual > 0.02
-  ) {
-    extrasForProposedPay = {
-      ...extrasForProposedPay,
-      descontos_diversos: roundFolha(
-        (extrasForProposedPay.descontos_diversos ?? 0) +
-          olerite.embeddedCreditResidual,
-        4,
-      ),
-    }
-  }
-
   /**
    * Baru vs residual olerite (Fopag: colunas separadas).
    * Débito residual ≈ Baru embutido no a_pagar → coluna Baru, Outros null,
-   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros e
-   * já é estornado via descontos_diversos; Baru do RH ainda abate.
+   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros.
+   * Não estorna no pay (a base ROM não incluiu o crédito). Baru do RH abate.
    *
    * Assistente/manicure: descontos 8123 já fecha a_pagar (Baru±parc embutidos).
    * Sem Baru RH/Zig: promove residual Avec → coluna (exceto Beto = W).
@@ -1502,18 +1558,6 @@ export function buildFolhaDraftLine(
     flags.push('maquiador_adm_no_bruto')
   }
 
-  /**
-   * Hard gate: a_pagar já = líquido Avec → impostos nunca rebatem.
-   * Q1 (dia 20): Baru/parc também só coluna (Francine/Diego/Lucas Out Q1).
-   * Q2: Zig Baru ainda abate quando Y ≠ net (Alison/Monique).
-   * Nathan: match via charged−house fecha avecLiquidClosed → sem crédito residual.
-   */
-  if (aPagarIsAvecLiquid) {
-    extrasForProposedPay = stripClosedLiquidPayExtras(extrasForProposedPay, {
-      stripBaru: applyTaxExtras,
-    })
-  }
-
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
   const yPreview =
     fatLiquido == null
@@ -1575,7 +1619,17 @@ export function buildFolhaDraftLine(
     exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(
-      applyFolhaExtras(row.net_payable, extrasForProposedPay, meioForProposedPay),
+      proposePayFromFopagRom({
+        panel,
+        name: row.name,
+        cargo: row.role,
+        charged: row.charged,
+        productShare: row.product_share,
+        cardFee: row.card_fee,
+        productSpend: row.product_spend,
+        assistantDiscount: row.assistant_discount,
+        extras: extrasForProposedPay,
+      }),
       4,
     ),
     formula_y_preview: roundFolha(yPreview, 4),

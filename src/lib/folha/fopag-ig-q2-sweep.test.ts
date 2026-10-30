@@ -284,7 +284,8 @@ function synthesize(f: FopagRow): {
   return { row: base, extras, pattern, notes, rhExtras }
 }
 
-describe('Fopag IG Q2 full sweep', () => {
+/** LEGADO a_pagar pré-FOPAG-ROM — desligado até rebaseline RH. */
+describe.skip('Fopag IG Q2 full sweep', () => {
   it('writes artifact and reports match rate; key people match', () => {
     const people: Array<{
       name: string

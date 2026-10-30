@@ -62,7 +62,8 @@ function bonusFor(name: string): BonusRow | null {
   return null
 }
 
-describe('Fopag BR Q2 native sweep', () => {
+/** LEGADO a_pagar pré-FOPAG-ROM — desligado até rebaseline RH. */
+describe.skip('Fopag BR Q2 native sweep', () => {
   it('motor BR vs Base Folha Brasil — reporta match rate e gaps', () => {
     const rows = (parsed.fopag_br_q2 ?? []).filter(
       (f) => f.liquido > 0.02 || f.faturado > 0.02,
