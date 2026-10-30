@@ -473,8 +473,14 @@ export function proposePayFromFopagRom(args: {
   cargo?: string | null
   charged: number | null | undefined
   productShare: number | null | undefined
+  /** 029 — taxa de cartão (débito+crédito). */
   cardFee: number | null | undefined
   productSpend: number | null | undefined
+  /**
+   * 029 — Desconto Assistente (total). Motor: −K + meio×K (default 50%).
+   * Distinto de `cardFee` e do passo 7 (0186 / taxa_servicos).
+   */
+  assistantDiscount?: number | null
   extras: FolhaDraftLine['folha_extras']
 }): number | null {
   const rate = resolveRhCommissionRate({
@@ -482,6 +488,7 @@ export function proposePayFromFopagRom(args: {
     name: args.name,
     cargo: args.cargo,
   })
+  const person = resolveFolhaPersonRules(args.name)
   const rom = calculateFopagRom({
     report0123: args.charged ?? null,
     report041: deriveReport041From8123(args.productShare),
@@ -489,7 +496,6 @@ export function proposePayFromFopagRom(args: {
     report026: deductionMagnitude(args.productSpend),
     comissaoProfissional: rate,
   })
-  const person = resolveFolhaPersonRules(args.name)
   const cargo = normalizeFolhaCargo(args.cargo)
   /**
    * Assistente/multiplicador/colorista: U/V/W são conferência (repasse no pro).
@@ -512,6 +518,8 @@ export function proposePayFromFopagRom(args: {
         ? u * resolveRemitRate(person)
         : null
   return applyFopagRomManualExtras(rom.liquidoPadrao, {
+    descontoAssistente: deductionMagnitude(args.assistantDiscount),
+    meioAMeioAssistenteRate: resolveMeioAMeioRate(person),
     servicoAssistenteBonus: bonus0186,
     servicoAssistenteDebito: uSoConferencia ? null : args.extras.taxa_servicos,
     consumoBaru: args.extras.consumo_baru,
@@ -1608,6 +1616,7 @@ export function buildFolhaDraftLine(
         productShare: row.product_share,
         cardFee: row.card_fee,
         productSpend: row.product_spend,
+        assistantDiscount: row.assistant_discount,
         extras: extrasForProposedPay,
       }),
       4,
