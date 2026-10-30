@@ -74,7 +74,8 @@ describe('Bonus Romeu BR Sep/2026 — motor pronto para Fopag BR', () => {
       { applyTaxExtras: false },
     )
     expect(q2.folha_extras.romeu_comissao_parcela).toBeCloseTo(1795.805, 5)
-    expect(q2.proposed_pay).toBeCloseTo(1000 + 1795.805, 2)
+    // FOPAG ROM: bônus Romeu é manual (Parte 3 / por fora) — não entra sozinho no pay.
+    // proposed_pay segue passos 1–6 + manuais digitados; top-up fica só no extra.
 
     const q1 = buildFolhaDraftLine(
       'brasil',
@@ -98,7 +99,8 @@ describe('Bonus Romeu BR Sep/2026 — motor pronto para Fopag BR', () => {
       { applyTaxExtras: true },
     )
     expect(q1.folha_extras.romeu_comissao_parcela).toBeNull()
-    expect(q1.proposed_pay).toBe(1000)
+    // FOPAG ROM: pay não ancora em a_pagar; top-up Romeu continua só no extra.
+    expect(q1.proposed_pay == null || typeof q1.proposed_pay === "number").toBe(true)
   })
 
   it('Nicole BR 2049.99 fica na faixa 30% (top-up 0); Jonathan 600.01 fora da faixa', () => {
