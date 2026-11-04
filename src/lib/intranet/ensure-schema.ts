@@ -17,6 +17,7 @@ const INTRANET_SQL_FILES = [
   'delta-intranet-avec-pro-id.sql',
   'delta-intranet-policy.sql',
   'delta-curriculos.sql',
+  'delta-intranet-stock-point.sql',
 ] as const
 
 let schemaOnce: Promise<void> | null = null

@@ -75,6 +75,12 @@ const GESTAO: IntranetSystem[] = [
     group: 'gestao',
   },
   { href: '/estoque', label: 'Estoque', description: 'Produtos e alertas.', group: 'gestao' },
+  {
+    href: '/solicitacao-produtos',
+    label: 'Solicitação produtos',
+    description: 'Pedido de produto para retirar no P1, P2 ou P3.',
+    group: 'gestao',
+  },
   { href: '/dashboard', label: 'Visão analítica', description: 'KPIs do mês e fechamento em Relatórios.', group: 'gestao' },
   { href: '/relatorios', label: 'Relatórios', description: 'Fechamento oficial do mês.', group: 'gestao' },
 ]

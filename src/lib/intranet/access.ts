@@ -31,6 +31,15 @@ export function isStockPath(pathname: string) {
   return pathname === '/estoque' || pathname.startsWith('/estoque/') || pathname.startsWith('/api/estoque/')
 }
 
+export function isSolicitacaoProdutosPath(pathname: string) {
+  return (
+    pathname === '/solicitacao-produtos' ||
+    pathname.startsWith('/solicitacao-produtos/') ||
+    pathname === '/api/solicitacao-produtos' ||
+    pathname.startsWith('/api/solicitacao-produtos/')
+  )
+}
+
 export function isOnboardingPath(pathname: string) {
   return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
 }
@@ -191,6 +200,12 @@ export function canAccessProtectedPath(
   if (isFinancePath(pathname)) return hasPanelModule(role, extras, 'financeiro')
   if (isRelatoriosPath(pathname)) return hasPanelModule(role, extras, 'relatorios')
   if (isStockPath(pathname)) return hasPanelModule(role, extras, 'estoque')
+  if (isSolicitacaoProdutosPath(pathname)) {
+    return (
+      hasPanelModule(role, extras, 'solicitacao_produtos') ||
+      hasPanelModule(role, extras, 'estoque')
+    )
+  }
   if (isDashboardPath(pathname)) return hasPanelModule(role, extras, 'dashboard')
   if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
   if (isFolhaPath(pathname)) return hasPanelModule(role, extras, 'folha')

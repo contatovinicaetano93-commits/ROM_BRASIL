@@ -31,6 +31,7 @@ const PREVIEW_ORDER = [
   '/financeiro',
   '/folha',
   '/estoque',
+  '/solicitacao-produtos',
   '/dashboard',
   '/relatorios',
 ] as const
