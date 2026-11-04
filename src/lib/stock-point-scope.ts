@@ -17,25 +17,22 @@ export function parseStockPointCode(value: unknown): StockPointCode | null {
 
 /**
  * Ponto atribuído ao colaborador (controlador P1/P2/P3 / almox).
- * null = vê todos (Sidney, almox lead, admin).
+ * null = vê todos (Sidney, almox lead, admin sem ponto).
+ * Falha de leitura (schema, timeout, conexão) propaga — null não é "erro".
  */
 export async function lookupEmployeeStockPointCode(
   employeeId: string | null | undefined,
 ): Promise<StockPointCode | null> {
   if (!employeeId?.trim()) return null
-  try {
-    await ensureIntranetSchema().catch(() => {})
-    const sql = getIntranetSql()
-    const rows = (await sql`
-      select stock_point_code
-      from intranet_employees
-      where id = ${employeeId}::uuid
-      limit 1
-    `) as Array<{ stock_point_code: string | null }>
-    return parseStockPointCode(rows[0]?.stock_point_code)
-  } catch {
-    return null
-  }
+  await ensureIntranetSchema().catch(() => {})
+  const sql = getIntranetSql()
+  const rows = (await sql`
+    select stock_point_code
+    from intranet_employees
+    where id = ${employeeId}::uuid
+    limit 1
+  `) as Array<{ stock_point_code: string | null }>
+  return parseStockPointCode(rows[0]?.stock_point_code)
 }
 
 export async function setEmployeeStockPointCode(

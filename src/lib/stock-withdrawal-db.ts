@@ -1,11 +1,10 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getSql, type Sql } from '@/lib/db'
 import { listRomLocations } from '@/lib/stock-points-db'
 import type { StockPointCode } from '@/lib/stock-point-scope'
 import {
   assertTransitionOk,
-  shouldDebitPointOnStatus,
   validateCreateWithdrawal,
   type CreateWithdrawalInput,
   type WithdrawalStatus,
@@ -205,39 +204,65 @@ export async function listWithdrawalRequests(filter: {
   }
 }
 
-async function getBalance(productId: string, locationId: string): Promise<number> {
-  const sql = getSql()
-  const rows = (await sql`
-    select qty from stock_point_balances
-    where product_id = ${productId}::uuid and location_id = ${locationId}::uuid
-    limit 1
-  `) as { qty: number }[]
-  return Number(rows[0]?.qty ?? 0)
-}
+/**
+ * Débito do piso e status `retirado` na mesma transação.
+ * O pedido fica travado (`for update`) e o update só casa `status = 'pronto'`,
+ * então retry ou dois operadores não subtraem o saldo duas vezes.
+ */
+async function confirmRetirado(sql: Sql, input: { id: string; actor: string }): Promise<void> {
+  await sql.transaction(async (txn) => {
+    const locked = (await txn`
+      select status, product_id, location_id, quantity::float as quantity
+      from stock_withdrawal_requests
+      where id = ${input.id}::uuid
+      for update
+    `) as { status: string; product_id: string; location_id: string; quantity: number }[]
+    const row = locked[0]
+    if (!row) throw new Error('Solicitação não encontrada')
+    const status = isWithdrawalStatus(row.status) ? row.status : 'solicitado'
+    const transitionErr = assertTransitionOk(status, 'retirado')
+    if (transitionErr) throw new Error(transitionErr)
 
-async function setBalance(productId: string, locationId: string, qty: number): Promise<void> {
-  const sql = getSql()
-  const next = Math.max(0, Math.round(qty * 1000) / 1000)
-  await sql`
-    insert into stock_point_balances (product_id, location_id, qty, updated_at)
-    values (${productId}::uuid, ${locationId}::uuid, ${next}, now())
-    on conflict (product_id, location_id) do update
-      set qty = excluded.qty, updated_at = now()
-  `
-}
+    const debited = (await txn`
+      update stock_point_balances b
+      set qty = b.qty - r.quantity,
+          updated_at = now()
+      from stock_withdrawal_requests r
+      where r.id = ${input.id}::uuid
+        and r.status = 'pronto'
+        and b.product_id = r.product_id
+        and b.location_id = r.location_id
+        and b.qty >= r.quantity
+      returning b.qty::float as qty
+    `) as { qty: number }[]
+    if (!debited[0]) {
+      const have = (await txn`
+        select qty::float as qty
+        from stock_point_balances
+        where product_id = ${row.product_id}::uuid
+          and location_id = ${row.location_id}::uuid
+        limit 1
+      `) as { qty: number }[]
+      const fromQty = Number(have[0]?.qty ?? 0)
+      const quantity = Number(row.quantity)
+      throw new Error(
+        `Saldo insuficiente no ponto (tem ${fromQty}, pedido ${quantity}). Reponha antes de confirmar a retirada.`,
+      )
+    }
 
-async function debitPointBalance(
-  productId: string,
-  locationId: string,
-  quantity: number,
-): Promise<void> {
-  const fromQty = await getBalance(productId, locationId)
-  if (fromQty < quantity) {
-    throw new Error(
-      `Saldo insuficiente no ponto (tem ${fromQty}, pedido ${quantity}). Reponha antes de confirmar a retirada.`,
-    )
-  }
-  await setBalance(productId, locationId, fromQty - quantity)
+    const marked = (await txn`
+      update stock_withdrawal_requests
+      set status = 'retirado',
+          delivered_by_name = ${input.actor},
+          withdrawn_at = now(),
+          updated_at = now()
+      where id = ${input.id}::uuid
+        and status = 'pronto'
+      returning id
+    `) as { id: string }[]
+    if (!marked[0]) throw new Error('Solicitação mudou de status durante a retirada')
+    return []
+  })
 }
 
 export async function transitionWithdrawalRequest(input: {
@@ -274,15 +299,13 @@ export async function transitionWithdrawalRequest(input: {
   const transitionErr = assertTransitionOk(current.status, input.toStatus)
   if (transitionErr) throw new Error(transitionErr)
 
-  if (shouldDebitPointOnStatus(input.toStatus)) {
-    await debitPointBalance(current.product_id, current.location_id, current.quantity)
-  }
-
   const actor = input.actorName.trim() || '—'
   const avecRef =
     typeof input.avecRef === 'string' && input.avecRef.trim() ? input.avecRef.trim() : null
 
-  if (input.toStatus === 'em_separacao') {
+  if (input.toStatus === 'retirado') {
+    await confirmRetirado(sql, { id: input.id, actor })
+  } else if (input.toStatus === 'em_separacao') {
     await sql`
       update stock_withdrawal_requests
       set status = 'em_separacao',
@@ -297,15 +320,6 @@ export async function transitionWithdrawalRequest(input: {
       set status = 'pronto',
           prepared_by_name = coalesce(prepared_by_name, ${actor}),
           ready_at = now(),
-          updated_at = now()
-      where id = ${input.id}::uuid
-    `
-  } else if (input.toStatus === 'retirado') {
-    await sql`
-      update stock_withdrawal_requests
-      set status = 'retirado',
-          delivered_by_name = ${actor},
-          withdrawn_at = now(),
           updated_at = now()
       where id = ${input.id}::uuid
     `
