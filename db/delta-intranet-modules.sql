@@ -23,6 +23,7 @@ alter table intranet_employee_modules
     'financeiro',
     'folha',
     'estoque',
+    'solicitacao_produtos',
     'relatorios',
     'dashboard',
     'checks_diario',

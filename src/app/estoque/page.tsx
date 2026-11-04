@@ -471,6 +471,14 @@ export default function EstoquePage() {
             <a href="/estoque/pontos" className="text-gold-strong hover:underline">
               Pontos (Almox / Pisos)
             </a>
+            {' · '}
+            <a href="/estoque/fila-ponto" className="text-gold-strong hover:underline">
+              Fila do ponto
+            </a>
+            {' · '}
+            <a href="/estoque/conferencia-retiradas" className="text-gold-strong hover:underline">
+              Conferência ROM × Avec
+            </a>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

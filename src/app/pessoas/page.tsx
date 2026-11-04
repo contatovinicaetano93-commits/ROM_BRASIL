@@ -22,6 +22,8 @@ import {
 } from '@/lib/intranet/modules'
 import type { RequestArea } from '@/lib/flow/types'
 
+type StockPointCode = 'almox' | 'piso_1' | 'piso_2' | 'piso_3'
+
 type Employee = {
   id: string
   email: string
@@ -31,9 +33,18 @@ type Employee = {
   status: string
   professional_name?: string | null
   avec_pro_id?: string | null
+  stock_point_code?: StockPointCode | null
   modules?: GrantableModuleKey[]
   areaIds?: RequestArea[]
 }
+
+const STOCK_POINT_OPTIONS: Array<{ value: '' | StockPointCode; label: string }> = [
+  { value: '', label: 'Todos os pontos (Sidney / gestor)' },
+  { value: 'almox', label: 'Almoxarifado' },
+  { value: 'piso_1', label: 'Piso 1' },
+  { value: 'piso_2', label: 'Piso 2' },
+  { value: 'piso_3', label: 'Piso 3' },
+]
 
 type UnitProfessional = {
   id: string
@@ -126,13 +137,17 @@ export default function PessoasPage() {
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
   const [editProfessionalName, setEditProfessionalName] = useState('')
   const [editAvecProId, setEditAvecProId] = useState('')
+  const [editStockPoint, setEditStockPoint] = useState<'' | StockPointCode>('')
   const [selectedProId, setSelectedProId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createProfessionalName, setCreateProfessionalName] = useState('')
   const [createAvecProId, setCreateAvecProId] = useState('')
+  const [createStockPoint, setCreateStockPoint] = useState<'' | StockPointCode>('')
   const [proSearch, setProSearch] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
   const isProfissionalCargo = cargoId === 'profissional'
+  const needsStockPoint =
+    cargoId === 'estoque_ops' || cargoId === 'almoxarifado' || cargoId === 'gestor_estoque'
 
   const pack = useMemo(() => cargoPackageById(cargoId), [cargoId])
   const selectedPro = useMemo(
@@ -173,6 +188,10 @@ export default function PessoasPage() {
     if (!pack) return
     setCreateModules([...pack.extras])
     setFineTune(false)
+    if (pack.id === 'almoxarifado') setCreateStockPoint('almox')
+    else if (pack.id === 'gestor_estoque') setCreateStockPoint('')
+    else if (pack.id === 'estoque_ops') setCreateStockPoint('piso_1')
+    else setCreateStockPoint('')
     if (pack.id !== 'profissional') {
       setSelectedProId('')
       setCreateProfessionalName('')
@@ -228,6 +247,7 @@ export default function PessoasPage() {
         avec_pro_id: isProfissionalCargo
           ? createAvecProId.trim() || null
           : null,
+        stock_point_code: needsStockPoint ? createStockPoint || null : null,
         panel_role: pack.panel_role,
         flow_role: pack.flow_role,
         can_publish: pack.can_publish,
@@ -253,6 +273,7 @@ export default function PessoasPage() {
     setCreateName('')
     setCreateProfessionalName('')
     setCreateAvecProId('')
+    setCreateStockPoint('')
     setSelectedProId('')
     setCreateModules([...pack.extras])
     setFineTune(false)
@@ -303,6 +324,7 @@ export default function PessoasPage() {
           modules: editModules,
           professional_name: editProfessionalName.trim() || null,
           avec_pro_id: editAvecProId.trim() || null,
+          stock_point_code: editStockPoint || null,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -312,7 +334,15 @@ export default function PessoasPage() {
       }
       const updated = json.data?.employee as Employee | undefined
       setEmployees((prev) =>
-        prev.map((item) => (item.id === person.id ? (updated ?? { ...item, modules: editModules }) : item)),
+        prev.map((item) =>
+          item.id === person.id
+            ? (updated ?? {
+                ...item,
+                modules: editModules,
+                stock_point_code: editStockPoint || null,
+              })
+            : item,
+        ),
       )
       setEditingId(null)
       setNotice(`Sistemas de ${person.name} atualizados.`)
@@ -373,6 +403,13 @@ export default function PessoasPage() {
                         {person.avec_pro_id ? ` · id ${person.avec_pro_id}` : ''}
                       </p>
                     ) : null}
+                    {person.stock_point_code ? (
+                      <p className="mt-0.5 text-xs text-muted">
+                        Ponto: {person.stock_point_code.replace('piso_', 'Piso ').replace('almox', 'Almox')}
+                      </p>
+                    ) : person.panel_role === 'estoque' ? (
+                      <p className="mt-0.5 text-xs text-muted">Ponto: todos</p>
+                    ) : null}
                     <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
                       {matched?.alias ?? person.panel_role}
                       {extras.length > 0 ? ` · extra ${extras.join(' · ')}` : ''}
@@ -390,6 +427,7 @@ export default function PessoasPage() {
                             setEditModules(extras)
                             setEditProfessionalName(person.professional_name ?? '')
                             setEditAvecProId(person.avec_pro_id ?? '')
+                            setEditStockPoint(person.stock_point_code ?? '')
                           }}
                         >
                           Ajustar
@@ -447,6 +485,26 @@ export default function PessoasPage() {
                         />
                       )}
                     </label>
+                    {person.panel_role === 'estoque' || person.stock_point_code ? (
+                      <label className="mb-3 block text-sm">
+                        <span className="mb-1 block text-xs uppercase tracking-wide text-muted">
+                          Ponto de estoque (fila)
+                        </span>
+                        <select
+                          value={editStockPoint}
+                          onChange={(e) =>
+                            setEditStockPoint(e.target.value as '' | StockPointCode)
+                          }
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                        >
+                          {STOCK_POINT_OPTIONS.map((opt) => (
+                            <option key={opt.value || 'all'} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     {person.panel_role !== 'admin' ? (
                       <ModuleChecks
                         role={person.panel_role}
@@ -626,6 +684,27 @@ export default function PessoasPage() {
               placeholder="Senha inicial (mín. 8)"
               className="rounded-xl border border-border bg-background px-3 py-2 sm:col-span-2"
             />
+            {needsStockPoint ? (
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-xs uppercase tracking-wide text-muted">
+                  Ponto de estoque (fila)
+                </span>
+                <select
+                  value={createStockPoint}
+                  onChange={(e) => setCreateStockPoint(e.target.value as '' | StockPointCode)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                >
+                  {STOCK_POINT_OPTIONS.map((opt) => (
+                    <option key={opt.value || 'all'} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  Admin P1/P2/P3 = piso correspondente. Sidney / gestor = todos. Almox = Almoxarifado.
+                </span>
+              </label>
+            ) : null}
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <input type="checkbox" checked={fineTune} onChange={(e) => setFineTune(e.target.checked)} />
               Ajuste fino dos sistemas (avançado)

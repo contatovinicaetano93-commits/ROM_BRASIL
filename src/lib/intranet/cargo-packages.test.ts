@@ -24,9 +24,23 @@ describe('cargo packages', () => {
       'pos_venda',
       'estoque_ops',
       'almoxarifado',
+      'gestor_estoque',
       'limpeza',
       'profissional',
     ])
+  })
+
+  it('Sidney = gestor estoque; profissional pede produto sem estoque completo', () => {
+    const gestor = cargoPackageById('gestor_estoque')
+    expect(gestor?.examples).toMatch(/Sidney/)
+    expect(gestor?.panel_role).toBe('estoque')
+    expect(modulesForCargo(gestor!)).toContain('estoque')
+    expect(modulesForCargo(gestor!)).toContain('solicitacao_produtos')
+
+    const pro = cargoPackageById('profissional')
+    expect(pro?.extras).toEqual(['solicitacao_produtos'])
+    expect(modulesForCargo(pro!)).toContain('solicitacao_produtos')
+    expect(modulesForCargo(pro!)).not.toContain('estoque')
   })
 
   it('gestor Baru pede só financeiro e compras no Flow', () => {
@@ -137,7 +151,7 @@ describe('cargo packages', () => {
       matchCargoPackage({
         panel_role: 'staff',
         flow_role: 'solicitante',
-        modules: [],
+        modules: ['solicitacao_produtos'],
         areaIds: ['compras'],
       })?.id,
     ).toBe('profissional')

@@ -81,6 +81,18 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/financeiro', 'estoque', ['financeiro'])).toBe(true)
   })
 
+  it('solicitação produtos: módulo dedicado ou estoque', () => {
+    expect(canAccessProtectedPath('/solicitacao-produtos', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/solicitacao-produtos', 'staff', ['solicitacao_produtos'])).toBe(
+      true,
+    )
+    expect(canAccessProtectedPath('/api/solicitacao-produtos', 'staff', ['solicitacao_produtos'])).toBe(
+      true,
+    )
+    expect(canAccessProtectedPath('/solicitacao-produtos', 'estoque', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/solicitacao-produtos', 'estoque', [])).toBe(true)
+  })
+
   it('admin continua irrestrito; sem role bloqueia', () => {
     expect(canAccessProtectedPath('/admin', 'admin', [])).toBe(true)
     expect(canAccessProtectedPath('/api/avec/sync', 'admin', [])).toBe(true)

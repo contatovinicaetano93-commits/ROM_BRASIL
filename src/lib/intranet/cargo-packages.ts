@@ -27,6 +27,7 @@ export type CargoPackageId =
   | 'pos_venda'
   | 'estoque_ops'
   | 'almoxarifado'
+  | 'gestor_estoque'
   | 'limpeza'
   | 'profissional'
 
@@ -89,7 +90,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     label: 'Solicitante amplo',
     alias: 'Solicitante',
     summary: 'Pede no Rom Flow em todos os setores; sem admin de painel.',
-    examples: 'Sidney',
+    examples: 'Solicitantes gerais',
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,
@@ -196,24 +197,38 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     id: 'estoque_ops',
     label: 'Estoque operacional',
     alias: 'Estoque ops',
-    summary: 'Cadastro de produto, movimentos, KPIs de baixa e pontos de distribuição.',
-    examples: 'Equipe estoque sob Rodrigo',
+    summary:
+      'Fila do ponto (P1/P2/P3): separa, libera retirada e marca baixa Avec. Atribua o ponto em Gestão de usuário.',
+    examples: 'Admin Piso 1 · Admin Piso 2 · Admin Piso 3',
     panel_role: 'estoque',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: ['checks_diario'],
+    extras: ['solicitacao_produtos', 'checks_diario'],
     areaIds: ['compras'],
   },
   {
     id: 'almoxarifado',
     label: 'Almoxarifado',
     alias: 'Almoxarifado',
-    summary: 'Base mestre do estoque e reposição dos 3 pontos do salão.',
+    summary: 'Base mestre do estoque e reposição dos 3 pontos do salão (Almox → P1/P2/P3).',
     examples: 'Lead almoxarifado',
     panel_role: 'estoque',
     flow_role: 'admin_compras',
     can_publish: false,
-    extras: ['checks_diario'],
+    extras: ['solicitacao_produtos', 'checks_diario'],
+    areaIds: ['compras'],
+  },
+  {
+    id: 'gestor_estoque',
+    label: 'Gestor estoque',
+    alias: 'Gestor estoque',
+    summary:
+      'Visão de todo o processo: Almox, filas P1–P3, pedidos dos profissionais e conferência ROM × Avec.',
+    examples: 'Sidney',
+    panel_role: 'estoque',
+    flow_role: 'solicitante',
+    can_publish: false,
+    extras: ['solicitacao_produtos', 'checks_diario'],
     areaIds: ['compras'],
   },
   {
@@ -232,12 +247,12 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     id: 'profissional',
     label: 'Profissional / cabeleireiro',
     alias: 'Profissional',
-    summary: 'Home, agenda, contatos e meu faturamento — só os dele.',
+    summary: 'Home, agenda, contatos, meu faturamento e pedido de produtos no piso.',
     examples: 'Cabeleireiros da unidade',
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: [],
+    extras: ['solicitacao_produtos'],
     areaIds: ['compras'],
   },
 ] as const

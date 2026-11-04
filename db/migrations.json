@@ -381,6 +381,13 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "048_estoque_solicitacao",
+      "file": "delta-estoque-solicitacao.sql",
+      "panels": [
+        "brasil"
+      ]
     }
   ]
 }

@@ -14,8 +14,10 @@ describe('cargoAccessPreviewLabels', () => {
       'Agenda do dia',
       'Contatos',
       'Meu faturamento',
+      'Solicitação produtos',
     ])
     expect(cargoAccessPreviewLabels(pack)).not.toContain('Sala de reunião')
+    expect(cargoAccessPreviewLabels(pack)).not.toContain('Estoque')
   })
 
   it('recepção e pós-venda também ficam em Agenda + Contatos', () => {

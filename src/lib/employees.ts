@@ -10,6 +10,7 @@ import { companiesForPanel } from '@/lib/intranet/companies'
 import { ensureIntranetSchema } from '@/lib/intranet/ensure-schema'
 import { ensureGrantableModuleKeyCheck } from '@/lib/intranet/ensure-module-key-check'
 import { extrasBeyondRole, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
+import { parseStockPointCode, type StockPointCode } from '@/lib/stock-point-scope'
 import { getRomPanelId } from '@/lib/brand'
 
 export type EmployeeRecord = {
@@ -25,6 +26,8 @@ export type EmployeeRecord = {
   professional_name: string | null
   /** Id Avec do elenco (roster) — preferido sobre match por nome. */
   avec_pro_id: string | null
+  /** Ponto ROM do controlador (piso_1|piso_2|piso_3|almox). null = vê todos. */
+  stock_point_code: StockPointCode | null
   companyIds: string[]
   areaIds: RequestArea[]
   modules: GrantableModuleKey[]
@@ -88,7 +91,7 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
     await ensureIntranetSchema().catch(() => {})
     const sql = getIntranetSql()
     const rows = (await sql`
-      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.avec_pro_id, e.created_at,
+      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.avec_pro_id, e.stock_point_code, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
         coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
         coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
@@ -115,6 +118,7 @@ export async function createEmployee(input: {
   can_publish?: boolean
   professional_name?: string | null
   avec_pro_id?: string | null
+  stock_point_code?: StockPointCode | null
   companyIds?: string[]
   areaIds?: RequestArea[]
   modules?: GrantableModuleKey[]
@@ -140,8 +144,9 @@ export async function createEmployee(input: {
     typeof input.avec_pro_id === 'string' && input.avec_pro_id.trim()
       ? input.avec_pro_id.trim()
       : null
+  const stockPoint = parseStockPointCode(input.stock_point_code)
   const rows = (await sql`
-    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name, avec_pro_id)
+    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name, avec_pro_id, stock_point_code)
     values (
       ${input.email.trim().toLowerCase()},
       ${input.name.trim()},
@@ -150,7 +155,8 @@ export async function createEmployee(input: {
       ${flowRole},
       ${canPublish},
       ${professionalName},
-      ${avecProId}
+      ${avecProId},
+      ${stockPoint}
     )
     returning *
   `) as Array<Record<string, unknown>>
@@ -340,12 +346,17 @@ export async function updateEmployeeModules(
   selected: readonly GrantableModuleKey[],
   professionalName?: string | null,
   avecProId?: string | null,
+  stockPointCode?: StockPointCode | null | undefined,
 ): Promise<Omit<EmployeeRecord, 'password_hash'>> {
   const current = await findEmployeeById(userId)
   if (!current) throw new Error('Usuário não encontrado.')
   const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
   await replaceEmployeeModules(userId, extras)
-  if (professionalName !== undefined || avecProId !== undefined) {
+  if (
+    professionalName !== undefined ||
+    avecProId !== undefined ||
+    stockPointCode !== undefined
+  ) {
     await ensureIntranetSchema()
     const sql = getIntranetSql()
     const nextName =
@@ -360,10 +371,15 @@ export async function updateEmployeeModules(
         : typeof avecProId === 'string' && avecProId.trim()
           ? avecProId.trim()
           : null
+    const nextPoint =
+      stockPointCode === undefined
+        ? current.stock_point_code
+        : parseStockPointCode(stockPointCode)
     await sql`
       update intranet_employees
       set professional_name = ${nextName},
           avec_pro_id = ${nextAvecId},
+          stock_point_code = ${nextPoint},
           updated_at = now()
       where id = ${userId}::uuid
     `
@@ -373,6 +389,7 @@ export async function updateEmployeeModules(
     to: extras,
     professional_name: professionalName === undefined ? undefined : professionalName,
     avec_pro_id: avecProId === undefined ? undefined : avecProId,
+    stock_point_code: stockPointCode === undefined ? undefined : stockPointCode,
   })
   const updated = await findEmployeeById(userId)
   if (!updated) throw new Error('Usuário não encontrado.')
@@ -486,6 +503,7 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
       typeof row.avec_pro_id === 'string' && row.avec_pro_id.trim()
         ? row.avec_pro_id.trim()
         : null,
+    stock_point_code: parseStockPointCode(row.stock_point_code),
     companyIds,
     areaIds,
     modules: parseGrantableModules(row.module_keys),

@@ -7,6 +7,7 @@ import { requireFlowMaster } from '@/lib/flow/require-master'
 import { canListAllEmployees } from '@/lib/intranet/employees-acl'
 import { announceEmployeeCreated } from '@/lib/intranet/employee-created'
 import { parseGrantableModules } from '@/lib/intranet/modules'
+import { parseStockPointCode } from '@/lib/stock-point-scope'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
 import { Logger } from '@/lib/logger'
 
@@ -60,6 +61,11 @@ export async function POST(req: NextRequest) {
         isPanelAdmin && typeof body.professional_name === 'string' ? body.professional_name : null,
       avec_pro_id:
         isPanelAdmin && typeof body.avec_pro_id === 'string' ? body.avec_pro_id : null,
+      stock_point_code: isPanelAdmin
+        ? body.stock_point_code === null || body.stock_point_code === ''
+          ? null
+          : parseStockPointCode(body.stock_point_code)
+        : null,
       companyIds: Array.isArray(body.companyIds) ? body.companyIds.map(String) : undefined,
       areaIds: parseAreas(body.areaIds),
       modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],

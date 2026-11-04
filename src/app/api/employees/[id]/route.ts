@@ -3,6 +3,7 @@ import { err, ok } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { deleteEmployee, updateEmployeeModules } from '@/lib/employees'
 import { parseGrantableModules } from '@/lib/intranet/modules'
+import { parseStockPointCode } from '@/lib/stock-point-scope'
 
 export async function PATCH(
   req: NextRequest,
@@ -14,6 +15,12 @@ export async function PATCH(
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
   try {
+    const stockPoint =
+      body.stock_point_code === undefined
+        ? undefined
+        : body.stock_point_code === null || body.stock_point_code === ''
+          ? null
+          : parseStockPointCode(body.stock_point_code)
     const employee = await updateEmployeeModules(
       auth.session.user,
       auth.session.role,
@@ -29,6 +36,7 @@ export async function PATCH(
         : typeof body.avec_pro_id === 'string'
           ? body.avec_pro_id
           : null,
+      stockPoint,
     )
     return ok({ employee })
   } catch (error) {
