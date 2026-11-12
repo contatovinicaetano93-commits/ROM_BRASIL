@@ -24,7 +24,7 @@ describe('intranetAuditHref', () => {
   it('aponta para o sistema certo', () => {
     expect(intranetAuditHref('flow:exp-1')).toBe('/flow/exp-1')
     expect(intranetAuditHref('flow:user:u1')).toBe('/pessoas')
-    expect(intranetAuditHref('cms:p1')).toBe('/empresa')
+    expect(intranetAuditHref('cms:p1')).toBe('/empresa/p1')
     expect(intranetAuditHref('other')).toBeNull()
   })
 })

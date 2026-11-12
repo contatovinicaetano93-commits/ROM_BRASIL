@@ -3,7 +3,7 @@
 const EXACT: Record<string, string> = {
   '/': 'Home',
   '/pessoas': 'Gestão de usuário',
-  '/empresa': 'Notícias e eventos',
+  '/empresa': 'ROM News',
   '/rh': 'RH',
   '/treinamentos': 'Treinamentos',
   '/ajuda': 'Suporte',
@@ -31,7 +31,7 @@ const EXACT: Record<string, string> = {
 const PREFIXES: Array<{ prefix: string; label: string }> = [
   { prefix: '/flow', label: 'Rom Flow' },
   { prefix: '/pessoas', label: 'Gestão de usuário' },
-  { prefix: '/empresa', label: 'Notícias e eventos' },
+  { prefix: '/empresa', label: 'ROM News' },
   { prefix: '/rh', label: 'RH' },
   { prefix: '/treinamentos', label: 'Treinamentos' },
   { prefix: '/ajuda', label: 'Suporte' },
